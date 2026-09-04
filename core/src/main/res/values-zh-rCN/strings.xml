@@ -23,7 +23,7 @@
     <string name="enable">启用</string>
     <string name="export">导出</string>
     <string name="filter">筛选</string>
-    <string name="got_it">了解了</string>
+    <string name="got_it">了解</string>
     <string name="later">稍后</string>
     <string name="manage_in_settings">在设置中管理</string>
     <string name="merge_and_save">合并并保存</string>
@@ -66,7 +66,7 @@
     <string name="check_for_differences">检查差异</string>
     <string name="cloud">云同步</string>
     <string name="console_logs">控制台日志</string>
-    <string name="created">已创建</string>
+    <string name="created">创建于</string>
     <string name="developer_options">开发者选项</string>
     <string name="disabled">禁用</string>
     <string name="drafts">草稿</string>
@@ -86,7 +86,7 @@
     <string name="no_journals_yet_desc">从今天开始记录你的旅程吧。创建第一篇日记，开启你的收藏。</string>
     <string name="no_links_available">无可用链接</string>
     <string name="no_locations_this_month">本月未添加任何地点。</string>
-    <string name="no_media_this_month">本月没有媒体文件。</string>
+    <string name="no_media_this_month">本月未保存媒体文件。</string>
     <string name="no_music_this_month">本月未录制任何音乐。</string>
     <string name="not_synced">未同步</string>
     <string name="now">现在</string>
@@ -94,7 +94,7 @@
     <string name="save_progress_message">您是否要在离开前保存进度？</string>
     <string name="search_settings_placeholder">搜索设置...</string>
     <string name="sync_required">需要同步</string>
-    <string name="synced">已同步</string>
+    <string name="synced">同步于</string>
     <string name="test_api_key">测试 API密钥</string>
     <string name="test_connection">测试连接</string>
     <string name="testing_connection">测试连接中...</string>
@@ -102,7 +102,7 @@
     <string name="today">今天</string>
     <string name="unsaved_tags_message">您的标签中有未保存的更改。是否要在退出前保存这些更改？</string>
     <string name="untitled">无标题</string>
-    <string name="updated">已更新</string>
+    <string name="updated">更新于</string>
     <string name="verifying_connection">验证连接中...</string>
     <string name="whats_changed">更新日志</string>
     <string name="save_entry">保存条目？</string>
@@ -114,7 +114,7 @@
     <string name="internet_access_disabled">互联网访问已禁用</string>
     <string name="internet_access_restricted">互联网访问受限</string>
     <string name="internet_restricted_desc">要使用此功能，请在应用设置中开启网络访问权限。</string>
-    <string name="move_all_to_bin">将所有内容移至回收站</string>
+    <string name="move_all_to_bin">将此内容移至回收站</string>
     <string name="move_all_to_bin_desc">这将把您的所有日记条目移至回收站。您可以在30天内将其恢复。</string>
     <string name="move_all_to_bin_title">将所有内容移至回收站？</string>
     <string name="move_to_bin_default_desc">移至回收站？30天后将被永久删除。</string>
@@ -182,7 +182,7 @@
     <string name="include_time_desc">创建日记时始终启用时间记录</string>
     <string name="keyboard_autocorrect">自动纠正</string>
     <string name="keyboard_autocorrect_desc">自动纠正拼写错误的单词</string>
-    <string name="keyboard_capitalization_desc">句子首字母自动大写</string>
+    <string name="keyboard_capitalization_desc">句首字母自动大写</string>
     <string name="keyboard_capitalization">自动大写</string>
     <string name="map_settings">地图选项</string>
     <string name="map_settings_desc">选择样式并管理 API 密钥</string>
@@ -441,4 +441,5 @@
     <string name="link_url_label">链接地址</string>
     <string name="take_photo_or_video">拍摄照片/视频</string>
     <string name="whats_on_your_mind">脑海中回荡着什么呢？</string>
+    <string name="whats_new">更新日志</string>
 </resources>
