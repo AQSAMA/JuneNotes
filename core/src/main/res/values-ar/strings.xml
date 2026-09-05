@@ -38,7 +38,7 @@
     <string name="manage_in_settings">إدارة في الإعدادات</string>
     <string name="reset_pin">إعادة تعيين رمز PIN</string>
     <string name="paste_link_placeholder">لصق الرابط هنا...</string>
-    <string name="no_bookmarks">لا يوجد إشارات مرجعية</string>
+    <string name="no_bookmarks">لا توجد إشارات مرجعية</string>
     <string name="move_all_to_bin">نقل الكل إلى سلة المهملات</string>
     <string name="no_journals_this_month">لا توجد يوميات هذا الشهر.</string>
     <string name="search_settings_placeholder">البحث في الإعدادات...</string>
@@ -58,7 +58,7 @@
     <string name="got_it">فهمت</string>
     <string name="new_journal">يوميات جديدة</string>
     <string name="journals_and_media_pending">%1$d يوميات و%2$d وسائط</string>
-    <string name="no_journals_yet">لا يوجد يوميات بعد</string>
+    <string name="no_journals_yet">لا توجد يوميات بعد</string>
     <string name="no_locations_this_month">لم تتم إضافة أي مواقع هذا الشهر.</string>
     <string name="no_media_this_month">لا توجد وسائط هذا الشهر.</string>
     <string name="sync_required">المزامنة مطلوبة</string>
@@ -106,8 +106,8 @@
     <string name="local_and_cloud_matching">المحلي والسحابي متطابقان</string>
     <string name="more_entries">المزيد من المدخلات</string>
     <string name="name">اسم</string>
-    <string name="no_bookmarks_desc">احتفظ باللحظات المفضلة في متناول يدك. سيظهر هنا أي تدوينة تضع عليها علامة لتتمكن من العودة إليه لاحقًا.</string>
-    <string name="no_drafts">لا يوجد مسودات</string>
+    <string name="no_bookmarks_desc">احتفظ باللحظات المفضلة في متناول يدك. سيظهر هنا أي تدوينة تضع عليها علامة لتتمكن من العودة إليها لاحقًا.</string>
+    <string name="no_drafts">لا توجد مسودات</string>
     <string name="no_drafts_desc">أفكارك غير المكتملة تبقى هنا. أي تدوينة تبدأها سيتم حفظها لإكمالها لاحقًا.</string>
     <string name="test_connection">اختبار الاتصال</string>
     <string name="testing_connection">جارٍ اختبار الاتصال...</string>
@@ -160,7 +160,7 @@
     <string name="sync_and_backup">المزامنة والنسخ الاحتياطي</string>
     <string name="sync_and_backup_desc">المزامنة السحابية، النسخ الاحتياطي المحلي، WebDAV</string>
     <string name="always_open_new_note">فتح المحرر عند بدء التشغيل</string>
-    <string name="always_open_new_note_desc">افتح دائمًا ملاحظة جديدة عند تشغيل التطبيق</string>
+    <string name="always_open_new_note_desc">افتح دائمًا تدوينة جديدة عند تشغيل التطبيق</string>
     <string name="delete_all_journals">حذف كل اليوميات</string>
     <string name="delete_all_journals_desc">نقل جميع اليوميات إلى سلة المهملات</string>
     <string name="include_time">تضمين الوقت</string>
@@ -172,7 +172,7 @@
     <string name="map_settings">إعدادات الخريطة</string>
     <string name="map_settings_desc">اختيار النمط وإدارة مفاتيح API</string>
     <string name="markdown_editor">محرر Markdown</string>
-    <string name="markdown_editor_desc">تم تفعيل تنسيق النصوص الغني</string>
+    <string name="markdown_editor_desc">تفعيل تنسيق النصوص الغني</string>
     <string name="plain_text_mode">وضع النص العادي</string>
     <string name="reminders">التذكيرات</string>
     <string name="reminders_desc">تعيين تذكيرات لكتابة اليوميات</string>
@@ -309,7 +309,7 @@
     <string name="recovery_setup_desc">قم بإعداد سؤال استعادة. إذا نسيت رمز PIN الخاص بك، فإن الإجابة على هذا السؤال بشكل صحيح ستتيح لك إعادة تعيينه.</string>
     <string name="your_answer_label">إجابتك</string>
     <string name="internet_access">صلاحية الوصول للإنترنت</string>
-    <string name="internet_access_desc">تُستخدم للخرائط، ومزامنة السحابة، وبيانات الأغاني الوصفية مثل اسم و صوره الأغنية، والخطوط عبر الإنترنت.</string>
+    <string name="internet_access_desc">تُستخدم للخرائط، والمزامنة السحابية، وبيانات الأغاني الوصفية مثل اسم و صورة الأغنية، والخطوط عبر الإنترنت.</string>
     <string name="location_permission_granted">تم منح الإذن. يُستخدم لتحديد الموقع الحالي على الخريطة.</string>
     <string name="location_permission_needed">انقر للتفعيل. يُستخدم لتحديد موقعك الحالي على الخريطة بسرعة.</string>
     <string name="notification">إشعار</string>
@@ -327,7 +327,7 @@
     <string name="schedule">جدول</string>
     <string name="advanced_sync_desc">أدوات التحليل والإصلاح</string>
     <string name="analyze_sync">تحليل المزامنة</string>
-    <string name="analyze_sync_desc">تحليل حالة مزامنة السحابة</string>
+    <string name="analyze_sync_desc">تحليل حالة المزامنة السحابية</string>
     <string name="automatic_sync">المزامنة التلقائية</string>
     <string name="automatic_sync_desc">قم بمزامنة التغييرات فور حدوثها</string>
     <string name="backup_format_too_old">تنسيق النسخ الاحتياطي قديم جدًا</string>
@@ -436,7 +436,7 @@
     <string name="license">رخصة</string>
     <string name="map_credits">حقوق الخريطة</string>
     <string name="map_credits_desc">حقوق الملكية والتراخيص لبيانات الخرائط</string>
-    <string name="journals">يوميات</string>
+    <string name="journals">اليوميات</string>
     <string name="location">موقع</string>
     <string name="media">وسائط</string>
     <string name="music">موسيقى</string>
