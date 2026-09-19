@@ -5,6 +5,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
@@ -154,7 +156,17 @@ fun JournalContentEditor(
             autoCorrectEnabled = isKeyboardAutocorrectEnabled
         )
 
-        Box(modifier = modifier) {
+        val interactionSource = remember { MutableInteractionSource() }
+
+        Box(
+            modifier = modifier.clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            }
+        ) {
             if (!isMarkdownEnabled) {
                 TextField(
                     value = rawContent,
