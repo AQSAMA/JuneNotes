@@ -123,6 +123,7 @@
     <string name="internet_access_disabled">Internet Access Disabled</string>
     <string name="internet_access_restricted">Internet access restricted</string>
     <string name="internet_restricted_desc">To use this feature, please enable internet access in the app settings.</string>
+    <string name="move_to_bin">Move to Bin</string>
     <string name="move_all_to_bin">Move All to Bin</string>
     <string name="move_all_to_bin_desc">This will move all your journal entries to the Bin. You can restore them within 30 days.</string>
     <string name="move_all_to_bin_title">Move all to Bin?</string>

@@ -17,7 +17,7 @@ fun DeleteConfirmationSheet(
     onDismissRequest: () -> Unit,
     onConfirm: () -> Unit,
     message: String = stringResource(R.string.move_to_bin_default_desc),
-    confirmText: String = stringResource(R.string.move_all_to_bin),
+    confirmText: String = stringResource(R.string.move_to_bin),
     sheetState: SheetState = rememberModalBottomSheetState()
 ) {
     ModalBottomSheet(
