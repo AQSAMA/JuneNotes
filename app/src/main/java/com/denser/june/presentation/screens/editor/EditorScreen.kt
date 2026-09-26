@@ -36,8 +36,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.denser.hyphen.model.TriggerConfig
-import com.denser.hyphen.state.rememberHyphenTextState
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.enums.EditorLayoutDirection
@@ -47,6 +45,7 @@ import com.denser.june.core.utils.toDateWithDay
 import com.denser.june.core.utils.toFullTime
 import com.denser.june.core.utils.toLocalTime
 import com.denser.june.core.utils.LanguageHelper
+import com.denser.june.presentation.components.ExportJournalBottomSheet
 import com.denser.june.presentation.components.JuneTopAppBar
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
@@ -80,14 +79,7 @@ fun EditorScreen() {
     val dialogState = rememberEditorDialogState()
     var showOptionsSheet by remember { mutableStateOf(false) }
     val isEditorReady = !state.isLoading
-    val hyphenState = rememberHyphenTextState(
-        triggerConfigs = remember {
-            listOf(
-                TriggerConfig(trigger = "@", scheme = "person"),
-                TriggerConfig(trigger = "#", scheme = "topic")
-            )
-        }
-    )
+    val hyphenState = viewModel.hyphenState
 
     val activeTrigger = hyphenState.activeTrigger
     val activeTagQuery = activeTrigger
@@ -101,12 +93,6 @@ fun EditorScreen() {
         val trimmed = tag.trim()
         if (trimmed.isNotBlank() && state.tags.none { it.equals(trimmed, ignoreCase = true) }) {
             viewModel.onAction(EditorAction.UpdateTags(state.tags + trimmed))
-        }
-    }
-
-    LaunchedEffect(isEditorReady) {
-        if (isEditorReady && state.content.isNotEmpty()) {
-            hyphenState.setMarkdown(state.content)
         }
     }
 
@@ -125,6 +111,8 @@ fun EditorScreen() {
     }
 
     val onBack = {
+        keyboardController?.hide()
+        focusManager.clearFocus(force = true)
         if (!state.isDraft && state.isDirty) {
             dialogState.showExitDialog = true
         } else {
@@ -156,7 +144,16 @@ fun EditorScreen() {
             },
             frontMediaPath = state.images.lastOrNull(),
             onRemoveSong = { viewModel.onAction(EditorAction.RemoveSong) },
-            onSongSheetToggle = { dialogState.showSongSheet = true },
+            onSongSheetToggle = { navigator.navigateTo(Route.AddSong, isSingleTop = true) },
+            onTrimSong = {
+                val song = state.songDetails ?: return@MediaOperations
+                viewModel.onAction(EditorAction.OpenClipTrimmer(song))
+                navigator.navigateTo(Route.AddSong, isSingleTop = true)
+            },
+            onEditJournalSong = {
+                viewModel.onAction(EditorAction.OpenJournalSongEdit)
+                navigator.navigateTo(Route.AddSong, isSingleTop = true)
+            },
             onRemoveLocation = { viewModel.onAction(EditorAction.RemoveLocation) },
             onLocationDialogToggle = { dialogState.showLocationDialog = true },
         )
@@ -180,7 +177,12 @@ fun EditorScreen() {
                                     alpha = 0.75f
                                 )
                             )
-                        ) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.close)) }
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.close_24px),
+                                stringResource(R.string.close)
+                            )
+                        }
 
                         FilledIconButton(
                             onClick = { dialogState.showEmojiPicker = true },
@@ -320,7 +322,9 @@ fun EditorScreen() {
                                         stringResource(R.string.add_title),
                                         style = MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.5f
+                                        )
                                     )
                                 },
                                 keyboardOptions = KeyboardOptions(
@@ -365,7 +369,7 @@ fun EditorScreen() {
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Button(
                                 onClick = {
                                     keyboardController?.hide()
@@ -391,7 +395,7 @@ fun EditorScreen() {
                                     softWrap = false
                                 )
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
                             Button(
                                 onClick = {
                                     keyboardController?.hide()
@@ -482,11 +486,14 @@ fun EditorScreen() {
                     JournalContentEditor(
                         state = hyphenState,
                         rawContent = state.content,
-                        onMarkdownChange = {
-                            viewModel.onAction(EditorAction.ChangeContent(it))
+                        onMarkdownChange = { newContent ->
+                            if (newContent.trim() != state.content.trim()) {
+                                viewModel.onAction(EditorAction.ChangeContent(newContent))
+                            }
                         },
                         onFocusChanged = { isEditorFocused = it },
                         focusRequester = contentFocusRequester,
+                        isLoading = state.isLoading,
                         isMarkdownEnabled = isMarkdownEnabled,
                         isKeyboardAutocorrectEnabled = isKeyboardAutocorrectEnabled,
                         isKeyboardCapitalizationEnabled = isKeyboardCapitalizationEnabled,
@@ -497,7 +504,8 @@ fun EditorScreen() {
                                 minHeight = (availableHeight - fixedContentHeight - toolbarHeight).coerceAtLeast(
                                     84.dp
                                 )
-                            ).padding(bottom = 16.dp)
+                            )
+                            .padding(bottom = 16.dp)
                     )
                 }
                 if (isEditorFocused && isMarkdownEnabled) {
@@ -518,10 +526,18 @@ fun EditorScreen() {
             }
         }
     }
+
     EditorModals(
         dialogState = dialogState,
         editorState = state,
         onAction = viewModel::onAction
+    )
+
+    var journalToExport by remember { mutableStateOf<Journal?>(null) }
+
+    ExportJournalBottomSheet(
+        journal = journalToExport,
+        onDismiss = { journalToExport = null }
     )
 
     if (showOptionsSheet) {
@@ -558,6 +574,10 @@ fun EditorScreen() {
                 journal = journalPreview,
                 is24Hour = state.timeFormat == TimeFormat.TWENTY_FOUR_HOUR,
                 onToggleBookmark = { viewModel.onAction(EditorAction.ToggleBookmark) },
+                onExportMarkdown = {
+                    showOptionsSheet = false
+                    journalToExport = journalPreview
+                },
                 onDeleteOrRestore = {
                     if (state.isDeleted) {
                         scope.launch { sheetState.hide() }.invokeOnCompletion {

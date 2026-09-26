@@ -24,6 +24,7 @@ import com.denser.june.core.domain.model.enums.TimeFormat
 import com.denser.june.core.utils.*
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
+import com.denser.june.presentation.components.ExportJournalBottomSheet
 import com.denser.june.presentation.screens.home.components.DeleteConfirmationSheet
 import com.denser.june.presentation.screens.home.components.JournalOptionsSheet
 import com.denser.june.presentation.screens.home.timeline.components.TimelineCalendarPage
@@ -67,6 +68,13 @@ fun TimelinePage(
         }
     }
 
+    var journalToExport by remember { mutableStateOf<Journal?>(null) }
+
+    ExportJournalBottomSheet(
+        journal = journalToExport,
+        onDismiss = { journalToExport = null }
+    )
+
     val currentJournalForOptions = remember(selectedJournalForOptions, journalsInMonth) {
         val id = selectedJournalForOptions?.id ?: return@remember null
         journalsInMonth.find { it.id == id }
@@ -83,6 +91,10 @@ fun TimelinePage(
                 is24Hour = is24Hour,
                 onToggleBookmark = {
                     viewModel.toggleBookmark(currentJournalForOptions.id)
+                },
+                onExportMarkdown = {
+                    journalToExport = currentJournalForOptions
+                    selectedJournalForOptions = null
                 },
                 onDeleteOrRestore = {
                     if (currentJournalForOptions.isDeleted) {
@@ -216,6 +228,8 @@ fun TimelinePage(
         }
     }
 
+    var targetScrollDate by remember { mutableStateOf<LocalDate?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -253,7 +267,17 @@ fun TimelinePage(
                         selectedDate = selectedDate,
                         journals = pageJournals,
                         startOfWeek = startOfWeek,
-                        onDateSelected = { clickedDate ->
+                        onDateClick = { clickedDate, dayJournals ->
+                            selectedDate = clickedDate
+                            if (dayJournals.isEmpty()) {
+                                val dateMillis = combineDateAndTime(clickedDate, null)
+                                navigator.navigateTo(Route.Editor(initialDate = dateMillis))
+                            } else {
+                                viewModel.onTabChange(TimelineTab.Journals)
+                                targetScrollDate = clickedDate
+                            }
+                        },
+                        onDateLongClick = { clickedDate ->
                             selectedDate = clickedDate
                             val dateMillis = combineDateAndTime(clickedDate, null)
                             navigator.navigateTo(Route.Editor(initialDate = dateMillis))
@@ -269,6 +293,10 @@ fun TimelinePage(
             onTabSelected = { viewModel.onTabChange(it) },
             modifier = Modifier.weight(1f),
             bottomPadding = UiUtils.BOTTOM_BAR_PADDING,
+            is24Hour = is24Hour,
+            targetScrollDate = targetScrollDate,
+            onScrollConsumed = { targetScrollDate = null },
+            onToggleBookmark = { id -> viewModel.toggleBookmark(id) },
             onLongClickJournal = { journal -> selectedJournalForOptions = journal }
         )
     }

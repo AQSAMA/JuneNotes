@@ -1,7 +1,9 @@
 package com.denser.june.core.di
 
 import com.denser.june.core.data.backup.ExportImpl
+import com.denser.june.core.data.backup.MarkdownImportImpl
 import com.denser.june.core.data.backup.RestoreImpl
+import com.denser.june.core.domain.backup.MarkdownImportRepo
 import com.denser.june.core.data.database.DatabaseFactory
 import com.denser.june.core.data.database.journal.JournalDatabase
 import com.denser.june.core.data.datastore.DatastoreFactory
@@ -9,7 +11,7 @@ import com.denser.june.core.data.preferences.JournalPreferencesImpl
 import com.denser.june.core.data.preferences.PrivacyPreferencesImpl
 import com.denser.june.core.data.preferences.SyncPreferencesImpl
 import com.denser.june.core.data.preferences.ThemePreferencesImpl
-import com.denser.june.core.data.remote.SonglinkApiService
+import com.denser.june.core.data.remote.SongLinkScraper
 import com.denser.june.core.data.remote.SpotifyScraper
 import com.denser.june.core.data.remote.DeezerFetcher
 import com.denser.june.core.data.remote.ItunesFetcher
@@ -30,10 +32,7 @@ import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.domain.repository.SongRepository
 import com.denser.june.core.domain.sync.CloudProvider
 import com.denser.june.core.domain.sync.SyncManager
-import com.denser.june.core.utils.Constants
 import java.io.File
-import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,17 +43,17 @@ import android.content.Context
 import com.denser.june.core.data.remote.InternetInterceptor
 import org.koin.dsl.bind
 import org.koin.dsl.module
-import retrofit2.Retrofit
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
 
 val coreModule = module {
     singleOf(::DatabaseFactory)
     singleOf(::DatastoreFactory)
     single { get<DatabaseFactory>().createJournalDatabase().build() }
     single { get<JournalDatabase>().journalDao() }
+    single { get<JournalDatabase>().songLibraryDao() }
 
     singleOf(::ExportImpl).bind<ExportRepo>()
     singleOf(::RestoreImpl).bind<RestoreRepo>()
+    singleOf(::MarkdownImportImpl).bind<MarkdownImportRepo>()
 
     singleOf(::JournalRepositoryImpl).bind<JournalRepository>()
     singleOf(::ReminderSchedulerImpl).bind<ReminderScheduler>()
@@ -70,21 +69,7 @@ val coreModule = module {
             .addInterceptor(InternetInterceptor(get()))
             .build()
     }
-    single {
-        val json = Json {
-            ignoreUnknownKeys = true
-            coerceInputValues = true
-        }
-        val contentType = "application/json".toMediaType()
-
-        Retrofit.Builder()
-            .baseUrl(Constants.ODESIL_URL)
-            .addConverterFactory(json.asConverterFactory(contentType))
-            .client(get<OkHttpClient>())
-            .build()
-    }
-
-    single { get<Retrofit>().create(SonglinkApiService::class.java) }
+    singleOf(::SongLinkScraper)
     singleOf(::SpotifyScraper)
     singleOf(::DeezerFetcher)
     singleOf(::ItunesFetcher)
@@ -114,7 +99,9 @@ val coreModule = module {
             providers,
             File(context.filesDir, "journal_media"),
             get(),
-            get(named("ApplicationScope"))
+            get(named("ApplicationScope")),
+            get(),
+            File(context.filesDir, "song_media")
         )
     }
 }

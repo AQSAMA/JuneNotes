@@ -12,11 +12,17 @@ sealed interface Route {
     data class Editor(
         val journalId: String? = null,
         val initialDate: Long? = null,
-        val initialTags: List<String>? = null
+        val initialTags: List<String>? = null,
+        val initialTitle: String? = null,
+        val initialContent: String? = null,
+        val initialEmoji: String? = null
     ) : Route
 
     @Serializable
     data class JournalMedia(val journalId: String) : Route
+
+    @Serializable
+    data object AddSong : Route
 
     @Serializable
     data class JournalMediaDetail(
@@ -29,9 +35,6 @@ sealed interface Route {
         val mediaPaths: List<String>,
         val initialIndex: Int
     ) : Route
-
-    @Serializable
-    data object Search : Route
 
     @Serializable
     data object Bin : Route

@@ -40,6 +40,17 @@ fun Long.toFullDate(): String {
     return sdf.format(Date(this))
 }
 
+fun Long.toMonthDay(): String {
+    val sdf = SimpleDateFormat("MMM dd", Locale.getDefault())
+    return sdf.format(Date(this))
+}
+
+fun Long.toMonthDayTime(is24Hour: Boolean = false): String {
+    val pattern = if (is24Hour) "MMM dd '•' HH:mm" else "MMM dd '•' hh:mm a"
+    val sdf = SimpleDateFormat(pattern, Locale.getDefault())
+    return sdf.format(Date(this))
+}
+
 fun Long.toFullDateTime(is24Hour: Boolean = false): String {
     val pattern = if (is24Hour) "MMMM dd, yyyy 'at' HH:mm" else "MMMM dd, yyyy 'at' hh:mm a"
     val sdf = SimpleDateFormat(pattern, Locale.getDefault())
@@ -58,6 +69,36 @@ fun Long.toHoursMinutesSeconds(): String {
         String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
     }
 }
+
+fun Long.toSongTimestamp(): String {
+    val totalSeconds = (this.coerceAtLeast(0L) + 500) / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.getDefault(), "%d:%02d", minutes, seconds)
+}
+
+fun Long.toSongDurationString(): String {
+    val totalSeconds = (this.coerceAtLeast(0L) + 500) / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return when {
+        minutes > 0 && seconds > 0 -> "${minutes}m ${seconds}s"
+        minutes > 0 -> "${minutes}m"
+        else -> "${seconds}s"
+    }
+}
+
+fun Long.toAudioTimestamp(): String {
+    val totalMs = this.coerceAtLeast(0L)
+    val totalSeconds = totalMs / 1000
+    val tenths = (totalMs % 1000) / 100
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format(Locale.getDefault(), "%d:%02d.%d", minutes, seconds, tenths)
+}
+
+fun formatAudioTimestamp(ms: Long): String = ms.toAudioTimestamp()
+
 
 fun YearMonth.getDaysInMonthGrid(startOfWeek: DayOfWeek = DayOfWeek.SUNDAY): List<LocalDate?> {
     val firstDay = this.atDay(1)

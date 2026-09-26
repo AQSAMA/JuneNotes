@@ -10,8 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -19,159 +18,171 @@ import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.utils.toDayOfMonth
 import com.denser.june.core.utils.toFullDate
 import com.denser.june.core.utils.toShortMonth
+import com.denser.june.presentation.components.JournalActionButton
+import com.denser.june.presentation.components.JournalCardColors
+import com.denser.june.presentation.components.JournalMetadataBadges
+import com.denser.june.presentation.components.JournalThumbnail
+import com.denser.june.presentation.components.JuneBadge
+import com.denser.june.presentation.components.rememberJournalCardColors
+import com.denser.june.presentation.components.rememberJournalDisplayTitle
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
 import com.denser.june.presentation.screens.editor.components.JournalMosaicCard
 import com.denser.june.presentation.screens.editor.components.MediaOperations
-import com.denser.june.presentation.screens.home.journals.JournalsVM
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
-
 import com.denser.june.core.R
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun JournalCard(
     journal: Journal,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    is24Hour: Boolean = false,
+    showDate: Boolean = false,
     actionIcon: Int? = null,
     onActionClick: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null
+    onToggleBookmark: (() -> Unit)? = null,
+    onJournalClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    colors: JournalCardColors = rememberJournalCardColors(journal)
 ) {
-    val viewModel: JournalsVM = koinViewModel()
-    val navigator = koinInject<AppNavigator>()
-
-    val mediaOperations = MediaOperations(onMediaClick = null)
+    val navigator = if (onJournalClick == null) koinInject<AppNavigator>() else null
+    val mediaOperations = remember { MediaOperations(onMediaClick = null) }
+    val displayTitle = rememberJournalDisplayTitle(journal)
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(84.dp)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(shape)
             .combinedClickable(
-                onClick = { navigator.navigateTo(Route.Editor(journal.id), isSingleTop = true) },
+                onClick = {
+                    if (onJournalClick != null) {
+                        onJournalClick()
+                    } else {
+                        navigator?.navigateTo(Route.Editor(journal.id), isSingleTop = true)
+                    }
+                },
                 onLongClick = onLongClick
             ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = colors.containerColor
         ),
-        shape = RoundedCornerShape(24.dp)
+        shape = shape
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
+                .fillMaxWidth()
+                .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                modifier = Modifier.size(96.dp, 60.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
-            ) {
-                if (journal.images.isNotEmpty()) {
-                    JournalMosaicCard(
-                        mediaList = listOf(journal.images.last()),
-                        enablePlayback = false,
-                        modifier = Modifier.fillMaxSize(),
-                        operations = mediaOperations,
-                        roundedCornerShape = RoundedCornerShape(16.dp)
-                    )
-                } else {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            painter = painterResource(R.drawable.book_5_24px),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            JournalThumbnail(
+                journal = journal,
+                containerColor = colors.innerContainerColor,
+                mediaOperations = mediaOperations
+            )
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = journal.dateTime.toFullDate(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.dateColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    JuneBadge(
+                        show = journal.isDraft,
+                        icon = R.drawable.edit_24px_fill
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
                 Text(
-                    text = journal.dateTime.toFullDate(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = journal.title.ifBlank { journal.content.ifBlank { stringResource(R.string.add_title) } },
+                    text = displayTitle,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            FilledIconButton(
-                onClick = { onActionClick?.invoke() ?: viewModel.toggleBookmark(journal.id) },
-                colors = IconButtonDefaults.iconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                shape = IconButtonDefaults.smallRoundShape
-            ) {
-                Icon(
-                    painter = painterResource(
-                        actionIcon ?: if (journal.isBookmarked) R.drawable.bookmark_added_24px_fill 
-                        else R.drawable.bookmark_24px
-                    ),
-                    contentDescription = if (actionIcon != null) "Action" else "Toggle Bookmark",
-                )
-            }
-            Spacer(modifier = Modifier.width(4.dp))
+
+            JournalActionButton(
+                isBookmarked = journal.isBookmarked,
+                innerContainerColor = colors.innerContainerColor,
+                actionIcon = actionIcon,
+                onActionClick = onActionClick,
+                onToggleBookmark = onToggleBookmark
+            )
         }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecentJournalCard(
     journal: Journal,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
+    is24Hour: Boolean = false,
     actionIcon: Int? = null,
     onActionClick: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null
+    onToggleBookmark: (() -> Unit)? = null,
+    onJournalClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    colors: JournalCardColors = rememberJournalCardColors(journal)
 ) {
     if (journal.images.isEmpty()) {
         JournalCard(
             journal = journal,
             modifier = modifier,
+            shape = shape,
+            is24Hour = is24Hour,
             actionIcon = actionIcon,
             onActionClick = onActionClick,
-            onLongClick = onLongClick
+            onToggleBookmark = onToggleBookmark,
+            onJournalClick = onJournalClick,
+            onLongClick = onLongClick,
+            colors = colors
         )
     } else {
-        val viewModel: JournalsVM = koinViewModel()
-        val navigator = koinInject<AppNavigator>()
-
+        val navigator = if (onJournalClick == null) koinInject<AppNavigator>() else null
         val displayImages = remember(journal.images) {
             journal.images.reversed().take(3)
         }
-
-        val mediaOperations = MediaOperations(onMediaClick = null)
+        val mediaOperations = remember { MediaOperations(onMediaClick = null) }
+        val displayTitle = rememberJournalDisplayTitle(journal)
 
         Card(
             modifier = modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
+                .clip(shape)
                 .combinedClickable(
-                    onClick = {
-                        navigator.navigateTo(
+                onClick = {
+                    if (onJournalClick != null) {
+                        onJournalClick()
+                    } else {
+                        navigator?.navigateTo(
                             Route.Editor(journal.id),
                             isSingleTop = true
                         )
-                    },
-                    onLongClick = onLongClick
-                ),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    }
+                },
+                onLongClick = onLongClick
             ),
-            shape = RoundedCornerShape(24.dp)
+            colors = CardDefaults.cardColors(
+                containerColor = colors.containerColor
+            ),
+            shape = shape
         ) {
             Column(
                 modifier = Modifier
@@ -193,34 +204,34 @@ fun RecentJournalCard(
                         Text(
                             text = journal.dateTime.toShortMonth(),
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = colors.dateColor,
                         )
                     }
-                    Spacer(modifier = Modifier.width(20.dp))
-                    Text(
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(
                         modifier = Modifier.weight(1f),
-                        text = journal.title.ifBlank { journal.content.ifBlank { stringResource(R.string.untitled) } },
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    FilledIconButton(
-                        onClick = { onActionClick?.invoke() ?: viewModel.toggleBookmark(journal.id) },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        shape = IconButtonDefaults.smallRoundShape
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Icon(
-                            painter = painterResource(
-                                actionIcon ?: if (journal.isBookmarked) R.drawable.bookmark_added_24px_fill 
-                                else R.drawable.bookmark_24px
-                            ),
-                            contentDescription = if (actionIcon != null) "Action" else "Toggle Bookmark",
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        JournalMetadataBadges(journal = journal)
                     }
+                    JournalActionButton(
+                        isBookmarked = journal.isBookmarked,
+                        innerContainerColor = colors.innerContainerColor,
+                        actionIcon = actionIcon,
+                        onActionClick = onActionClick,
+                        onToggleBookmark = onToggleBookmark
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
                 }
                 Spacer(modifier = Modifier.height(8.dp))

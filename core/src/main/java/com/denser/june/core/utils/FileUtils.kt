@@ -36,6 +36,25 @@ object FileUtils {
         }
     }
 
+    fun persistSongArt(context: Context, uri: Uri): String? {
+        return try {
+            val contentResolver = context.contentResolver
+            val inputStream = contentResolver.openInputStream(uri) ?: return null
+
+            val songArtDir = File(context.filesDir, "song_media/art").apply { if (!exists()) mkdirs() }
+            val fileName = "art_${System.currentTimeMillis()}_${(0..999).random()}.jpg"
+            val file = File(songArtDir, fileName)
+
+            file.outputStream().use { output ->
+                inputStream.copyTo(output)
+            }
+            file.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     fun deleteMedia(path: String?): Boolean {
         if (path == null) return false
         return try {
@@ -106,6 +125,55 @@ object FileUtils {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
+
+    fun getDisplayName(context: Context, uri: Uri): String? {
+        if (uri.scheme == "content") {
+            try {
+                context.contentResolver.query(
+                    uri,
+                    arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val colIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (colIdx != -1) {
+                            return cursor.getString(colIdx)
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        return uri.lastPathSegment?.let { File(it).name }
+    }
+
+    fun getAudioDurationMs(path: String?): Long? {
+        if (path.isNullOrBlank()) return null
+        val file = File(path)
+        if (!file.exists() || file.length() == 0L) return null
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            val dur = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            dur?.takeIf { it > 0L }
+        } catch (_: Exception) {
+            null
+        } finally {
+            try {
+                retriever.release()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun resolveSongMedia(context: Context, path: String?, subDir: String): File? {
+        if (path.isNullOrBlank()) return null
+        val file = File(path)
+        if (file.exists() && file.length() > 0L) return file
+        val candidate = File(File(context.filesDir, "song_media/$subDir"), file.name)
+        return candidate.takeIf { it.exists() && it.length() > 0L }
+    }
 }
 
-fun File.computeSHA256(): String = FileUtils.computeSHA256(this)
+fun File.computeSHA256(): String = FileUtils.computeSHA256(this)

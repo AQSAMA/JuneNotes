@@ -31,7 +31,8 @@ Any developer or AI agent modifying database schemas, sync manifests, or export/
 * **Manifest Schema Version History**:
   - `schemaVersion = 1`: Initial release (basic file listing).
   - `schemaVersion = 2`: Added `deletedIds` array for cloud deletion tracking.
-  - `schemaVersion = 3` (Current): Added `journalMetadata` (`rev` counter + SHA-256 `contentHash`) and `mediaMetadata` (`size` + SHA-256 file `hash`).
+  - `schemaVersion = 3`: Added `journalMetadata` (`rev` counter + SHA-256 `contentHash`) and `mediaMetadata` (`size` + SHA-256 file `hash`).
+  - `schemaVersion = 4` (Current): Added `songMediaMetadata` (`size` + SHA-256 `hash`) and `totalSongMedia` count for cached audio files in `song_media/`.
 
 ---
 
@@ -40,3 +41,17 @@ Any developer or AI agent modifying database schemas, sync manifests, or export/
 * **Action**: If you update the backup ZIP contents or formatting:
   1. If introducing a new format, define a new manifest file marker (like `manifest.json`).
   2. Update `RestoreImpl.kt` to run conditional parsing blocks (e.g. format detection) to guarantee older backup files (like legacy ZIPs containing `journal_data.json` at schema version 3) remain fully restorable.
+
+---
+
+## 5. App Versioning & Release Codes (`versionCode`)
+* **File**: [app/build.gradle.kts](app/build.gradle.kts)
+* **Rule**: `versionCode` must strictly increase on every release. Never decrement below `100000`. Declare `val appVersionCode = <INT>` and `val appVersionName = "<STR>"` as literal constants on single lines.
+* **Format**: `M mm pp b` (Major `M`, 2-digit Minor `mm`, 2-digit Patch `pp`, 1-digit Build `b`)
+  * `1.0.0` -> `100000`
+  * `1.0.1` -> `100010`
+  * `1.0.2` -> `100020`
+  * `1.0.10` -> `100100`
+  * `1.1.0` -> `101000`
+  * `1.10.0` -> `110000`
+  * `2.0.0` -> `200000`

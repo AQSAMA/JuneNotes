@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.ksp)
@@ -35,7 +37,7 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmToolchain(17)
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
@@ -51,6 +53,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.ui.text.google.fonts)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kaml)
 
     // Essential
     implementation(libs.koin.core)

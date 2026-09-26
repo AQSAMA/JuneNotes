@@ -1,21 +1,33 @@
-package com.denser.june;
+package com.denser.june
 
 import android.app.Application
-import com.denser.june.di.juneModules
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import com.denser.june.core.domain.repository.JournalRepository
+import com.denser.june.core.utils.FileUtils
 import com.denser.june.di.flavorModule
+import com.denser.june.di.juneModules
+import com.denser.june.notification.NotificationsHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
-import com.denser.june.core.utils.FileUtils
-import com.denser.june.core.domain.repository.JournalRepository
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import com.denser.june.notification.NotificationsHelper
-import org.koin.android.ext.android.inject
+import kotlin.time.Duration.Companion.milliseconds
 
-class JuneApplication : Application() {
+class JuneApplication : Application(), ImageLoaderFactory {
     private val journalRepo: JournalRepository by inject()
+    private val songRepo: com.denser.june.core.domain.repository.SongRepository by inject()
+    private val imageLoader: ImageLoader by inject()
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun newImageLoader(): ImageLoader = imageLoader
+
     override fun onCreate() {
         super.onCreate()
 
@@ -24,16 +36,22 @@ class JuneApplication : Application() {
             androidContext(this@JuneApplication)
             modules(juneModules, flavorModule)
         }
-        
+
         NotificationsHelper(this).createNotificationChannel()
         cleanupStorage()
     }
+
     private fun cleanupStorage() {
-        CoroutineScope(Dispatchers.IO).launch {
+        appScope.launch {
             try {
+                delay(3000L.milliseconds)
                 val allJournals = journalRepo.getAllJournalsIncludeDeletedSync()
-                val activePaths = allJournals.flatMap { it.images }
+                val librarySongs = songRepo.getLibrarySongs().first()
+                val activePaths = allJournals.flatMap { it.images } +
+                    allJournals.mapNotNull { it.songDetails?.localThumbnailPath } +
+                    librarySongs.mapNotNull { it.localThumbnailPath }
                 FileUtils.cleanOrphanedFiles(applicationContext, activePaths)
+                songRepo.cleanupUnreferencedSongMedia(allJournals)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

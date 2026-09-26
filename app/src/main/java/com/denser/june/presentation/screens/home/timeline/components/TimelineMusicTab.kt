@@ -21,10 +21,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalContext
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.SongDetails
+import com.denser.june.core.utils.FileUtils
 import com.denser.june.presentation.components.ListenDropdownMenu
 import com.denser.june.presentation.components.RestrictedAsyncImage
+import com.denser.june.presentation.components.SmallPlayPauseButton
+import com.denser.june.presentation.components.toAvailableLinks
 import com.denser.june.presentation.utils.rememberDynamicThemeColors
 import com.denser.june.presentation.screens.home.timeline.TimelineVM
 import org.koin.compose.viewmodel.koinViewModel
@@ -32,15 +36,28 @@ import org.koin.compose.viewmodel.koinViewModel
 import com.denser.june.core.R
 import com.denser.june.presentation.theme.LocalInternetAllowed
 
+import androidx.compose.ui.graphics.Shape
+import com.denser.june.core.utils.toLocalDate
+import com.denser.june.presentation.components.DayJournalGroupData
+import com.denser.june.presentation.components.rememberJournalGroupShape
+import java.time.LocalDate
+
 @Composable
 fun TimelineMusicTab(
     journals: List<Journal>,
     bottomPadding: Dp,
     viewModel: TimelineVM = koinViewModel()
 ) {
+    val context = LocalContext.current
     val isInternetAllowed = LocalInternetAllowed.current
     val musicJournals = remember(journals) {
         journals.filter { it.songDetails != null }
+    }
+
+    val dayGroups = remember(musicJournals) {
+        musicJournals
+            .groupBy { it.dateTime.toLocalDate() }
+            .map { (date, journalsOnDay) -> DayJournalGroupData(date, journalsOnDay) }
     }
 
     val activeSong by viewModel.activeSong.collectAsStateWithLifecycle()
@@ -83,21 +100,41 @@ fun TimelineMusicTab(
                     bottom = bottomPadding + 92.dp,
                     top = 16.dp
                 ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(musicJournals, key = { it.id }) { journal ->
-                    val song = journal.songDetails!!
-                    MusicListTile(
-                        journal = journal,
-                        song = song,
-                        isActive = activeSong?.previewUrl == song.previewUrl,
-                        onClick = { viewModel.onSongSelected(song, journal.id) }
-                    )
+                dayGroups.forEach { dayGroup ->
+                    if (dayGroup.journals.size > 1) {
+                        item(key = "music_day_group_${dayGroup.date}") {
+                            TimelineMusicDayGroup(
+                                journals = dayGroup.journals,
+                                activeSong = activeSong,
+                                onSongClick = { song, journalId ->
+                                    viewModel.onSongSelected(song, journalId)
+                                },
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                        }
+                    } else {
+                        val singleJournal = dayGroup.journals.first()
+                        val song = singleJournal.songDetails!!
+                        item(key = "single_music_${singleJournal.id}") {
+                            MusicListTile(
+                                journal = singleJournal,
+                                song = song,
+                                isActive = activeSong?.previewUrl == song.previewUrl,
+                                onClick = { viewModel.onSongSelected(song, singleJournal.id) },
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        if (activeSong != null && isInternetAllowed) {
+        val hasLocalAudio = remember(activeSong?.localPreviewPath) {
+            FileUtils.resolveSongMedia(context, activeSong?.localPreviewPath, "library") != null
+        }
+        if (activeSong != null && (isInternetAllowed || hasLocalAudio)) {
             DockedMiniPlayer(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -121,8 +158,15 @@ fun DockedMiniPlayer(
     onPlayPause: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val isInternetAllowed = LocalInternetAllowed.current
-    val themeColors = rememberDynamicThemeColors(if (isInternetAllowed) song.thumbnailUrl else null)
+    val localArtFile = remember(song.localThumbnailPath) {
+        FileUtils.resolveSongMedia(context, song.localThumbnailPath, "art")
+    }
+    val artModel = remember(localArtFile, song.thumbnailUrl, isInternetAllowed) {
+        if (localArtFile != null) localArtFile else if (isInternetAllowed) song.thumbnailUrl else null
+    }
+    val themeColors = rememberDynamicThemeColors(artModel)
 
     Surface(
         modifier = modifier
@@ -150,6 +194,7 @@ fun DockedMiniPlayer(
                 ) {
                     RestrictedAsyncImage(
                         imageUrl = song.thumbnailUrl,
+                        localPath = song.localThumbnailPath,
                         iconSize = 20.dp,
                         iconTint = themeColors.onSurfaceVariant.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxSize()
@@ -201,38 +246,67 @@ fun DockedMiniPlayer(
 }
 
 @Composable
+fun TimelineMusicDayGroup(
+    modifier: Modifier = Modifier,
+    journals: List<Journal>,
+    activeSong: SongDetails?,
+    onSongClick: (SongDetails, String) -> Unit
+) {
+    val groupShape = RoundedCornerShape(24.dp)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(groupShape),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        journals.forEachIndexed { index, journal ->
+            val song = journal.songDetails ?: return@forEachIndexed
+            val shape = rememberJournalGroupShape(index = index, totalCount = journals.size)
+            val isSongActive = (activeSong?.localPreviewPath != null && activeSong.localPreviewPath == song.localPreviewPath) ||
+                    (activeSong?.previewUrl != null && activeSong.previewUrl == song.previewUrl)
+
+            MusicListTile(
+                journal = journal,
+                song = song,
+                shape = shape,
+                isActive = isSongActive,
+                onClick = { onSongClick(song, journal.id) }
+            )
+        }
+    }
+}
+
+@Composable
 fun MusicListTile(
     journal: Journal,
     song: SongDetails,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(24.dp),
     isActive: Boolean = false,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     val isInternetAllowed = LocalInternetAllowed.current
+    val hasLocalAudio = remember(song.localPreviewPath) {
+        FileUtils.resolveSongMedia(context, song.localPreviewPath, "library") != null
+    }
     var showMenu by remember { mutableStateOf(false) }
 
     val availableLinks = remember(song.links) {
-        listOf(
-            "Spotify" to song.links.spotify,
-            "Apple Music" to song.links.appleMusic,
-            "YouTube Music" to song.links.youtubeMusic,
-            "YouTube" to song.links.youtube,
-            "Deezer" to song.links.deezer,
-            "SoundCloud" to song.links.soundcloud,
-            "Tidal" to song.links.tidal,
-            "Amazon Music" to song.links.amazonMusic
-        ).filter { it.second != null }
+        song.links.toAvailableLinks()
     }
 
-    Surface(
-        modifier = Modifier
+    Card(
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(enabled = isInternetAllowed) { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        color = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-        else MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 2.dp
+            .clip(shape)
+            .clickable(enabled = isInternetAllowed || hasLocalAudio) { onClick() },
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+            else MaterialTheme.colorScheme.surfaceContainer
+        )
     ) {
         Row(
             modifier = Modifier
@@ -250,6 +324,7 @@ fun MusicListTile(
             ) {
                 RestrictedAsyncImage(
                     imageUrl = song.thumbnailUrl,
+                    localPath = song.localThumbnailPath,
                     iconSize = 20.dp,
                     iconTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.fillMaxSize()
@@ -290,49 +365,6 @@ fun MusicListTile(
                         )
                     }
                 }
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun SmallPlayPauseButton(
-    isPlaying: Boolean,
-    isLoading: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    containerColor: Color,
-    contentColor: Color,
-    modifier: Modifier = Modifier
-) {
-    FilledIconToggleButton(
-        checked = isPlaying,
-        onCheckedChange = { if (!isLoading) onClick() },
-        enabled = enabled,
-        modifier = modifier.size(width = 52.dp, height = 40.dp),
-        shapes = IconButtonDefaults.toggleableShapes(),
-        colors = IconButtonDefaults.filledIconToggleButtonColors(
-            containerColor = containerColor,
-            contentColor = contentColor,
-            checkedContainerColor = containerColor,
-            checkedContentColor = contentColor,
-            disabledContainerColor = containerColor.copy(alpha = 0.5f),
-            disabledContentColor = contentColor.copy(alpha = 0.5f)
-        )
-    ) {
-        if (isLoading) {
-            CircularWavyProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                color = contentColor,
-            )
-        } else {
-            Icon(
-                painter = painterResource(
-                    if (isPlaying) R.drawable.pause_24px else R.drawable.play_arrow_24px
-                ),
-                contentDescription = if (isPlaying) "Pause" else "Play",
-                modifier = Modifier.size(24.dp)
             )
         }
     }

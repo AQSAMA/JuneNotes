@@ -15,9 +15,9 @@ import androidx.navigation.toRoute
 import com.denser.june.presentation.components.JuneMediaLightbox
 import com.denser.june.presentation.screens.editor.EditorVM
 import com.denser.june.presentation.screens.editor.EditorScreen
+import com.denser.june.presentation.screens.editor.screens.AddSongScreen
 import com.denser.june.presentation.screens.editor.screens.ItemGalleryScreen
 import com.denser.june.presentation.screens.home.HomeScreen
-import com.denser.june.presentation.screens.search.SearchScreen
 import com.denser.june.presentation.screens.settings.screens.FontSelectionScreen
 import com.denser.june.presentation.screens.settings.SettingsScreen
 
@@ -29,7 +29,7 @@ import com.denser.june.presentation.screens.settings.screens.GeneralSettingsScre
 import com.denser.june.presentation.screens.settings.screens.MapSettingsScreen
 import com.denser.june.presentation.screens.settings.screens.AppearanceSettingsScreen
 import com.denser.june.presentation.screens.settings.screens.PrivacySecuritySettingsScreen
-import com.denser.june.presentation.screens.settings.screens.SyncBackupSettingsScreen
+import com.denser.june.presentation.screens.settings.screens.DataSyncSettingsScreen
 import com.denser.june.presentation.screens.settings.screens.AboutSettingsScreen
 import com.denser.june.presentation.screens.settings.screens.DeveloperSettingsScreen
 import com.denser.june.presentation.screens.settings.screens.EditorSettingsScreen
@@ -63,13 +63,6 @@ fun JuneNavHost(
             HomeScreen()
         }
 
-        composable<Route.Search>(
-            enterTransition = { slideInHorizontally(initialOffsetX = { -it }) + fadeIn() },
-            popExitTransition = { slideOutHorizontally(targetOffsetX = { -it }) + fadeOut() }
-        ) {
-            SearchScreen()
-        }
-
         composable<Route.Editor> {
             EditorScreen()
         }
@@ -80,6 +73,17 @@ fun JuneNavHost(
             }
             val viewModel: EditorVM = koinViewModel(viewModelStoreOwner = parentEntry)
             ItemGalleryScreen(viewModel = viewModel)
+        }
+
+        composable<Route.AddSong> { backStackEntry ->
+            val parentEntry = remember(backStackEntry) {
+                navController.getBackStackEntry<Route.Editor>()
+            }
+            val viewModel: EditorVM = koinViewModel(viewModelStoreOwner = parentEntry)
+            AddSongScreen(
+                viewModel = viewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         composable<Route.MediaViewerRoute>(
@@ -136,7 +140,7 @@ fun JuneNavHost(
         }
 
         composable<Route.SyncBackupSettings> {
-            SyncBackupSettingsScreen()
+            DataSyncSettingsScreen()
         }
 
         composable<Route.AboutSettings> {

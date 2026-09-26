@@ -1,11 +1,21 @@
 package com.denser.june.presentation.utils
 
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import kotlinx.coroutines.delay
-import androidx.core.net.toUri
+import com.denser.june.core.utils.FileUtils
+import com.denser.june.core.utils.toAudioTimestamp
 import com.denser.june.presentation.theme.LocalInternetAllowed
+import kotlinx.coroutines.delay
 
 data class SongPlayerState(
     val exoPlayer: ExoPlayer?,
@@ -22,24 +32,40 @@ data class SongPlayerState(
 
 @Composable
 fun rememberSongPlayerState(
-    previewUrl: String?
+    previewUrl: String?,
+    localPreviewPath: String? = null,
+    clipStartMs: Long? = null,
+    clipEndMs: Long? = null,
+    autoRepeat: Boolean = false
 ): SongPlayerState {
+    val context = LocalContext.current
     val isInternetAllowed = LocalInternetAllowed.current
-    val uri = remember(previewUrl, isInternetAllowed) {
-        if (isInternetAllowed) previewUrl?.toUri() else null
+    val localFile = remember(localPreviewPath) {
+        FileUtils.resolveSongMedia(context, localPreviewPath, "library")
+    }
+    val uri = remember(localFile, previewUrl, isInternetAllowed) {
+        if (localFile != null) {
+            localFile.toUri()
+        } else if (isInternetAllowed) {
+            previewUrl?.toUri()
+        } else {
+            null
+        }
     }
     val exoPlayer = uri?.let {
         rememberManagedExoPlayer(uri = it, repeatMode = Player.REPEAT_MODE_OFF)
     }
 
+    val startMs = remember(clipStartMs) { (clipStartMs ?: 0L).coerceAtLeast(0L) }
+
     var isPlaying by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var sliderValue by remember { mutableFloatStateOf(0f) }
     var isSeeking by remember { mutableStateOf(false) }
-    var isRepeatEnabled by remember { mutableStateOf(false) }
+    var isRepeatEnabled by remember(autoRepeat) { mutableStateOf(autoRepeat) }
 
     if (exoPlayer != null) {
-        DisposableEffect(exoPlayer) {
+        DisposableEffect(exoPlayer, startMs, clipEndMs) {
             val listener = object : Player.Listener {
                 override fun onIsPlayingChanged(playing: Boolean) {
                     isPlaying = playing
@@ -47,12 +73,19 @@ fun rememberSongPlayerState(
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
                     isLoading = playbackState == Player.STATE_BUFFERING
-                    if (playbackState == Player.STATE_ENDED) {
+                    if (playbackState == Player.STATE_READY) {
+                        if (exoPlayer.currentPosition < startMs) {
+                            exoPlayer.seekTo(startMs)
+                        }
+                    } else if (playbackState == Player.STATE_ENDED) {
                         if (!isRepeatEnabled) {
                             isPlaying = false
                             sliderValue = 0f
-                            exoPlayer.seekTo(0)
+                            exoPlayer.seekTo(startMs)
                             exoPlayer.pause()
+                        } else {
+                            exoPlayer.seekTo(startMs)
+                            exoPlayer.play()
                         }
                     }
                 }
@@ -61,22 +94,52 @@ fun rememberSongPlayerState(
 
             isLoading = exoPlayer.playbackState == Player.STATE_BUFFERING
             isPlaying = exoPlayer.isPlaying
+            if (exoPlayer.currentPosition < startMs) {
+                exoPlayer.seekTo(startMs)
+            }
 
             onDispose { exoPlayer.removeListener(listener) }
         }
 
-        LaunchedEffect(isPlaying, isSeeking) {
+        LaunchedEffect(isPlaying, isSeeking, startMs, clipEndMs, isRepeatEnabled) {
             while (isPlaying && !isSeeking) {
-                val duration = exoPlayer.duration.coerceAtLeast(1)
-                val position = exoPlayer.currentPosition
-                sliderValue = position.toFloat() / duration.toFloat()
-                delay(100)
+                val totalDuration = exoPlayer.duration.coerceAtLeast(1L)
+                val effectiveEndMs = clipEndMs?.coerceAtMost(totalDuration)?.takeIf { it > startMs } ?: totalDuration
+                val clipSpan = (effectiveEndMs - startMs).coerceAtLeast(1L)
+                val currentPos = exoPlayer.currentPosition
+
+                if (clipEndMs != null && currentPos >= effectiveEndMs) {
+                    if (isRepeatEnabled) {
+                        exoPlayer.seekTo(startMs)
+                    } else {
+                        isPlaying = false
+                        sliderValue = 0f
+                        exoPlayer.seekTo(startMs)
+                        exoPlayer.pause()
+                    }
+                } else {
+                    val offsetInClip = (currentPos - startMs).coerceIn(0L, clipSpan)
+                    sliderValue = offsetInClip.toFloat() / clipSpan.toFloat()
+                }
+                delay(50)
             }
         }
     }
 
     val onPlayPause = {
-        if (isPlaying) exoPlayer?.pause() else exoPlayer?.play()
+        if (isPlaying) {
+            exoPlayer?.pause()
+        } else {
+            exoPlayer?.let { player ->
+                val totalDuration = player.duration.coerceAtLeast(1L)
+                val effectiveEndMs = clipEndMs?.coerceAtMost(totalDuration)?.takeIf { it > startMs } ?: totalDuration
+                val currentPos = player.currentPosition
+                if (currentPos < startMs || (clipEndMs != null && currentPos >= effectiveEndMs)) {
+                    player.seekTo(startMs)
+                }
+                player.play()
+            }
+        }
         Unit
     }
 
@@ -84,7 +147,11 @@ fun rememberSongPlayerState(
         isSeeking = true
         sliderValue = newVal
         exoPlayer?.let { player ->
-            player.seekTo((newVal * player.duration).toLong())
+            val totalDuration = player.duration.coerceAtLeast(1L)
+            val effectiveEndMs = clipEndMs?.coerceAtMost(totalDuration)?.takeIf { it > startMs } ?: totalDuration
+            val clipSpan = (effectiveEndMs - startMs).coerceAtLeast(1L)
+            val targetMs = startMs + (newVal * clipSpan).toLong()
+            player.seekTo(targetMs)
         }
     }
 
@@ -95,7 +162,11 @@ fun rememberSongPlayerState(
 
     val onToggleRepeat = {
         isRepeatEnabled = !isRepeatEnabled
-        exoPlayer?.repeatMode = if (isRepeatEnabled) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        if (clipEndMs == null) {
+            exoPlayer?.repeatMode = if (isRepeatEnabled) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        } else {
+            exoPlayer?.repeatMode = Player.REPEAT_MODE_OFF
+        }
         Unit
     }
 
@@ -114,3 +185,5 @@ fun rememberSongPlayerState(
         )
     }
 }
+
+fun formatAudioTimestamp(ms: Long): String = ms.toAudioTimestamp()

@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.presentation.screens.home.timeline.TimelineTab
 import com.denser.june.presentation.components.JunePlaceholderPage
+import java.time.LocalDate
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -25,6 +26,10 @@ fun TimelineTabs(
     onTabSelected: (TimelineTab) -> Unit,
     modifier: Modifier = Modifier,
     bottomPadding: Dp = 0.dp,
+    is24Hour: Boolean = false,
+    targetScrollDate: LocalDate? = null,
+    onScrollConsumed: (() -> Unit)? = null,
+    onToggleBookmark: ((String) -> Unit)? = null,
     onLongClickJournal: ((Journal) -> Unit)? = null
 ) {
     CompositionLocalProvider(
@@ -62,6 +67,10 @@ fun TimelineTabs(
                     TimelineTab.Journals -> TimelineJournalTab(
                         journals = journals,
                         bottomPadding = bottomPadding,
+                        is24Hour = is24Hour,
+                        targetScrollDate = targetScrollDate,
+                        onScrollConsumed = onScrollConsumed,
+                        onToggleBookmark = onToggleBookmark,
                         onLongClick = onLongClickJournal
                     )
 
