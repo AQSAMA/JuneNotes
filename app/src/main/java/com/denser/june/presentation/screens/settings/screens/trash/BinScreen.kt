@@ -18,6 +18,8 @@ import com.denser.june.core.R
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.enums.TimeFormat
 import com.denser.june.presentation.components.JuneAppBarType
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.presentation.components.JunePlaceholderPage
 import com.denser.june.presentation.components.JuneTopAppBar
 import com.denser.june.presentation.navigation.AppNavigator
@@ -91,17 +93,12 @@ fun BinScreen() {
                                     contentDescription = stringResource(R.string.options)
                                 )
                             }
-                            DropdownMenu(
+                            JuneDropdownMenu(
                                 expanded = showMenu,
                                 onDismissRequest = { showMenu = false },
-                                shape = RoundedCornerShape(24.dp),
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                tonalElevation = 3.dp,
-                                modifier = Modifier.padding(horizontal = 8.dp),
                                 offset = DpOffset(x = 0.dp, y = 4.dp)
                             ) {
-                                DropdownMenuItem(
-                                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                                JuneDropdownMenuItem(
                                     text = { Text(stringResource(R.string.restore_all)) },
                                     onClick = {
                                         showMenu = false
@@ -114,8 +111,7 @@ fun BinScreen() {
                                         )
                                     }
                                 )
-                                DropdownMenuItem(
-                                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                                JuneDropdownMenuItem(
                                     text = {
                                         Text(
                                             stringResource(R.string.empty_bin),

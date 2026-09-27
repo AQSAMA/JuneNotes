@@ -23,6 +23,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.enums.TagCategory
 import com.denser.june.core.domain.model.Journal
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.core.domain.model.enums.TimeFormat
 import com.denser.june.core.utils.toLocalDate
 import com.denser.june.presentation.components.DayJournalGroupData
@@ -169,16 +171,11 @@ fun TagsPage() {
                                             )
                                         }
 
-                                        DropdownMenu(
-                                            modifier = Modifier
-                                                .padding(horizontal = 8.dp),
+                                        JuneDropdownMenu(
                                             expanded = showMenu,
                                             onDismissRequest = { showMenu = false },
-                                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                            shape = RoundedCornerShape(24.dp),
-                                            tonalElevation = 3.dp
                                         ) {
-                                            DropdownMenuItem(
+                                            JuneDropdownMenuItem(
                                                 text = {
                                                     Text(
                                                         text = stringResource(R.string.rename),
@@ -197,7 +194,7 @@ fun TagsPage() {
                                                     showRenameDialog = true
                                                 }
                                             )
-                                            DropdownMenuItem(
+                                            JuneDropdownMenuItem(
                                                 text = {
                                                     Text(
                                                         text = stringResource(R.string.delete),

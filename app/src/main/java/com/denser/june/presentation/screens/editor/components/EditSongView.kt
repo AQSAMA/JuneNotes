@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.dp
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.SongDetails
 import com.denser.june.core.utils.FileUtils
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.presentation.components.JuneTextField
 import com.denser.june.presentation.components.RestrictedAsyncImage
 
@@ -126,19 +128,14 @@ fun EditSongView(
                         )
                     }
 
-                    DropdownMenu(
+                    JuneDropdownMenu(
                         modifier = Modifier
-                            .defaultMinSize(minWidth = 180.dp)
-                            .padding(horizontal = 8.dp),
+                            .defaultMinSize(minWidth = 180.dp),
                         expanded = showArtMenu,
                         onDismissRequest = { showArtMenu = false },
-                        shape = RoundedCornerShape(24.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        tonalElevation = 3.dp,
                         offset = DpOffset(x = 0.dp, y = 4.dp)
                     ) {
-                        DropdownMenuItem(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                        JuneDropdownMenuItem(
                             text = { Text("Change") },
                             onClick = {
                                 showArtMenu = false
@@ -156,8 +153,7 @@ fun EditSongView(
                             }
                         )
 
-                        DropdownMenuItem(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                        JuneDropdownMenuItem(
                             text = {
                                 Text(
                                     text = "Remove",

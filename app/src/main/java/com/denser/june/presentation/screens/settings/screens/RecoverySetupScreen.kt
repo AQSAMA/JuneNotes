@@ -14,8 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -189,23 +189,19 @@ fun RecoverySetupScreen() {
                         }
                     }
 
-                    DropdownMenu(
+                    JuneDropdownMenu(
                         expanded = isDropdownExpanded,
                         onDismissRequest = { isDropdownExpanded = false },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                     ) {
                         questionItems.forEach { (question, _) ->
                             val isCustomOption = question == customQuestionTitle
 
-                            DropdownMenuItem(
+                            JuneDropdownMenuItem(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clip(RoundedCornerShape(16.dp)),
+                                    .padding(vertical = 4.dp),
                                 text = {
                                     Text(
                                         text = question,

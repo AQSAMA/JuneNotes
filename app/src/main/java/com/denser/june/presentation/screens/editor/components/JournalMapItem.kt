@@ -20,6 +20,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.denser.june.presentation.components.InternetRestrictedIndicator
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.presentation.theme.LocalInternetAllowed
 import com.denser.june.core.R
 import androidx.compose.ui.unit.DpOffset
@@ -188,34 +190,29 @@ fun JournalMapItem(
                         .offset(x = pressOffset.x, y = pressOffset.y)
                         .size(1.dp)
                 ) {
-                    DropdownMenu(
-                        modifier = Modifier
-                            .defaultMinSize(minWidth = 200.dp)
-                            .padding(horizontal = 8.dp),
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                        shape = RoundedCornerShape(24.dp),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ) {
-                        DropdownMenuItem(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)),
-                            text = { Text(stringResource(R.string.change_location)) },
-                            onClick = {
-                                showMenu = false
-                                onMapClick()
-                            },
-                            leadingIcon = { Icon(painterResource(R.drawable.edit_24px), null) }
-                        )
-                        DropdownMenuItem(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)),
-                            text = { Text(stringResource(R.string.remove)) },
-                            onClick = {
-                                showMenu = false
-                                onRemove()
-                            },
-                            leadingIcon = { Icon(painterResource(R.drawable.delete_24px), null) }
-                        )
-                    }
+                JuneDropdownMenu(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 200.dp),
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                ) {
+                    JuneDropdownMenuItem(
+                        text = { Text(stringResource(R.string.change_location)) },
+                        onClick = {
+                            showMenu = false
+                            onMapClick()
+                        },
+                        leadingIcon = { Icon(painterResource(R.drawable.edit_24px), null) }
+                    )
+                    JuneDropdownMenuItem(
+                        text = { Text(stringResource(R.string.remove)) },
+                        onClick = {
+                            showMenu = false
+                            onRemove()
+                        },
+                        leadingIcon = { Icon(painterResource(R.drawable.delete_24px), null) }
+                    )
+                }
                 }
             }
         }

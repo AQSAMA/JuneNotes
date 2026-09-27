@@ -22,6 +22,8 @@ import com.denser.june.core.domain.model.SongDetails
 import com.denser.june.core.domain.model.SongSourceType
 import com.denser.june.core.utils.FileUtils
 import com.denser.june.core.utils.toSongTimestamp
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.presentation.components.RestrictedAsyncImage
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -177,19 +179,14 @@ fun LibrarySongRow(
                     )
                 }
 
-                DropdownMenu(
+                JuneDropdownMenu(
                     modifier = Modifier
-                        .defaultMinSize(minWidth = 200.dp)
-                        .padding(horizontal = 8.dp),
+                        .defaultMinSize(minWidth = 200.dp),
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    shape = RoundedCornerShape(24.dp),
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    tonalElevation = 3.dp,
                     offset = DpOffset(x = 0.dp, y = 4.dp)
                 ) {
-                    DropdownMenuItem(
-                        modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                    JuneDropdownMenuItem(
                         text = { Text("Trim Clip") },
                         onClick = {
                             showMenu = false
@@ -203,8 +200,7 @@ fun LibrarySongRow(
                         }
                     )
 
-                    DropdownMenuItem(
-                        modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                    JuneDropdownMenuItem(
                         text = { Text("Edit Details") },
                         onClick = {
                             showMenu = false
@@ -218,8 +214,7 @@ fun LibrarySongRow(
                         }
                     )
 
-                    DropdownMenuItem(
-                        modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                    JuneDropdownMenuItem(
                         text = {
                             Text(
                                 text = "Remove from Library",

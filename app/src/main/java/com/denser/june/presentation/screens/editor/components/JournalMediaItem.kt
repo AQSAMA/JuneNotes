@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -170,18 +172,13 @@ fun JournalMediaItem(
                     .offset(x = pressOffset.x, y = pressOffset.y)
                     .size(1.dp)
             ) {
-                DropdownMenu(
+                JuneDropdownMenu(
                     modifier = Modifier
-                        .defaultMinSize(minWidth = 200.dp)
-                        .padding(horizontal = 8.dp),
+                        .defaultMinSize(minWidth = 200.dp),
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false },
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    shape = RoundedCornerShape(24.dp),
-                    tonalElevation = 3.dp
                 ) {
-                    DropdownMenuItem(
-                        modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                    JuneDropdownMenuItem(
                         text = { Text(stringResource(R.string.delete)) },
                         onClick = {
                             showMenu = false
@@ -191,8 +188,7 @@ fun JournalMediaItem(
                         leadingIcon = { Icon(painterResource(R.drawable.delete_24px), null) }
                     )
                     if (shouldShowMoveToFront) {
-                        DropdownMenuItem(
-                            modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                        JuneDropdownMenuItem(
                             text = { Text(stringResource(R.string.move_to_front)) },
                             onClick = {
                                 operations.onMoveToFront(path)

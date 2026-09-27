@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.SongDetails
 import com.denser.june.core.utils.FileUtils
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.presentation.components.JuneSongPlayerCard
 import com.denser.june.presentation.utils.rememberSongPlayerState
 
@@ -98,18 +100,13 @@ fun JournalSongItem(
                             .offset(x = pressOffset.x, y = pressOffset.y)
                             .size(1.dp)
                     ) {
-                        DropdownMenu(
+                        JuneDropdownMenu(
                             modifier = Modifier
-                                .defaultMinSize(minWidth = 200.dp)
-                                .padding(horizontal = 8.dp),
+                                .defaultMinSize(minWidth = 200.dp),
                             expanded = showMenu,
                             onDismissRequest = { showMenu = false },
-                            shape = RoundedCornerShape(24.dp),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                            tonalElevation = 3.dp,
                         ) {
-                            DropdownMenuItem(
-                                modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                            JuneDropdownMenuItem(
                                 text = { Text("Edit Details") },
                                 onClick = {
                                     showMenu = false
@@ -119,8 +116,7 @@ fun JournalSongItem(
                                     Icon(painterResource(R.drawable.edit_24px), null)
                                 }
                             )
-                            DropdownMenuItem(
-                                modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                            JuneDropdownMenuItem(
                                 text = { Text("Open Library") },
                                 onClick = {
                                     showMenu = false
@@ -131,8 +127,7 @@ fun JournalSongItem(
                                 }
                             )
                             if (onTrim != null && hasLocalAudio) {
-                                DropdownMenuItem(
-                                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                                JuneDropdownMenuItem(
                                     text = { Text("Trim Clip") },
                                     onClick = {
                                         showMenu = false
@@ -144,8 +139,7 @@ fun JournalSongItem(
                                 )
                             }
                             if (onAddToLibrary != null && !isInLibrary) {
-                                DropdownMenuItem(
-                                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                                JuneDropdownMenuItem(
                                     text = { Text("Add to Library") },
                                     onClick = {
                                         showMenu = false
@@ -156,8 +150,7 @@ fun JournalSongItem(
                                     }
                                 )
                             }
-                            DropdownMenuItem(
-                                modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                            JuneDropdownMenuItem(
                                 text = { Text(stringResource(R.string.remove)) },
                                 onClick = {
                                     showMenu = false

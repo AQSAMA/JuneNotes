@@ -10,6 +10,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import com.denser.june.presentation.components.JuneDropdownMenu
+import com.denser.june.presentation.components.JuneDropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -102,18 +104,13 @@ fun EmojiTile(
         BasicText(text = emoji, style = EmojiTextStyle)
 
         if (showRemoveMenu && onRemoveFromRecents != null) {
-            DropdownMenu(
+            JuneDropdownMenu(
                 modifier = Modifier
-                    .defaultMinSize(minWidth = 200.dp)
-                    .padding(horizontal = 8.dp),
+                    .defaultMinSize(minWidth = 200.dp),
                 expanded = true,
                 onDismissRequest = { showRemoveMenu = false },
-                shape = RoundedCornerShape(24.dp),
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 3.dp,
             ) {
-                DropdownMenuItem(
-                    modifier = Modifier.clip(RoundedCornerShape(16.dp)),
+                JuneDropdownMenuItem(
                     text = { Text(stringResource(com.denser.june.core.R.string.remove)) },
                     onClick = {
                         showRemoveMenu = false
