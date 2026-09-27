@@ -1,11 +1,21 @@
 [
   {
+    "version": "v1.2.0",
+    "changes": [
+      "Added support for local music files.",
+      "Song library with audio trimming, waveform scrubbing, and metadata editing.",
+      "Added emoji picker with search and recent history.",
+      "Cloud sync support for songs and general fixes.",
+      "Misc UI improvements and refinements."
+    ]
+  },
+  {
     "version": "v1.1.0",
     "changes": [
       "Integrated search into home screen.",
       "Open markdown files into June.",
       "Markdown export & import for notes.",
-      "Palette selection preview bug resolved."
+      "Misc UI improvements and refinements."
     ]
   },
   {
