@@ -80,7 +80,10 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun hardDeleteJournal(id: String) {
-        journalDao.insertTombstone(DeletedJournalTombstone(id))
+        val journal = journalDao.getJournalById(id)
+        if (journal?.syncedAt != null) {
+            journalDao.insertTombstone(DeletedJournalTombstone(id))
+        }
         journalDao.hardDeleteJournal(id)
     }
 
@@ -89,11 +92,12 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun emptyBin() {
-        val deletedIds = journalDao.getDeletedJournalsSync().map { it.id }
-        if (deletedIds.isNotEmpty()) {
-            journalDao.insertTombstones(deletedIds.map { DeletedJournalTombstone(it) })
-            journalDao.emptyBin()
+        val deleted = journalDao.getDeletedJournalsSync()
+        val syncedDeletedIds = deleted.filter { it.syncedAt != null }.map { it.id }
+        if (syncedDeletedIds.isNotEmpty()) {
+            journalDao.insertTombstones(syncedDeletedIds.map { DeletedJournalTombstone(it) })
         }
+        journalDao.emptyBin()
     }
 
     override suspend fun restoreAllJournals() {
