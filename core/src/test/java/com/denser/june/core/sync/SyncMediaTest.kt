@@ -129,4 +129,37 @@ class SyncMediaTest : BaseSyncTest() {
         assertTrue("Sync succeeds", result.isSuccess)
         harness.assertMediaExistsOnDisk("missing.jpg")
     }
+
+    @Test
+    fun `media with case difference in manifest is not re-uploaded`() = runTest {
+        val mediaFile = harness.givenMediaFileOnDisk("Photo.JPG", byteArrayOf(1, 2, 3))
+        val journal = SyncFixtures.syncedJournal("j1", updatedAt = T1, images = listOf(mediaFile.absolutePath))
+        harness.repo.seed(journal)
+        harness.cloud.putJournal(journal, modifiedAt = T1)
+        harness.cloud.putMedia("j1", "photo.jpg", byteArrayOf(1, 2, 3))
+        harness.cloud.manifest = SyncFixtures.manifest(
+            totalJournals = 1,
+            mediaMetadata = mapOf("photo.jpg" to MediaSyncMeta(size = 3L, hash = com.denser.june.core.utils.FileUtils.computeSHA256(mediaFile)))
+        )
+
+        val result = harness.sync()
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, harness.cloud.uploadMediaCallCount)
+    }
+
+    @Test
+    fun `batch of media files is uploaded successfully`() = runTest {
+        val imagePaths = (1..15).map { i ->
+            harness.givenMediaFileOnDisk("photo_$i.jpg", byteArrayOf(i.toByte())).absolutePath
+        }
+        val journal = SyncFixtures.newJournal("j_batch", updatedAt = T1, images = imagePaths)
+        harness.repo.seed(journal)
+
+        val result = harness.sync()
+
+        assertTrue(result.isSuccess)
+        assertEquals(15, harness.cloud.uploadMediaCallCount)
+        assertEquals(15, harness.cloud.manifest?.totalMedia)
+    }
 }

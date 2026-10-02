@@ -55,4 +55,7 @@ interface SyncPreferences {
 
     fun getLastCompletedDataRepairVersion(): Flow<Int>
     suspend fun setLastCompletedDataRepairVersion(version: Int)
+
+    fun getLastPurgeTime(): Flow<Long>
+    suspend fun setLastPurgeTime(time: Long)
 }
