@@ -1,5 +1,20 @@
 [
   {
+    "version": "v1.2.1",
+    "changes": [
+      "Fixed whitespace and saving issues in default editor.",
+      "Fixed syllable separation during typing in languages like Korean.",
+      "Fixed keyboard spell-check and autocomplete misreading typed words.",
+      "General sync improvements and analysis count fixes.",
+      {
+        "text": "G-Drive sync improvements and fixed 100-file sync limit.",
+        "flavors": [
+          "play"
+        ]
+      }
+    ]
+  },
+  {
     "version": "v1.2.0",
     "changes": [
       "Added support for local music files.",

@@ -18,8 +18,8 @@ val appNamespace = "com.denser.june"
 val apkNamePrefix = "june"
 
 // Format: M mm pp b
-val appVersionCode = 102000
-val appVersionName = "1.2.0"
+val appVersionCode = 102010
+val appVersionName = "1.2.1"
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
