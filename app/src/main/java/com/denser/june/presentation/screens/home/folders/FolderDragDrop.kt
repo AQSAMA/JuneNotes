@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.*
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
@@ -128,7 +129,13 @@ fun FolderDropSurface(
     val hovered = controller.hovered == key
     DisposableEffect(controller, key) { onDispose { controller.unregister(key) } }
     val scale by animateFloatAsState(if (hovered) 1.025f else 1f, label = "folder_drop_scale")
-    val color by animateColorAsState(if (hovered) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface, label = "folder_drop_color")
+    val color by animateColorAsState(
+        when {
+            hovered -> MaterialTheme.colorScheme.secondaryContainer
+            onHoverScroll != null -> Color.Transparent
+            else -> MaterialTheme.colorScheme.surface
+        }, label = "folder_drop_color"
+    )
     Surface(
         color = color,
         border = if (hovered) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
