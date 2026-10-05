@@ -570,6 +570,7 @@
     <string name="whats_on_your_mind">What\'s on your mind?</string>
 
     <!-- Nested folders -->
+    <string name="move">Move</string>
     <string name="folders">Folders</string>
     <string name="new_folder">New folder</string>
     <string name="folder_options">Folder options</string>

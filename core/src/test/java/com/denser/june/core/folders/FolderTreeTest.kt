@@ -4,6 +4,7 @@ import com.denser.june.core.domain.folders.*
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.sync.SyncManifest
 import com.denser.june.core.domain.sync.serialize
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
 import org.junit.Test
@@ -58,7 +59,9 @@ class FolderTreeTest {
         val encoded = SyncManifest(1, "preview", 6, totalJournals = 0, folders = state).serialize()
         assertTrue(encoded.contains("\"folders\""))
         assertEquals(state, Json.decodeFromString<SyncManifest>(encoded).folders)
-        assertEquals(4, Json { ignoreUnknownKeys = true }.parseToJsonElement(encoded).let { SyncManifest.CURRENT_SCHEMA_VERSION })
+        val originalReader = Json { ignoreUnknownKeys = true }.decodeFromString<OriginalManifest>(encoded)
+        assertEquals(4, originalReader.schemaVersion)
+        assertEquals(0, originalReader.totalJournals)
     }
 
     @Test fun `folder extension does not alter original journal JSON or hashes`() {
@@ -75,3 +78,10 @@ class FolderTreeTest {
         FolderSnapshot(version = 2).validate()
     }
 }
+
+// Same relevant fields/defaults and tolerant decoder used by the original provider.
+@Serializable
+private data class OriginalManifest(
+    val lastSyncTime: Long, val lastSyncDeviceId: String, val databaseVersion: Int,
+    val schemaVersion: Int = 4, val totalJournals: Int
+)

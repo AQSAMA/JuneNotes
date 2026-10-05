@@ -30,6 +30,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all { systemProperty("june.schemaDir", file("schemas").absolutePath) }
+    }
     buildFeatures {
         buildConfig = true
     }
@@ -76,6 +80,7 @@ dependencies {
     implementation(libs.media3.common)
 
     // Testing
+    testImplementation("org.robolectric:robolectric:4.17")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
