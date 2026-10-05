@@ -46,7 +46,9 @@ jobs:
           cp app/build/outputs/apk/foss/preview/*.apk June-Preview.apk
           preview_apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
           preview_expected_cert="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
-          preview_actual_cert="$("$preview_apksigner" verify --print-certs June-Preview.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          preview_actual_cert="$("$preview_apksigner" verify --print-certs June-Preview.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1)"
+          echo "Cached certificate: $preview_expected_cert"
+          echo "APK certificate: $preview_actual_cert"
           test "$preview_expected_cert" = "$preview_actual_cert"
           echo "Preview APK signing certificate matches the cached key."
 

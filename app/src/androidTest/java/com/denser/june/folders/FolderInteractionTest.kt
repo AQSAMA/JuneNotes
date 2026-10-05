@@ -124,6 +124,8 @@ class FolderInteractionTest {
                 SystemClock.sleep(750)
                 ui.mainClock.advanceTimeBy(800)
                 ui.waitForIdle()
+                ui.onNodeWithContentDescription(text(R.string.folder_drop_here)).assertExists()
+                screenshot("folders-drag-active")
                 repeat(12) { index ->
                     inject(MotionEvent.ACTION_MOVE, source + (target - source) * ((index + 1) / 12f), downTime)
                     SystemClock.sleep(20)
@@ -155,7 +157,7 @@ class FolderInteractionTest {
         val journals = GlobalContext.get().get<JournalRepository>()
         val suffix = UUID.randomUUID().toString()
         val note = Journal("menu-$suffix", "Review notes", "Original content", tags = listOf("@Person", "#Topic", "Space"), createdAt = 1, updatedAt = null, dateTime = 1)
-        val destination = "Work-$suffix"
+        val destination = "Work-${suffix.take(8)}"
         val folder = runBlocking { journals.insertJournal(note); folders.create(destination, null) }
         try {
             ui.setContent {
@@ -174,6 +176,7 @@ class FolderInteractionTest {
             ui.onNode(hasSetTextAction()).performTextInput(destination)
             ui.onNode(hasSetTextAction()).performImeAction()
             ui.onNode(hasText(destination) and !hasSetTextAction()).performClick()
+            ui.waitForIdle()
             screenshot("note-folder-destination")
             ui.onNodeWithText(text(R.string.folder_move_here)).performClick()
             ui.waitUntil(5000) { runBlocking { folders.snapshot().journals.any { it.journalId == note.id && it.folderId == folder } } }
