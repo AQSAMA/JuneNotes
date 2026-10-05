@@ -139,7 +139,7 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".preview"
             versionNameSuffix = "-preview"
-            resValue("string", "app_name", "June Preview")
+            resValue("string", "preview_app_name", "June Preview")
             signingConfig = signingConfigs.getByName("debug")
             isDebuggable = false
             matchingFallbacks += listOf("release")
