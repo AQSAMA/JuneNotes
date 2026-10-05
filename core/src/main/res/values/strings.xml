@@ -568,4 +568,22 @@
     <string name="link_url_placeholder" translatable="false">https://example.com</string>
     <string name="take_photo_or_video">Take photo / video</string>
     <string name="whats_on_your_mind">What\'s on your mind?</string>
+
+    <!-- Nested folders -->
+    <string name="folders">Folders</string>
+    <string name="new_folder">New folder</string>
+    <string name="folder_options">Folder options</string>
+    <string name="rename_folder">Rename folder</string>
+    <string name="delete_folder">Delete folder</string>
+    <string name="delete_folder_description">Delete “%1$s” and its subfolders? Your notes will stay in June and return to the Folders root.</string>
+    <string name="folder_drag_hint">Drop on a folder or path. Hold to open.</string>
+    <string name="folder_empty">Nothing here yet</string>
+    <string name="unfiled_notes">Unfiled notes</string>
+    <string name="folder_counts">%1$d folders · %2$d notes</string>
+    <string name="move_folder">Move folder</string>
+    <string name="move_note">Move note</string>
+    <string name="move_here">Move here</string>
+    <string name="drop_here">Drop here</string>
+    <string name="folder_moved">Moved</string>
+    <string name="folder_operation_failed">Could not save this change. Please try again.</string>
 </resources>

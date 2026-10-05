@@ -465,7 +465,7 @@ class EditorVM(
             )
 
             if (isNewEntry) {
-                val newId = journalRepo.insertJournal(journalToSave)
+                val newId = journalRepo.insertJournalInFolder(journalToSave, editorRoute?.initialFolderId)
                 val savedDraft = journalToSave.copy(id = newId)
                 existingJournal = savedDraft
                 _state.update { it.copy(journalId = newId, content = currentMarkdown, isDirty = false, isDraft = true) }
@@ -507,7 +507,7 @@ class EditorVM(
                 journalRepo.updateJournal(journalToSave)
                 existingJournal = journalToSave
             } else {
-                val newId = journalRepo.insertJournal(journalToSave)
+                val newId = journalRepo.insertJournalInFolder(journalToSave, editorRoute?.initialFolderId)
                 existingJournal = journalToSave.copy(id = newId)
                 _state.update { it.copy(journalId = newId) }
             }

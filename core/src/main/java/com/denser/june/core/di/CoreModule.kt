@@ -1,5 +1,7 @@
 package com.denser.june.core.di
 
+import com.denser.june.core.data.repository.FolderRepositoryImpl
+import com.denser.june.core.domain.folders.FolderRepository
 import com.denser.june.core.data.backup.ExportImpl
 import com.denser.june.core.data.backup.MarkdownImportImpl
 import com.denser.june.core.data.backup.RestoreImpl
@@ -57,6 +59,7 @@ val coreModule = module {
     singleOf(::RestoreImpl).bind<RestoreRepo>()
     singleOf(::MarkdownImportImpl).bind<MarkdownImportRepo>()
 
+    singleOf(::FolderRepositoryImpl).bind<FolderRepository>()
     singleOf(::JournalRepositoryImpl).bind<JournalRepository>()
     singleOf(::ReminderSchedulerImpl).bind<ReminderScheduler>()
 
@@ -104,7 +107,8 @@ val coreModule = module {
             get(),
             get(named("ApplicationScope")),
             get(),
-            File(context.filesDir, "song_media")
+            File(context.filesDir, "song_media"),
+            get<FolderRepository>()
         )
     }
 }

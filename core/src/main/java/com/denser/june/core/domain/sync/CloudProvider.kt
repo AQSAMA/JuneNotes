@@ -125,7 +125,8 @@ data class SyncManifest(
     val deletedIds: List<String> = emptyList(),
     val journalMetadata: Map<String, JournalSyncMeta> = emptyMap(),
     val mediaMetadata: Map<String, MediaSyncMeta> = emptyMap(),
-    val songMediaMetadata: Map<String, MediaSyncMeta> = emptyMap()
+    val songMediaMetadata: Map<String, MediaSyncMeta> = emptyMap(),
+    val folders: com.denser.june.core.domain.folders.FolderSnapshot? = null
 ) {
     companion object {
         const val CURRENT_SCHEMA_VERSION = 4

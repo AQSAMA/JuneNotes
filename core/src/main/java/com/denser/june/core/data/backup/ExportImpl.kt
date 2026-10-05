@@ -1,5 +1,7 @@
 package com.denser.june.core.data.backup
 
+import com.denser.june.core.domain.folders.FolderRepository
+import com.denser.june.core.domain.folders.FolderSnapshot
 import android.content.Context
 import com.denser.june.core.data.database.journal.JournalDatabase
 import com.denser.june.core.domain.logging.AppLogger
@@ -23,7 +25,8 @@ import java.time.format.DateTimeFormatter
 
 class ExportImpl(
     private val journalRepo: JournalRepository,
-    private val context: Context
+    private val context: Context,
+    private val folderRepo: FolderRepository
 ) : ExportRepo {
 
     override suspend fun exportData(includeMedia: Boolean, includeSongFiles: Boolean): Result<File> = withContext(Dispatchers.IO) {
@@ -76,6 +79,7 @@ class ExportImpl(
             val zipOutputStream = ZipOutputStream(BufferedOutputStream(FileOutputStream(backupFile)))
 
             zipOutputStream.use { zos ->
+                writeFolders(zos, folderRepo.snapshot())
                 val manifestEntry = ZipEntry("manifest.json")
                 zos.putNextEntry(manifestEntry)
                 zos.write(manifestJson.toByteArray())
@@ -194,6 +198,7 @@ class ExportImpl(
 
             val usedFileNames = mutableSetOf<String>()
             zipOutputStream.use { zos ->
+                writeFolders(zos, folderRepo.snapshot())
                 cleanedJournals.forEach { journal ->
                     val mediaPrefix = if (includeMedia) "media/${journal.id}" else null
                     val markdownText = com.denser.june.core.domain.markdown.MarkdownEngine.toMarkdown(
@@ -246,6 +251,12 @@ class ExportImpl(
             AppLogger.e(AppLogger.Category.BACKUP, "ExportImpl", "Markdown export failed with exception", e)
             Result.failure(e)
         }
+    }
+
+    private fun writeFolders(zos: ZipOutputStream, snapshot: FolderSnapshot) {
+        zos.putNextEntry(ZipEntry("folders.json"))
+        zos.write(Json.encodeToString(FolderSnapshot.serializer(), snapshot).toByteArray(Charsets.UTF_8))
+        zos.closeEntry()
     }
 
     override suspend fun exportSingleJournalZip(journal: Journal): Result<File> = withContext(Dispatchers.IO) {

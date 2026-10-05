@@ -1,6 +1,9 @@
 package com.denser.june.core.data.backup
 
+import com.denser.june.core.domain.folders.FolderRepository
+import com.denser.june.core.domain.folders.FolderSnapshot
 import android.content.Context
+import androidx.room.withTransaction
 import androidx.core.net.toUri
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.domain.backup.ExportSchema
@@ -22,7 +25,9 @@ import com.denser.june.core.data.database.song.SongLibraryEntity
 class RestoreImpl(
     private val journalRepo: JournalRepository,
     private val songLibraryDao: SongLibraryDao,
-    private val context: Context
+    private val context: Context,
+    private val folderRepo: FolderRepository,
+    private val database: com.denser.june.core.data.database.journal.JournalDatabase
 ) : RestoreRepo {
 
     companion object {
@@ -37,6 +42,7 @@ class RestoreImpl(
                 val songLibraryDir = File(context.filesDir, "song_media/library").apply { if (!exists()) mkdirs() }
                 val songArtDir = File(context.filesDir, "song_media/art").apply { if (!exists()) mkdirs() }
                 val journalsList = mutableListOf<Journal>()
+                var folderSnapshot: FolderSnapshot? = null
                 var isLegacy = false
                 var isMarkdown = false
 
@@ -67,6 +73,11 @@ class RestoreImpl(
                         while (entry != null) {
                             val entryName = entry.name
                             when {
+                                entryName == "folders.json" -> {
+                                    folderSnapshot = Json { ignoreUnknownKeys = true }
+                                        .decodeFromString<FolderSnapshot>(String(zis.readBytes(), Charsets.UTF_8))
+                                    folderSnapshot!!.validate()
+                                }
                                 isLegacy -> {
                                     if (entryName == "journal_data.json") {
                                         val jsonString = String(zis.readBytes(), Charsets.UTF_8)
@@ -138,13 +149,14 @@ class RestoreImpl(
                     }
                 }
 
-                if (journalsList.isEmpty()) {
+                if (journalsList.isEmpty() && folderSnapshot == null) {
                     AppLogger.e(AppLogger.Category.BACKUP, TAG, "No journals found in backup file to restore")
                     return@withContext Result.failure(RestoreException.InvalidFile)
                 }
 
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Found ${journalsList.size} journals to import. Inserting into DB...")
 
+                database.withTransaction {
                 journalsList.forEach { journal ->
                     val updatedJournal = remapMediaPaths(journal, extractedMediaMap, mediaDir, songLibraryDir, songArtDir)
                     val existing = journalRepo.getJournalById(updatedJournal.id)
@@ -185,6 +197,9 @@ class RestoreImpl(
                     AppLogger.d(AppLogger.Category.BACKUP, TAG, "Successfully imported journal with ID: $id")
                 }
                 
+                folderSnapshot?.let { folderRepo.merge(it) }
+                }
+
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Restore completed successfully.")
                 Result.success(Unit)
             } catch (e: IllegalArgumentException) {

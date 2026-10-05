@@ -185,4 +185,12 @@ object DatabaseMigrations {
             )
         }
     }
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS note_folders (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, parentId TEXT, position INTEGER NOT NULL, updatedAt INTEGER NOT NULL, deletedAt INTEGER)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS note_placements (journalId TEXT NOT NULL PRIMARY KEY, folderId TEXT, position INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+            db.execSQL("CREATE TABLE IF NOT EXISTS folder_sync_state (id INTEGER NOT NULL PRIMARY KEY, snapshot TEXT NOT NULL)")
+        }
+    }
+
 }

@@ -28,6 +28,8 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 import com.denser.june.core.R
+import com.denser.june.presentation.screens.home.folders.FoldersVM
+import com.denser.june.presentation.screens.home.folders.FoldersPage
 import com.denser.june.presentation.screens.home.tags.TagsVM
 import com.denser.june.presentation.components.SyncIndicator
 import com.denser.june.MainVM
@@ -48,6 +50,7 @@ enum class HomeTab(@get:StringRes val labelRes: Int, val iconRes: Int, val fille
     Journals(R.string.journals, R.drawable.home_24px, R.drawable.home_24px_fill),
     Tags(R.string.tags, R.drawable.view_cozy_24px, R.drawable.view_cozy_24px_fill),
     Timeline(R.string.timeline, R.drawable.event_note_24px, R.drawable.event_note_24px_fill),
+    Folders(R.string.folders, R.drawable.folder_24px, R.drawable.folder_open_24px),
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -72,6 +75,8 @@ fun HomeScreen() {
     val selectedCategory by tagsVM.selectedCategory.collectAsStateWithLifecycle()
 
     val journalsVM: JournalsVM = koinViewModel()
+    val foldersVM: FoldersVM = koinViewModel()
+    val foldersState by foldersVM.state.collectAsStateWithLifecycle()
     val searchQuery by journalsVM.searchQuery.collectAsStateWithLifecycle()
     var isSearchActive by remember { mutableStateOf(false) }
 
@@ -209,6 +214,7 @@ fun HomeScreen() {
                     )
                     HomeTab.Tags -> TagsPage()
                     HomeTab.Timeline -> TimelinePage()
+                    HomeTab.Folders -> FoldersPage(isSelected = pagerState.currentPage == HomeTab.Folders.ordinal, viewModel = foldersVM)
                 }
             }
         }
@@ -226,7 +232,8 @@ fun HomeScreen() {
                         currentTab = HomeTab.entries[pagerState.currentPage],
                         activeTag = activeTag,
                         isAutoTimeEnabled = isAutoTimeEnabled,
-                        navigator = navigator
+                        navigator = navigator,
+                        activeFolder = foldersState.currentId
                     )
                 }
             )
@@ -238,11 +245,14 @@ private fun handleFabClick(
     currentTab: HomeTab,
     activeTag: String?,
     isAutoTimeEnabled: Boolean,
-    navigator: AppNavigator
+    navigator: AppNavigator,
+    activeFolder: String? = null
 ) {
     val initialDate = if (isAutoTimeEnabled) System.currentTimeMillis() else null
     val route = if (currentTab == HomeTab.Tags && activeTag != null) {
         Route.Editor(initialDate = initialDate, initialTags = listOf(activeTag))
+    } else if (currentTab == HomeTab.Folders) {
+        Route.Editor(initialDate = initialDate, initialFolderId = activeFolder)
     } else {
         Route.Editor(initialDate = initialDate)
     }

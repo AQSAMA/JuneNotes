@@ -20,6 +20,7 @@ interface JournalRepository {
     fun getJournalsByMultipleTags(tags: List<String>): Flow<List<Journal>>
     
     suspend fun insertJournal(journal: Journal): String
+    suspend fun insertJournalInFolder(journal: Journal, folderId: String?): String = insertJournal(journal)
     suspend fun softDeleteJournal(id: String)
     suspend fun restoreJournal(id: String)
     suspend fun hardDeleteJournal(id: String)

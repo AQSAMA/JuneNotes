@@ -54,7 +54,7 @@ android {
         applicationId = appId
         minSdk = 28
         targetSdk = 36
-        versionCode = appVersionCode
+        versionCode = providers.gradleProperty("previewVersionCode").orNull?.toInt() ?: appVersionCode
         versionName = appVersionName
         buildConfigField("String", "HYPHEN_VERSION", "\"${libs.versions.hyphen.get()}\"")
 
@@ -133,6 +133,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            resValue("string", "app_name", "June Preview")
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            matchingFallbacks += listOf("release")
         }
 
         debug {

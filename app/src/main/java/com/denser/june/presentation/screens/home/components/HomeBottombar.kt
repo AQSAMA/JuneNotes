@@ -72,7 +72,7 @@ private fun rememberHomeFabConfig(
         Triple(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, Color.Transparent)
     }
 
-    val badgeIconRes = when (activeTagCategory) {
+    val badgeIconRes = if (currentTab == HomeTab.Folders) R.drawable.folder_open_24px else when (activeTagCategory) {
         TagCategory.Spaces -> R.drawable.view_cozy_24px_fill
         TagCategory.People -> R.drawable.person_24px_fill
         TagCategory.Topics -> R.drawable.cards_stack_24px_fill
@@ -194,7 +194,7 @@ fun HomeBottomBar(
                                             indication = null,
                                             interactionSource = null,
                                         )
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        .padding(horizontal = 12.dp, vertical = 12.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
