@@ -37,7 +37,11 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
         hoverJob?.cancel()
         val value = item ?: return false
         val region = regions[hovered]
-        return if (region != null && region.accepts(value)) { region.drop(value); true } else fallback(value)
+        if (region != null && region.accepts(value)) { region.drop(value); return true }
+        // An invalid folder under the pointer must reject the drop, rather than file it in the background.
+        val position = pointer
+        if (position != null && regions.values.any { it.bounds.contains(position) }) return false
+        return fallback(value)
     }
     private fun refresh() {
         val value = item

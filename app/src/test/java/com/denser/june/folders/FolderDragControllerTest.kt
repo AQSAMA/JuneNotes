@@ -42,7 +42,7 @@ class FolderDragControllerTest {
             assertTrue(scrolls > 0)
             controller.move(Offset(50f, 80f))
             assertNull(controller.hovered)
-            assertFalse(controller.drop { false })
+            assertFalse(controller.drop { fail("An invalid descendant must not fall back to the current folder"); true })
             controller.end()
         } finally { scope.cancel() }
     }
