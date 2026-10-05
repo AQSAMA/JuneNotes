@@ -3,7 +3,6 @@ package com.denser.june.folders
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.View
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -99,8 +98,11 @@ class FolderInteractionTest {
         ui.setContent { Theme { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             FolderDragHandle(FolderDrag("tap", true)) { tapped = true }
         } } }
-        ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)).performTouchInput { click() }
-        ui.runOnIdle { assertTrue(tapped) }
+        val source = screenCenter(ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)))
+        val downTime = SystemClock.uptimeMillis()
+        inject(MotionEvent.ACTION_DOWN, source, downTime)
+        inject(MotionEvent.ACTION_UP, source, downTime)
+        ui.waitUntil(3000) { tapped }
     }
 
     @Test fun actualFolderRowsMoveIntoAnotherFolderWithTouchDragging() {
@@ -180,14 +182,11 @@ class FolderInteractionTest {
     }
 
     private fun screenCenter(node: SemanticsNodeInteraction): Offset {
-        val center = node.fetchSemanticsNode().boundsInRoot.center
-        val location = IntArray(2)
-        instrumentation.runOnMainSync {
-            val activity = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
-                .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED).single()
-            activity.findViewById<View>(android.R.id.content).getLocationOnScreen(location)
+        val semantics = node.fetchSemanticsNode()
+        return ui.runOnIdle {
+            // Use the node's actual screen position, including Compose view/window insets.
+            semantics.positionOnScreen + Offset(semantics.size.width / 2f, semantics.size.height / 2f)
         }
-        return center + Offset(location[0].toFloat(), location[1].toFloat())
     }
     private fun inject(action: Int, position: Offset, downTime: Long) {
         val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, position.x, position.y, 0)

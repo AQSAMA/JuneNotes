@@ -80,6 +80,14 @@ android {
                 storeFile = file(fossStoreFile)
             }
         }
+        providers.gradleProperty("previewStoreFile").orNull?.let { previewStoreFile ->
+            create("preview") {
+                storeFile = file(previewStoreFile)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("playRelease") {
             if (!playStoreFile.isNullOrEmpty()) {
                 keyAlias = playKeyAlias
@@ -142,7 +150,7 @@ android {
             versionNameSuffix = "-preview"
             resValue("string", "app_name", "June Preview")
             isDebuggable = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("preview") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
         }
 
