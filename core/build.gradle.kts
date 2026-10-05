@@ -77,6 +77,7 @@ dependencies {
 
     // Testing
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
