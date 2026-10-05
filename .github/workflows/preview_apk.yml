@@ -29,6 +29,8 @@ jobs:
           cmdline-tools-version: 13114758
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Install Android SDK
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Keep preview signing stable for updates within this PR
@@ -36,8 +38,21 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: june-preview-signing-${{ runner.os }}-${{ github.event.pull_request.number || github.ref_name }}
-      - name: Test and build the preview variant
-        run: bash gradlew :core:testDebugUnitTest :app:testFossDebugUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((1000000 + GITHUB_RUN_NUMBER)) --stacktrace
+      - name: Run regression and folder tests
+        run: >-
+          bash gradlew :core:testDebugUnitTest :app:testFossDebugUnitTest
+          --no-daemon --max-workers=2
+          -Pkotlin.compiler.execution.strategy=in-process
+          '-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -Dfile.encoding=UTF-8'
+          --stacktrace
+      - name: Build optimized Preview APK
+        run: >-
+          bash gradlew :app:assembleFossPreview
+          --no-daemon --max-workers=2
+          -Pkotlin.compiler.execution.strategy=in-process
+          '-Dorg.gradle.jvmargs=-Xmx4g -XX:+UseParallelGC -Dfile.encoding=UTF-8'
+          -PpreviewVersionCode=$((1000000 + GITHUB_RUN_NUMBER))
+          --stacktrace
       - name: Name the installable APK
         run: cp app/build/outputs/apk/foss/preview/app-foss-preview.apk June-Preview.apk
       - name: Upload Preview APK
