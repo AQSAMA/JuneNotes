@@ -5,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -46,24 +47,33 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     var exportNote by remember { mutableStateOf<Journal?>(null) }
     var moveItem by remember { mutableStateOf<FolderDrag?>(null) }
     var addExisting by remember { mutableStateOf(false) }
+    var dragging by remember { mutableStateOf(false) }
+    val pathScroll = rememberScrollState()
+    LaunchedEffect(state.currentId, pathScroll.maxValue) { pathScroll.animateScrollTo(pathScroll.maxValue) }
     val is24Hour = time == TimeFormat.TWENTY_FOUR_HOUR
     ExportJournalBottomSheet(exportNote, onDismiss = { exportNote = null })
 
     fun accepts(item: FolderDrag, parent: String?): Boolean = if (item.folder) state.snapshot.canMove(item.id, parent) else true
 
+    FolderDropSurface(
+        accepts = { accepts(it, state.currentId) }, onDrop = { viewModel.move(it, state.currentId) },
+        modifier = Modifier.fillMaxSize(), onDragActive = { dragging = it }
+    ) {
     Box(Modifier.fillMaxSize()) {
         Column {
             // Every ancestor is both a navigation button and a drop target, including the root.
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Breadcrumb(null, stringResource(R.string.folders), accepts = { accepts(it, null) },
                     onOpen = { viewModel.open(null) }, onDrop = { viewModel.move(it, null) })
+                Row(Modifier.weight(1f).horizontalScroll(pathScroll), verticalAlignment = Alignment.CenterVertically) {
                 state.path.forEach { folder ->
                     Icon(painterResource(R.drawable.chevron_right_24px), null, Modifier.size(16.dp))
                     Breadcrumb(folder.id, folder.name, accepts = { accepts(it, folder.id) },
                         onOpen = { viewModel.open(folder.id) }, onDrop = { viewModel.move(it, folder.id) })
+                }
                 }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -80,6 +90,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                 // Use the target ID for each animated pane, avoiding duplicate note IDs during transitions.
                 val pane = state.copy(currentId = displayedId)
                 val listState = rememberLazyListState()
+                Box(Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -144,9 +155,24 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                         }
                     }
                 }
+                if (dragging) {
+                    FolderDropSurface(
+                        accepts = { accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) },
+                        modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(40.dp),
+                        onHoverScroll = { listState.scrollBy(-24f) }
+                    ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.expand_less_24px), null) } }
+                    FolderDropSurface(
+                        accepts = { accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) },
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = UiUtils.BOTTOM_BAR_PADDING).height(40.dp),
+                        onHoverScroll = { listState.scrollBy(24f) }
+                    ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.expand_more_24px), null) } }
+                }
+                }
             }
         }
         SnackbarHost(snack, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = UiUtils.BOTTOM_BAR_PADDING))
+    }
+
     }
 
     if (nameDialog || renameFolder != null) {

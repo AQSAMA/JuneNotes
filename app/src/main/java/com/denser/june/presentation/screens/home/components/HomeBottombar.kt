@@ -194,7 +194,7 @@ fun HomeBottomBar(
                                             indication = null,
                                             interactionSource = null,
                                         )
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        .padding(horizontal = if (HomeTab.entries.size > 3) 12.dp else 16.dp, vertical = 12.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {

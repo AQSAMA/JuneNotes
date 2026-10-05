@@ -54,7 +54,8 @@ android {
         applicationId = appId
         minSdk = 28
         targetSdk = 36
-        versionCode = appVersionCode
+        versionCode = if (project.gradle.startParameter.taskNames.any { it.contains("Preview", ignoreCase = true) })
+            providers.gradleProperty("previewVersionCode").orNull?.toInt() ?: appVersionCode else appVersionCode
         versionName = appVersionName
         buildConfigField("String", "HYPHEN_VERSION", "\"${libs.versions.hyphen.get()}\"")
 
@@ -139,7 +140,6 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".preview"
             versionNameSuffix = "-preview"
-            versionCode = providers.gradleProperty("previewVersionCode").orNull?.toInt() ?: appVersionCode
             resValue("string", "app_name", "June Preview")
             isDebuggable = false
             signingConfig = signingConfigs.getByName("debug")

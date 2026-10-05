@@ -196,6 +196,7 @@ class ExportImpl(
 
             val usedFileNames = mutableSetOf<String>()
             zipOutputStream.use { zos ->
+                writeFolders(zos, folderRepo.snapshot())
                 cleanedJournals.forEach { journal ->
                     val mediaPrefix = if (includeMedia) "media/${journal.id}" else null
                     val markdownText = com.denser.june.core.domain.markdown.MarkdownEngine.toMarkdown(

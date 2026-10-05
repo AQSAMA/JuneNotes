@@ -51,28 +51,37 @@ fun FolderDropSurface(
     onDrop: (FolderDrag) -> Unit,
     modifier: Modifier = Modifier,
     onHoverOpen: (() -> Unit)? = null,
+    onDragActive: ((Boolean) -> Unit)? = null,
+    onHoverScroll: (suspend () -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     var hovered by remember { mutableStateOf(false) }
     val currentAccepts by rememberUpdatedState(accepts)
     val currentDrop by rememberUpdatedState(onDrop)
     val currentOpen by rememberUpdatedState(onHoverOpen)
+    val currentActive by rememberUpdatedState(onDragActive)
+    val currentScroll by rememberUpdatedState(onHoverScroll)
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val target = remember {
         object : DragAndDropTarget {
             var openJob: Job? = null
             fun item(event: DragAndDropEvent) = event.toAndroidDragEvent().localState as? FolderDrag
+            override fun onStarted(event: DragAndDropEvent) { currentActive?.invoke(true) }
             override fun onEntered(event: DragAndDropEvent) {
                 hovered = item(event)?.let(currentAccepts) == true
                 if (hovered) {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     openJob?.cancel()
-                    openJob = scope.launch { delay(800); currentOpen?.invoke() }
+                    openJob = scope.launch {
+                        if (currentScroll != null) {
+                            while (hovered) { currentScroll?.invoke(); delay(40) }
+                        } else { delay(800); currentOpen?.invoke() }
+                    }
                 }
             }
             override fun onExited(event: DragAndDropEvent) { hovered = false; openJob?.cancel() }
-            override fun onEnded(event: DragAndDropEvent) { hovered = false; openJob?.cancel() }
+            override fun onEnded(event: DragAndDropEvent) { hovered = false; openJob?.cancel(); currentActive?.invoke(false) }
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 openJob?.cancel()
                 hovered = false
