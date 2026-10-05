@@ -58,8 +58,7 @@ class MarkdownImportImpl(
                 }
             }
 
-            if (importedCount > 0 || folders != null) {
-                folders?.let { folderRepo.merge(it) }
+            if (importedCount > 0) {
                 Result.success(importedCount)
             } else {
                 Result.failure(Exception("No valid Markdown files could be imported"))

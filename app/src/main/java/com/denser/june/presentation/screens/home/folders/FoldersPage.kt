@@ -88,7 +88,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                 label = "folder_navigation"
             ) { displayedId ->
                 // Use the target ID for each animated pane, avoiding duplicate note IDs during transitions.
-                val pane = state.copy(currentId = displayedId)
+                val pane = remember(state, displayedId) { state.copy(currentId = displayedId) }
                 val listState = rememberLazyListState()
                 Box(Modifier.fillMaxSize()) {
                 LazyColumn(
@@ -111,9 +111,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                     onDrop = { viewModel.move(it, folder.id) },
                                     onHoverOpen = { viewModel.open(folder.id) }
                                 ) {
-                                    val notesCount = state.notes.count { note -> state.snapshot.journals.any { it.journalId == note.id && it.folderId == folder.id } }
-                                    val childCount = state.liveFolders.count { it.parentId == folder.id }
-                                    FolderRow(folder, notesCount + childCount, onOpen = { viewModel.open(folder.id) },
+                                    FolderRow(folder, state.itemCounts[folder.id] ?: 0, onOpen = { viewModel.open(folder.id) },
                                         onOptions = { optionsFolder = folder }, onMove = { moveItem = FolderDrag(folder.id, true) })
                                 }
                             }

@@ -18,15 +18,17 @@ data class FoldersState(
     val currentId: String? = null,
     val loading: Boolean = true
 ) {
-    val liveFolders get() = snapshot.folders.filterNot { it.deleted }
-    val children get() = liveFolders.filter { it.parentId == currentId }.sortedWith(compareBy({ it.position }, { it.id }))
-    val visibleNotes: List<Journal> get() {
-        val membership = snapshot.journals.associateBy { it.journalId }
-        return notes.filter { membership[it.id]?.folderId == currentId }.sortedWith(
-            compareBy<Journal> { membership[it.id]?.position ?: Long.MAX_VALUE }.thenByDescending { it.dateTime }
-        )
+    val liveFolders = snapshot.folders.filterNot { it.deleted }
+    private val memberships = snapshot.journals.associateBy { it.journalId }
+    val children = liveFolders.filter { it.parentId == currentId }.sortedWith(compareBy({ it.position }, { it.id }))
+    val visibleNotes = notes.filter { memberships[it.id]?.folderId == currentId }.sortedWith(
+        compareBy<Journal> { memberships[it.id]?.position ?: Long.MAX_VALUE }.thenByDescending { it.dateTime }.thenByDescending { it.createdAt }
+    )
+    val itemCounts: Map<String, Int> = buildMap {
+        liveFolders.forEach { folder -> folder.parentId?.let { this[it] = (get(it) ?: 0) + 1 } }
+        notes.forEach { note -> memberships[note.id]?.folderId?.let { this[it] = (get(it) ?: 0) + 1 } }
     }
-    val path: List<Folder> get() {
+    val path: List<Folder> = run {
         val byId = liveFolders.associateBy { it.id }
         val result = mutableListOf<Folder>()
         val seen = mutableSetOf<String>()
@@ -36,8 +38,9 @@ data class FoldersState(
             result.add(folder)
             id = folder.parentId
         }
-        return result.reversed()
+        result.reversed()
     }
+
 }
 
 class FoldersVM(
