@@ -585,4 +585,5 @@
     <string name="folder_search_notes">Search notes</string>
     <string name="folder_search_folders">Find a folder</string>
     <string name="folder_note_added">Note added to folder</string>
+    <string name="folder_move_failed">Could not move this note. Please try again.</string>
 </resources>

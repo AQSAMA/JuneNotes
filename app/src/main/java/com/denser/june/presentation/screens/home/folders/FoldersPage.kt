@@ -57,9 +57,11 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     val pathScroll = rememberScrollState()
     LaunchedEffect(state.currentId, pathScroll.maxValue) { pathScroll.animateScrollTo(pathScroll.maxValue) }
     var addingNote by remember { mutableStateOf(false) }
+    var addingError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val autoTime by viewModel.preferences.isAutoTimeEnabled().collectAsStateWithLifecycle(false)
     val addedMessage = stringResource(R.string.folder_note_added)
+    val failureMessage = stringResource(R.string.folder_move_failed)
     val is24Hour = time == TimeFormat.TWENTY_FOUR_HOUR
     ExportJournalBottomSheet(exportNote, onDismiss = { exportNote = null })
 
@@ -71,8 +73,8 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     ) {
     Box(Modifier.fillMaxSize()) {
         Column {
-            // Keep the root heading uncluttered; the ancestor path appears inside folders or during dragging.
-            AnimatedVisibility(state.currentId != null || dragging) { Row(
+            // Keep the root heading uncluttered and the list stationary when a drag begins.
+            AnimatedVisibility(state.currentId != null) { Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -90,7 +92,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                 Text(state.path.lastOrNull()?.name ?: stringResource(R.string.folders), style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 IconButton(onClick = { nameDialog = true }) { Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder)) }
-                IconButton(onClick = { addExisting = true }) { Icon(painterResource(R.drawable.edit_note_24px), stringResource(R.string.folder_add_existing)) }
+                IconButton(onClick = { addingError = null; addExisting = true }) { Icon(painterResource(R.drawable.edit_note_24px), stringResource(R.string.folder_add_existing)) }
             }
             AnimatedContent(
                 targetState = state.currentId,
@@ -229,18 +231,20 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
         ExistingFolderNoteSheet(
             notes = state.notes.filterNot { it.id in visibleIds },
             destination = state.path.lastOrNull()?.name ?: stringResource(R.string.folders),
-            is24Hour = is24Hour, busy = addingNote,
+            is24Hour = is24Hour, busy = addingNote, error = addingError,
             onDismiss = { addExisting = false },
             onChoose = { note ->
-                val destination = state.currentId
-                addingNote = true
-                scope.launch {
-                    try {
-                        if (viewModel.moveAndReport(FolderDrag(note.id, false), destination)) {
-                            addExisting = false
-                            snack.showSnackbar(addedMessage)
-                        }
-                    } finally { addingNote = false }
+                if (!addingNote) {
+                    val destination = state.currentId
+                    addingNote = true
+                    scope.launch {
+                        try {
+                            if (viewModel.moveAndReport(FolderDrag(note.id, false), destination)) {
+                                addExisting = false
+                                snack.showSnackbar(addedMessage)
+                            } else addingError = failureMessage
+                        } finally { addingNote = false }
+                    }
                 }
             }
         )
@@ -257,7 +261,7 @@ private fun Breadcrumb(id: String?, label: String, accepts: (FolderDrag) -> Bool
 @Composable
 private fun ReorderSlot(active: Boolean, accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
     FolderDropSurface(accepts, onDrop, modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(if (active) 20.dp else 2.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(8.dp), contentAlignment = Alignment.Center) {
             if (active) HorizontalDivider(Modifier.fillMaxWidth(0.8f), color = MaterialTheme.colorScheme.outlineVariant)
         }
     }

@@ -490,4 +490,5 @@
     <string name="folder_search_notes">البحث في الملاحظات</string>
     <string name="folder_search_folders">البحث عن مجلد</string>
     <string name="folder_note_added">أضيفت الملاحظة إلى المجلد</string>
+    <string name="folder_move_failed">تعذر نقل الملاحظة. حاول مرة أخرى.</string>
 </resources>

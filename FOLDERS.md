@@ -5,12 +5,14 @@ Open the folder icon in the existing bottom bar. Folders are independent of spac
 - Use the folder-plus icon to create a folder at the current level.
 - Use June’s existing bottom + button to write a note in the open folder.
 - Use the note icon beside the folder title to file an existing note here.
+- The existing-note picker searches titles, content, and tags. Tap the original note card or its + action to file it. Placement is saved before the picker closes.
+- Long-press a note in Home, Tags, Timeline, or the editor, then use the folder action in June’s existing note menu. The shared destination sheet supports nested navigation, folder search, and creating a destination without leaving the sheet.
 - Tap a folder to open it. The path at the top and Android Back move between levels.
 - Hold a grip to drag a folder or note. Drop on a folder to move inside it; hold over a folder for 800 ms to open it during a drag. Drop on any ancestor in the path, including Folders, to move out. Drop in the gap above a sibling to reorder; the end zone moves to the end. Hold in the upper or lower arrow zone to scroll a long list.
 - Tap the grip for a folder destination sheet. This also supports moving to any depth without dragging, with TalkBack or a keyboard.
 - Folder menus offer rename, move, and delete. Deleting a folder promotes its direct notes and child folders into its parent; it never deletes notes. Note deletion uses June’s existing confirmation and Bin.
 
-Folder and note order is stored separately; folders appear first, then notes. Unfiled notes appear at the folder root. The original journal feed is unchanged.
+Folder and note order is stored separately; folders appear first, then notes. Unfiled notes appear at the folder root. The original journal feed is unchanged. Folder rows show separate folder and note counts. Insertion targets and scrolling controls appear during a drag, keeping the resting layout compact.
 
 ## Backups and sync
 
@@ -33,5 +35,7 @@ Local build: `bash gradlew :app:assembleFossPreview`. The default APK targets ar
 ## Validation
 
 The preview workflow runs core release and app preview unit tests and builds the optimized APK. A separate Android emulator job validates the Room migration, deep moves, ordering, cycle rejection, folder deletion with promotion, and retained memberships across note trash/restore. Unit tests cover Unicode sidecars, malformed metadata, deterministic concurrent merges, original-format compatibility, and folder-only cloud sync.
+
+A UI emulator job injects real Android touch input to verify native long-press dragging, including actual folder rows. It also tests tap-to-move, searching/selecting the original note cards, and filing a note from its long-press menu while retaining tags. Reports and screenshots are published as **Folder UI tests and screenshots**.
 
 Manual device checks: import an original June backup; create three nested folders; save and reopen a note; drag it and its folder to root and back; reorder siblings; delete a container; restore a deleted note from Bin; export JSON and Markdown ZIPs and import them into the preview and original June; sync between two fork installations; verify portrait/landscape, large text, Arabic RTL, and TalkBack.

@@ -22,6 +22,8 @@ import com.denser.june.core.domain.model.AppTheme
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.enums.ThemeMode
 import com.denser.june.core.domain.repository.JournalRepository
+import com.denser.june.core.domain.preferences.JournalPreferences
+import androidx.lifecycle.SavedStateHandle
 import com.denser.june.presentation.screens.home.components.JournalCard
 import com.denser.june.presentation.screens.home.components.JournalOptionsSheet
 import com.denser.june.presentation.screens.home.folders.*
@@ -87,9 +89,38 @@ class FolderInteractionTest {
 
     @Test fun tappingTheGripStillOpensTheDestinationControl() {
         var tapped = false
-        ui.setContent { Theme { FolderDragHandle(FolderDrag("tap", true)) { tapped = true } } }
+        ui.setContent { Theme { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            FolderDragHandle(FolderDrag("tap", true)) { tapped = true }
+        } } }
         ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)).performTouchInput { click() }
         ui.runOnIdle { assertTrue(tapped) }
+    }
+
+    @Test fun actualFolderRowsMoveIntoAnotherFolderWithTouchDragging() {
+        val folders = GlobalContext.get().get<FolderRepository>()
+        val journals = GlobalContext.get().get<JournalRepository>()
+        val preferences = GlobalContext.get().get<JournalPreferences>()
+        val ids = runBlocking { folders.create("Projects", null) to folders.create("Personal", null) }
+        val model = FoldersVM(folders, journals, preferences, SavedStateHandle())
+        try {
+            ui.setContent { Theme { FoldersPage(model, true) } }
+            ui.waitUntil(5000) { ui.onAllNodesWithContentDescription(text(R.string.folder_drag_or_move)).fetchSemanticsNodes().size == 2 }
+            ui.onNodeWithText(text(R.string.folder_drop_here)).assertDoesNotExist()
+            screenshot("folders-refined-layout")
+            val source = screenCenter(ui.onAllNodesWithContentDescription(text(R.string.folder_drag_or_move))[0])
+            val target = screenCenter(ui.onNodeWithText("Personal"))
+            val downTime = SystemClock.uptimeMillis()
+            inject(MotionEvent.ACTION_DOWN, source, downTime)
+            try {
+                SystemClock.sleep(750)
+                ui.waitForIdle()
+                repeat(12) { index ->
+                    inject(MotionEvent.ACTION_MOVE, source + (target - source) * ((index + 1) / 12f), downTime)
+                    SystemClock.sleep(20)
+                }
+            } finally { inject(MotionEvent.ACTION_UP, target, downTime) }
+            ui.waitUntil(5000) { runBlocking { folders.snapshot().folders.any { it.id == ids.first && it.parentId == ids.second } } }
+        } finally { runBlocking { folders.delete(ids.first); folders.delete(ids.second) } }
     }
 
     @Test fun existingNotePickerSearchesContentAndSelectsTheOriginalCard() {

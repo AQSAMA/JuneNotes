@@ -43,7 +43,8 @@ internal fun ExistingFolderNoteSheet(
     is24Hour: Boolean,
     busy: Boolean,
     onDismiss: () -> Unit,
-    onChoose: (Journal) -> Unit
+    onChoose: (Journal) -> Unit,
+    error: String? = null
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     val matching = remember(notes, query) { matchingFolderNotes(notes, query) }
@@ -55,6 +56,8 @@ internal fun ExistingFolderNoteSheet(
     ) {
         Column(Modifier.fillMaxHeight(0.88f).imePadding().padding(horizontal = 16.dp)) {
             SheetHeading(stringResource(R.string.folder_add_existing), destination, busy, onDismiss)
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(bottom = 8.dp))
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
             FolderSearchField(query, { query = it }, stringResource(R.string.folder_search_notes))
             Spacer(Modifier.height(12.dp))
             LazyColumn(
@@ -71,6 +74,7 @@ internal fun ExistingFolderNoteSheet(
                     JournalCard(
                         note, is24Hour = is24Hour, showDate = true,
                         actionIcon = R.drawable.add_2_24px,
+                        actionContentDescription = stringResource(R.string.folder_add_existing),
                         onActionClick = { if (!busy) onChoose(note) },
                         onJournalClick = { if (!busy) onChoose(note) }
                     )
@@ -92,6 +96,7 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var createFolder by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val failureMessage = stringResource(R.string.folder_move_failed)
     val list = rememberLazyListState()
     LaunchedEffect(query, parent) { list.scrollToItem(0) }
     val live = remember(snapshot) { snapshot.folders.filterNot { it.deleted } }
@@ -153,7 +158,7 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
                             if (item.folder) repository.moveFolder(item.id, parent) else repository.moveJournal(item.id, parent)
                             onDismiss()
                         } catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { error = e.message }
+                        catch (e: Exception) { error = e.message ?: failureMessage }
                         finally { busy = false }
                     }
                 },
@@ -172,7 +177,7 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
         scope.launch {
             try { open(repository.create(name, parent)) }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = e.message }
+            catch (e: Exception) { error = e.message ?: failureMessage }
             finally { busy = false }
         }
     }
