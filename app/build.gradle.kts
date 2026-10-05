@@ -135,6 +135,17 @@ android {
             )
         }
 
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            versionCode = providers.gradleProperty("previewVersionCode").orNull?.toInt() ?: appVersionCode
+            resValue("string", "app_name", "June Preview")
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
+
         debug {
             signingConfigs.findByName("debug")?.let {
                 signingConfig = it

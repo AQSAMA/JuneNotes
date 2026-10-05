@@ -568,4 +568,18 @@
     <string name="link_url_placeholder" translatable="false">https://example.com</string>
     <string name="take_photo_or_video">Take photo / video</string>
     <string name="whats_on_your_mind">What\'s on your mind?</string>
+
+    <string name="folders">Folders</string>
+    <string name="new_folder">New folder</string>
+    <string name="folder_name">Folder name</string>
+    <string name="folder_drag_or_move">Hold to drag, or tap to move</string>
+    <string name="folder_move">Move to folder</string>
+    <string name="folder_move_here">Move here</string>
+    <string name="folder_add_existing">Add an existing note</string>
+    <string name="folder_no_other_notes">No other notes to add</string>
+    <string name="folder_options">Folder options</string>
+    <string name="folder_empty">This folder is empty</string>
+    <string name="folder_drop_here">Drop here</string>
+    <string name="folder_delete_title">Delete folder?</string>
+    <string name="folder_delete_description">Notes and child folders will move up one level. Your notes will be kept.</string>
 </resources>

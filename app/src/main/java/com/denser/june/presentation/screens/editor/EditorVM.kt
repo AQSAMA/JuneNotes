@@ -33,7 +33,8 @@ class EditorVM(
     private val journalRepo: JournalRepository,
     private val journalPrefs: JournalPreferences,
     private val songRepo: SongRepository,
-    private val navigator: AppNavigator
+    private val navigator: AppNavigator,
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) : ViewModel() {
     private val editorRoute = savedStateHandle.tryRoute<Route.Editor>()
     private val journalId = editorRoute?.journalId
@@ -466,6 +467,12 @@ class EditorVM(
 
             if (isNewEntry) {
                 val newId = journalRepo.insertJournal(journalToSave)
+                editorRoute?.initialFolderId?.let { folderId ->
+                    // A folder may be removed while the editor is open; always preserve the saved note.
+                    if (folderRepo.snapshot().folders.any { it.id == folderId && !it.deleted }) {
+                        folderRepo.moveJournal(newId, folderId)
+                    }
+                }
                 val savedDraft = journalToSave.copy(id = newId)
                 existingJournal = savedDraft
                 _state.update { it.copy(journalId = newId, content = currentMarkdown, isDirty = false, isDraft = true) }
@@ -508,6 +515,12 @@ class EditorVM(
                 existingJournal = journalToSave
             } else {
                 val newId = journalRepo.insertJournal(journalToSave)
+                editorRoute?.initialFolderId?.let { folderId ->
+                    // A folder may be removed while the editor is open; always preserve the saved note.
+                    if (folderRepo.snapshot().folders.any { it.id == folderId && !it.deleted }) {
+                        folderRepo.moveJournal(newId, folderId)
+                    }
+                }
                 existingJournal = journalToSave.copy(id = newId)
                 _state.update { it.copy(journalId = newId) }
             }

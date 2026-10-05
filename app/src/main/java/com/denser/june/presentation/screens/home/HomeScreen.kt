@@ -48,6 +48,7 @@ enum class HomeTab(@get:StringRes val labelRes: Int, val iconRes: Int, val fille
     Journals(R.string.journals, R.drawable.home_24px, R.drawable.home_24px_fill),
     Tags(R.string.tags, R.drawable.view_cozy_24px, R.drawable.view_cozy_24px_fill),
     Timeline(R.string.timeline, R.drawable.event_note_24px, R.drawable.event_note_24px_fill),
+    Folders(R.string.folders, R.drawable.folder_open_24px, R.drawable.folder_open_24px),
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -71,6 +72,8 @@ fun HomeScreen() {
     val activeTag by tagsVM.selectedPrimaryTag.collectAsStateWithLifecycle()
     val selectedCategory by tagsVM.selectedCategory.collectAsStateWithLifecycle()
 
+    val foldersVM: com.denser.june.presentation.screens.home.folders.FoldersVM = koinViewModel()
+    val folderState by foldersVM.state.collectAsStateWithLifecycle()
     val journalsVM: JournalsVM = koinViewModel()
     val searchQuery by journalsVM.searchQuery.collectAsStateWithLifecycle()
     var isSearchActive by remember { mutableStateOf(false) }
@@ -209,6 +212,7 @@ fun HomeScreen() {
                     )
                     HomeTab.Tags -> TagsPage()
                     HomeTab.Timeline -> TimelinePage()
+                    HomeTab.Folders -> com.denser.june.presentation.screens.home.folders.FoldersPage(foldersVM, pagerState.currentPage == HomeTab.Folders.ordinal)
                 }
             }
         }
@@ -222,7 +226,12 @@ fun HomeScreen() {
                 selectedCategory = selectedCategory,
                 activeTag = activeTag,
                 onFabClick = {
-                    handleFabClick(
+                    if (HomeTab.entries[pagerState.currentPage] == HomeTab.Folders) {
+                        navigator.navigateTo(Route.Editor(
+                            initialDate = if (isAutoTimeEnabled) System.currentTimeMillis() else null,
+                            initialFolderId = folderState.currentId
+                        ), isSingleTop = true)
+                    } else handleFabClick(
                         currentTab = HomeTab.entries[pagerState.currentPage],
                         activeTag = activeTag,
                         isAutoTimeEnabled = isAutoTimeEnabled,
