@@ -32,7 +32,6 @@ android {
     }
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        unitTests.all { systemProperty("june.schemaDir", file("schemas").absolutePath) }
     }
     buildFeatures {
         buildConfig = true
@@ -83,4 +82,9 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("june.schemaDir", file("schemas").absolutePath)
 }

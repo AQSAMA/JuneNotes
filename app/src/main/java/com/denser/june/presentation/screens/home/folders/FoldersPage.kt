@@ -81,7 +81,7 @@ fun FoldersPage(isSelected: Boolean, viewModel: FoldersVM = koinViewModel()) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().folderDragHost(drag)) {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (state.currentId != null) IconButton(onClick = viewModel::back) {

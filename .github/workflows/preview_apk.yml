@@ -37,7 +37,7 @@ jobs:
           path: ~/.android/debug.keystore
           key: june-preview-signing-${{ runner.os }}-${{ github.event.pull_request.number || github.ref_name }}
       - name: Test and build the preview variant
-        run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((1000000 + GITHUB_RUN_NUMBER)) --stacktrace
+        run: bash gradlew :core:testDebugUnitTest :app:testFossDebugUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((1000000 + GITHUB_RUN_NUMBER)) --stacktrace
       - name: Name the installable APK
         run: cp app/build/outputs/apk/foss/preview/app-foss-preview.apk June-Preview.apk
       - name: Upload Preview APK
