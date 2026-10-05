@@ -28,6 +28,8 @@ data class FoldersState(
         liveFolders.forEach { folder -> folder.parentId?.let { this[it] = (get(it) ?: 0) + 1 } }
         notes.forEach { note -> memberships[note.id]?.folderId?.let { this[it] = (get(it) ?: 0) + 1 } }
     }
+    val folderCounts = liveFolders.groupingBy { it.parentId }.eachCount()
+    val noteCounts = notes.groupingBy { memberships[it.id]?.folderId }.eachCount()
     val path: List<Folder> = run {
         val byId = liveFolders.associateBy { it.id }
         val result = mutableListOf<Folder>()
@@ -64,7 +66,14 @@ class FoldersVM(
     fun rename(id: String, name: String) { mutate { folderRepo.rename(id, name) } }
     fun delete(id: String) { mutate { folderRepo.delete(id) } }
     fun move(item: FolderDrag, parent: String?, beforeId: String? = null) {
-        mutate { if (item.folder) folderRepo.moveFolder(item.id, parent, beforeId) else folderRepo.moveJournal(item.id, parent, beforeId) }
+        viewModelScope.launch { moveAndReport(item, parent, beforeId) }
+    }
+    suspend fun moveAndReport(item: FolderDrag, parent: String?, beforeId: String? = null): Boolean {
+        return try {
+            if (item.folder) folderRepo.moveFolder(item.id, parent, beforeId) else folderRepo.moveJournal(item.id, parent, beforeId)
+            true
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { messages.send(e.message ?: "Unable to update folders"); false }
     }
     fun bookmark(id: String) { mutate { journalRepo.toggleBookmark(id) } }
     fun deleteNote(id: String) { mutate { journalRepo.softDeleteJournal(id) } }

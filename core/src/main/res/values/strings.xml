@@ -582,4 +582,7 @@
     <string name="folder_drop_here">Drop here</string>
     <string name="folder_delete_title">Delete folder?</string>
     <string name="folder_delete_description">Notes and child folders will move up one level. Your notes will be kept.</string>
+    <string name="folder_search_notes">Search notes</string>
+    <string name="folder_search_folders">Find a folder</string>
+    <string name="folder_note_added">Note added to folder</string>
 </resources>

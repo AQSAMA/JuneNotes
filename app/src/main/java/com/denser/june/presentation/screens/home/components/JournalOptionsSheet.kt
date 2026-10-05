@@ -9,6 +9,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +34,8 @@ import com.denser.june.presentation.theme.LocalSyncEnabled
 import java.util.Date
 import com.denser.june.presentation.utils.TagUtils
 import com.denser.june.core.domain.model.enums.TagCategory
+import com.denser.june.presentation.screens.home.folders.FolderDestinationSheet
+import com.denser.june.presentation.screens.home.folders.FolderDrag
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -39,8 +45,14 @@ fun JournalOptionsSheet(
     onToggleBookmark: () -> Unit,
     onDeleteOrRestore: () -> Unit,
     onPermanentDelete: (() -> Unit)? = null,
-    onExportMarkdown: (() -> Unit)? = null
+    onExportMarkdown: (() -> Unit)? = null,
+    onMoveToFolder: (() -> Unit)? = null
 ) {
+    var choosingFolder by rememberSaveable(journal.id) { mutableStateOf(false) }
+    val moveToFolder = onMoveToFolder ?: { choosingFolder = true }
+    if (choosingFolder && !journal.isDeleted) {
+        FolderDestinationSheet(FolderDrag(journal.id, false), onDismiss = { choosingFolder = false })
+    }
     val wordCount = remember(journal.content) {
         if (journal.content.isBlank()) 0
         else journal.content.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.size
@@ -133,9 +145,17 @@ fun JournalOptionsSheet(
                             onExportMarkdown,
                             onToggleBookmark,
                             onDeleteOrRestore,
-                            onPermanentDelete
+                            onPermanentDelete,
+                            moveToFolder
                         ) {
                             buildList {
+                                if (!journal.isDeleted) {
+                                    add(ActionConfig(
+                                        iconRes = R.drawable.drive_folder_upload_24px,
+                                        contentDescriptionRes = R.string.folder_move,
+                                        onClick = moveToFolder
+                                    ))
+                                }
                                 if (!journal.isDeleted && onExportMarkdown != null) {
                                     add(
                                         ActionConfig(

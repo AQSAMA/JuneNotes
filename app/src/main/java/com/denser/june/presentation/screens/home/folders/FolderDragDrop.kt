@@ -4,6 +4,8 @@ import android.content.ClipData
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -27,19 +33,33 @@ private const val FOLDER_MIME = "application/vnd.june.folder-item"
 private val LocalFolderDragController = staticCompositionLocalOf<FolderDragController> { error("FolderDragHost is required") }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
+@Suppress("DEPRECATION")
 fun FolderDragHandle(item: FolderDrag, onMove: () -> Unit) {
     val haptic = LocalHapticFeedback.current
-    IconButton(
-        onClick = onMove,
-        modifier = Modifier.dragAndDropSource { _ ->
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            DragAndDropTransferData(
-                clipData = ClipData("June folder item", arrayOf(FOLDER_MIME), ClipData.Item(item.id)),
-                localState = item
+    val currentMove by rememberUpdatedState(onMove)
+    val description = stringResource(R.string.folder_drag_or_move)
+    // One gesture detector owns both tap and long press. IconButton's clickable detector
+    // consumes the down event needed by the default native drag source on touch devices.
+    Box(
+        modifier = Modifier.size(48.dp).semantics {
+            contentDescription = description
+            onClick { currentMove(); true }
+        }.dragAndDropSource(block = {
+            detectTapGestures(
+                onTap = { currentMove() },
+                onLongPress = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    startTransfer(DragAndDropTransferData(
+                        clipData = ClipData("June folder item", arrayOf(FOLDER_MIME), ClipData.Item(item.id)),
+                        localState = item
+                    ))
+                }
             )
-        }
+        }),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(painterResource(R.drawable.drag_indicator_24px), stringResource(R.string.folder_drag_or_move))
+        Icon(painterResource(R.drawable.drag_indicator_24px), null)
     }
 }
 

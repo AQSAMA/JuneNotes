@@ -8,6 +8,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.launch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,6 +56,10 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     var dragging by remember { mutableStateOf(false) }
     val pathScroll = rememberScrollState()
     LaunchedEffect(state.currentId, pathScroll.maxValue) { pathScroll.animateScrollTo(pathScroll.maxValue) }
+    var addingNote by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val autoTime by viewModel.preferences.isAutoTimeEnabled().collectAsStateWithLifecycle(false)
+    val addedMessage = stringResource(R.string.folder_note_added)
     val is24Hour = time == TimeFormat.TWENTY_FOUR_HOUR
     ExportJournalBottomSheet(exportNote, onDismiss = { exportNote = null })
 
@@ -61,8 +71,8 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     ) {
     Box(Modifier.fillMaxSize()) {
         Column {
-            // Every ancestor is both a navigation button and a drop target, including the root.
-            Row(
+            // Keep the root heading uncluttered; the ancestor path appears inside folders or during dragging.
+            AnimatedVisibility(state.currentId != null || dragging) { Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -75,8 +85,8 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                         onOpen = { viewModel.open(folder.id) }, onDrop = { viewModel.move(it, folder.id) })
                 }
                 }
-            }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            } }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(state.path.lastOrNull()?.name ?: stringResource(R.string.folders), style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 IconButton(onClick = { nameDialog = true }) { Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder)) }
@@ -103,25 +113,26 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                         items(pane.children, key = { "folder_${it.id}" }) { folder ->
                             Column(Modifier.animateItem()) {
                                 ReorderSlot(
-                                    accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
+                                    active = dragging && displayedId == state.currentId,
+                                    accepts = { displayedId == state.currentId && it.folder && it.id != folder.id && accepts(it, displayedId) },
                                     onDrop = { viewModel.move(it, displayedId, folder.id) }
                                 )
                                 FolderDropSurface(
-                                    accepts = { accepts(it, folder.id) },
+                                    accepts = { displayedId == state.currentId && accepts(it, folder.id) },
                                     onDrop = { viewModel.move(it, folder.id) },
                                     onHoverOpen = { viewModel.open(folder.id) }
                                 ) {
-                                    FolderRow(folder, state.itemCounts[folder.id] ?: 0, onOpen = { viewModel.open(folder.id) },
+                                    FolderRow(folder, state.folderCounts[folder.id] ?: 0, state.noteCounts[folder.id] ?: 0, onOpen = { viewModel.open(folder.id) },
                                         onOptions = { optionsFolder = folder }, onMove = { moveItem = FolderDrag(folder.id, true) })
                                 }
                             }
                         }
                         if (pane.children.isNotEmpty()) {
-                            item(key = "folder_end") { ReorderSlot(accepts = { it.folder && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) }
+                            item(key = "folder_end") { ReorderSlot(active = dragging && displayedId == state.currentId, accepts = { displayedId == state.currentId && it.folder && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) }
                         }
                         items(pane.visibleNotes, key = { "note_${it.id}" }) { note ->
                             Column(Modifier.animateItem()) {
-                                ReorderSlot(accepts = { !it.folder && it.id != note.id }, onDrop = { viewModel.move(it, displayedId, note.id) })
+                                ReorderSlot(active = dragging && displayedId == state.currentId, accepts = { displayedId == state.currentId && !it.folder && it.id != note.id }, onDrop = { viewModel.move(it, displayedId, note.id) })
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     JournalCard(
                                         journal = note, is24Hour = is24Hour, showDate = true,
@@ -135,25 +146,30 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                             }
                         }
                         item(key = "drop_end") {
-                            FolderDropSurface(accepts = { accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) {
+                            FolderDropSurface(accepts = { displayedId == state.currentId && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) {
                                 if (pane.children.isEmpty() && pane.visibleNotes.isEmpty()) {
-                                    Column(Modifier.fillMaxWidth().padding(vertical = 56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.height(16.dp))
-                                        Text(stringResource(R.string.folder_empty), style = MaterialTheme.typography.titleMedium)
+                                        Text(stringResource(R.string.folder_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         Spacer(Modifier.height(12.dp))
-                                        FilledTonalButton(onClick = { nameDialog = true }) { Text(stringResource(R.string.new_folder)) }
+                                        FilledTonalButton(onClick = { navigator.navigateTo(Route.Editor(initialFolderId = displayedId, initialDate = if (autoTime) System.currentTimeMillis() else null), isSingleTop = true) }) {
+                                            Icon(painterResource(R.drawable.add_2_24px), null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(stringResource(R.string.new_journal))
+                                        }
                                     }
-                                } else {
-                                    Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-                                        Text(stringResource(R.string.folder_drop_here), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else if (dragging) {
+                                    Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
+                                        Icon(painterResource(R.drawable.drive_folder_upload_24px), stringResource(R.string.folder_drop_here), tint = MaterialTheme.colorScheme.primary)
                                     }
                                 }
+
                             }
                         }
                     }
                 }
-                if (dragging) {
+                if (dragging && displayedId == state.currentId) {
                     FolderDropSurface(
                         accepts = { accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) },
                         modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(40.dp),
@@ -197,9 +213,9 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
         val note = state.notes.firstOrNull { it.id == selected.id }
         if (note != null) {
             ModalBottomSheet(onDismissRequest = { optionsNote = null }) {
-                FolderAction(R.drawable.drive_folder_upload_24px, stringResource(R.string.folder_move)) { moveItem = FolderDrag(note.id, false); optionsNote = null }
                 JournalOptionsSheet(note, is24Hour, onToggleBookmark = { viewModel.bookmark(note.id) },
-                    onExportMarkdown = { exportNote = note; optionsNote = null }, onDeleteOrRestore = { deleteNote = note; optionsNote = null })
+                    onExportMarkdown = { exportNote = note; optionsNote = null }, onDeleteOrRestore = { deleteNote = note; optionsNote = null },
+                    onMoveToFolder = { moveItem = FolderDrag(note.id, false); optionsNote = null })
             }
         }
     }
@@ -207,23 +223,27 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
         DeleteConfirmationSheet(sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             onDismissRequest = { deleteNote = null }, onConfirm = { viewModel.deleteNote(note.id); deleteNote = null })
     }
-    moveItem?.let { item ->
-        FolderMoveSheet(state, item, onDismiss = { moveItem = null }, onMove = { parent -> viewModel.move(item, parent); moveItem = null })
-    }
+    moveItem?.let { item -> FolderDestinationSheet(item, onDismiss = { moveItem = null }) }
     if (addExisting) {
-        ModalBottomSheet(onDismissRequest = { addExisting = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-            Text(stringResource(R.string.folder_add_existing), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(24.dp))
-            val visibleIds = state.visibleNotes.map { it.id }.toSet()
-            val notes = state.notes.filterNot { it.id in visibleIds }
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (notes.isEmpty()) item { Text(stringResource(R.string.folder_no_other_notes), modifier = Modifier.padding(16.dp)) }
-                items(notes, key = { it.id }) { note ->
-                    JournalCard(note, is24Hour = is24Hour, showDate = true, onJournalClick = {
-                        viewModel.move(FolderDrag(note.id, false), state.currentId); addExisting = false
-                    })
+        val visibleIds = state.visibleNotes.map { it.id }.toSet()
+        ExistingFolderNoteSheet(
+            notes = state.notes.filterNot { it.id in visibleIds },
+            destination = state.path.lastOrNull()?.name ?: stringResource(R.string.folders),
+            is24Hour = is24Hour, busy = addingNote,
+            onDismiss = { addExisting = false },
+            onChoose = { note ->
+                val destination = state.currentId
+                addingNote = true
+                scope.launch {
+                    try {
+                        if (viewModel.moveAndReport(FolderDrag(note.id, false), destination)) {
+                            addExisting = false
+                            snack.showSnackbar(addedMessage)
+                        }
+                    } finally { addingNote = false }
                 }
             }
-        }
+        )
     }
 }
 
@@ -235,21 +255,29 @@ private fun Breadcrumb(id: String?, label: String, accepts: (FolderDrag) -> Bool
 }
 
 @Composable
-private fun ReorderSlot(accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
+private fun ReorderSlot(active: Boolean, accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
     FolderDropSurface(accepts, onDrop, modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(16.dp))
+        Box(Modifier.fillMaxWidth().height(if (active) 20.dp else 2.dp), contentAlignment = Alignment.Center) {
+            if (active) HorizontalDivider(Modifier.fillMaxWidth(0.8f), color = MaterialTheme.colorScheme.outlineVariant)
+        }
     }
 }
 
 @Composable
-private fun FolderRow(folder: Folder, count: Int, onOpen: () -> Unit, onOptions: () -> Unit, onMove: () -> Unit) {
+private fun FolderRow(folder: Folder, folders: Int, notes: Int, onOpen: () -> Unit, onOptions: () -> Unit, onMove: () -> Unit) {
     Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(start = 16.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(folder.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(painterResource(R.drawable.folder_open_24px), stringResource(R.string.folders), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(folders.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(painterResource(R.drawable.edit_note_24px), stringResource(R.string.journals), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(notes.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             IconButton(onClick = onOptions) { Icon(painterResource(R.drawable.more_vert_24px), stringResource(R.string.folder_options)) }
             FolderDragHandle(FolderDrag(folder.id, true), onMove)
@@ -263,38 +291,15 @@ private fun FolderAction(icon: Int, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FolderNameDialog(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+internal fun FolderNameDialog(initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by rememberSaveable(initial) { mutableStateOf(initial) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(onDismissRequest = onDismiss, icon = { Icon(painterResource(R.drawable.folder_open_24px), null) },
         title = { Text(stringResource(if (initial.isEmpty()) R.string.new_folder else R.string.rename)) },
-        text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.folder_name)) }, singleLine = true) },
+        text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.folder_name)) }, singleLine = true,
+            modifier = Modifier.focusRequester(focus), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) onSave(name.trim()) })) },
         confirmButton = { TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FolderMoveSheet(state: FoldersState, item: FolderDrag, onDismiss: () -> Unit, onMove: (String?) -> Unit) {
-    var parent by rememberSaveable(item.id) { mutableStateOf<String?>(null) }
-    val folders = state.liveFolders.filter { it.parentId == parent && (!item.folder || state.snapshot.canMove(item.id, it.id)) }.sortedBy { it.position }
-    val current = state.liveFolders.firstOrNull { it.id == parent }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (parent != null) IconButton(onClick = { parent = current?.parentId }) { Icon(painterResource(R.drawable.arrow_back_24px), stringResource(R.string.back)) }
-                Text(current?.name ?: stringResource(R.string.folders), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            }
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                items(folders, key = { it.id }) { folder ->
-                    ListItem(headlineContent = { Text(folder.name) }, leadingContent = { Icon(painterResource(R.drawable.folder_open_24px), null) },
-                        trailingContent = { Icon(painterResource(R.drawable.chevron_right_24px), null) }, modifier = Modifier.clickable { parent = folder.id })
-                }
-            }
-            Button(onClick = { onMove(parent) }, enabled = !item.folder || state.snapshot.canMove(item.id, parent), modifier = Modifier.fillMaxWidth()) {
-                Icon(painterResource(R.drawable.drive_folder_upload_24px), null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.folder_move_here))
-            }
-        }
-    }
 }

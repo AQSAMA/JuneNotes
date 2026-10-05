@@ -487,4 +487,7 @@
     <string name="folder_drop_here">أفلت هنا</string>
     <string name="folder_delete_title">حذف المجلد؟</string>
     <string name="folder_delete_description">ستنتقل الملاحظات والمجلدات الفرعية إلى المستوى الأعلى. سيتم الاحتفاظ بملاحظاتك.</string>
+    <string name="folder_search_notes">البحث في الملاحظات</string>
+    <string name="folder_search_folders">البحث عن مجلد</string>
+    <string name="folder_note_added">أضيفت الملاحظة إلى المجلد</string>
 </resources>
