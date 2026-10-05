@@ -53,6 +53,7 @@ class FoldersVM(
         val validId = id?.takeIf { it in FolderTree(snapshot).folders }
         FoldersState(true, snapshot, notes, validId, working)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FoldersState())
+    val autoTime = preferences.isAutoTimeEnabled().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
     val timeFormat = preferences.timeFormat().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TimeFormat.TWELVE_HOUR)
     private val messages = Channel<Int>(Channel.BUFFERED)
     val events = messages.receiveAsFlow()

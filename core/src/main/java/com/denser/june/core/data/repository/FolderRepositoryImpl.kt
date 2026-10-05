@@ -50,8 +50,14 @@ class FolderRepositoryImpl(private val database: JournalDatabase) : FolderReposi
         val tree = FolderTree(state)
         require(parentId == null || parentId in tree.folders) { "Folder no longer exists" }
         val id = UUID.randomUUID().toString()
-        val folder = NoteFolder(id, clean(name), parentId, tree.children(parentId).size.toLong(), stamp(state))
-        write(state.copy(folders = state.folders + folder))
+        val siblings = tree.children(parentId)
+        val time = stamp(state)
+        val positions = siblings.withIndex().associate { it.value.id to it.index.toLong() }
+        val ordered = state.folders.map { existing ->
+            positions[existing.id]?.let { existing.copy(parentId = parentId, position = it, updatedAt = time) } ?: existing
+        }
+        val folder = NoteFolder(id, clean(name), parentId, siblings.size.toLong(), time)
+        write(state.copy(folders = ordered + folder))
         id
     }
 

@@ -53,6 +53,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun FoldersPage(isSelected: Boolean, viewModel: FoldersVM = koinViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val timeFormat by viewModel.timeFormat.collectAsStateWithLifecycle()
+    val autoTime by viewModel.autoTime.collectAsStateWithLifecycle()
     val navigator = koinInject<AppNavigator>()
     val drag = remember { FolderDrag() }
     val direction = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
@@ -128,7 +129,7 @@ fun FoldersPage(isSelected: Boolean, viewModel: FoldersVM = koinViewModel()) {
                     onOpenNote = { navigator.navigateTo(Route.Editor(it.id), isSingleTop = true) },
                     onNoteOptions = { selectedNote = it.id }, onFolderOptions = { selectedFolder = it },
                     onMove = { moveItem = it }, onNewFolder = { newFolder = true },
-                    onNewNote = { navigator.navigateTo(Route.Editor(initialFolderId = page.currentId)) })
+                    onNewNote = { navigator.navigateTo(Route.Editor(initialFolderId = page.currentId, initialDate = if (autoTime) System.currentTimeMillis() else null)) })
             }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = UiUtils.BOTTOM_BAR_PADDING))

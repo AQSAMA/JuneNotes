@@ -59,6 +59,14 @@ class FolderStorageTest {
         try { folders.moveFolder(c, d); Assert.fail("Cycle must be rejected") } catch (_: IllegalArgumentException) { }
     }
 
+    @Test fun `new folders append after sibling deletion and retain requested ordering`() = runBlocking<Unit> {
+        val a = folders.create("A", null)
+        val b = folders.create("B", null)
+        folders.remove(a)
+        val c = folders.create("C", null)
+        Assert.assertEquals(listOf(b, c), FolderTree(folders.snapshot()).children(null).map { it.id })
+    }
+
     @Test fun `unfiled original notes can be reordered before any placement exists`() = runBlocking<Unit> {
         notes.insertJournal(note("one")); notes.insertJournal(note("two"))
         folders.moveNote("two", null, "one")
