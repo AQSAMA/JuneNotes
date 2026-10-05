@@ -51,6 +51,7 @@ fun FolderDropSurface(
     onDrop: (FolderDrag) -> Unit,
     modifier: Modifier = Modifier,
     onHoverOpen: (() -> Unit)? = null,
+    highlight: Boolean = true,
     onDragActive: ((Boolean) -> Unit)? = null,
     onHoverScroll: (suspend () -> Unit)? = null,
     content: @Composable () -> Unit
@@ -93,11 +94,11 @@ fun FolderDropSurface(
         }
     }
     DisposableEffect(target) { onDispose { target.openJob?.cancel() } }
-    val scale by animateFloatAsState(if (hovered) 1.025f else 1f, label = "folder_drop_scale")
-    val color by animateColorAsState(if (hovered) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface, label = "folder_drop_color")
+    val scale by animateFloatAsState(if (hovered && highlight) 1.025f else 1f, label = "folder_drop_scale")
+    val color by animateColorAsState(if (hovered && highlight) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface, label = "folder_drop_color")
     Surface(
         color = color,
-        border = if (hovered) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (hovered && highlight) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         shape = RoundedCornerShape(24.dp),
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }

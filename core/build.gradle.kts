@@ -26,7 +26,6 @@ android {
             )
         }
     }
-    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -81,4 +80,11 @@ dependencies {
     androidTestImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+// Use the variant API to avoid AGP 9.3.1's library source-set interface cast regression.
+androidComponents {
+    onVariants { variant ->
+        variant.androidTest?.sources?.assets?.addStaticSourceDirectory("schemas")
+    }
 }

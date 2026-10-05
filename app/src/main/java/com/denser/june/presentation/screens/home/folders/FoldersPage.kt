@@ -57,7 +57,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
 
     FolderDropSurface(
         accepts = { accepts(it, state.currentId) }, onDrop = { viewModel.move(it, state.currentId) },
-        modifier = Modifier.fillMaxSize(), onDragActive = { dragging = it }
+        modifier = Modifier.fillMaxSize(), highlight = false, onDragActive = { dragging = it }
     ) {
     Box(Modifier.fillMaxSize()) {
         Column {
