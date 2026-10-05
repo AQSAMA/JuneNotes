@@ -33,6 +33,7 @@ import kotlin.io.path.createTempDirectory
 @OptIn(ExperimentalCoroutinesApi::class)
 class SyncTestHarness {
     val testDispatcher: TestDispatcher = StandardTestDispatcher()
+    val folders = com.denser.june.core.sync.fakes.FakeFolderRepository()
     lateinit var cloud: FakeCloudProvider
     lateinit var repo: FakeJournalRepository
     lateinit var prefs: FakeSyncPreferences
@@ -58,7 +59,8 @@ class SyncTestHarness {
             syncScheduler = FakeSyncScheduler(),
             applicationScope = CoroutineScope(testDispatcher),
             songLibraryDao = songDao,
-            songMediaDir = songMediaDir
+            songMediaDir = songMediaDir,
+            folderRepo = folders
         )
     }
 

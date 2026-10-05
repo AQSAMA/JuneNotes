@@ -145,7 +145,8 @@ class SyncFaultToleranceTest : BaseSyncTest() {
             syncScheduler = FakeSyncScheduler(),
             applicationScope = CoroutineScope(harness.testDispatcher),
             songLibraryDao = harness.songDao,
-            songMediaDir = harness.songMediaDir
+            songMediaDir = harness.songMediaDir,
+            folderRepo = harness.folders
         )
 
         harness.prefs.setSelectedProvider("ProviderB")
@@ -174,7 +175,8 @@ class SyncFaultToleranceTest : BaseSyncTest() {
             syncScheduler = FakeSyncScheduler(),
             applicationScope = CoroutineScope(harness.testDispatcher),
             songLibraryDao = harness.songDao,
-            songMediaDir = harness.songMediaDir
+            songMediaDir = harness.songMediaDir,
+            folderRepo = harness.folders
         )
 
         harness.prefs.setSelectedProvider("ProviderB")

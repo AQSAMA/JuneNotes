@@ -3,6 +3,7 @@ package com.denser.june.presentation.screens.home.folders
 import android.content.ClipData
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.layout.*
@@ -87,6 +88,7 @@ fun FolderDropSurface(
     val color by animateColorAsState(if (hovered) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface, label = "folder_drop_color")
     Surface(
         color = color,
+        border = if (hovered) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         shape = RoundedCornerShape(24.dp),
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }

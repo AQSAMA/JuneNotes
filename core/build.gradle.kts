@@ -26,6 +26,7 @@ android {
             )
         }
     }
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -76,6 +77,8 @@ dependencies {
     implementation(libs.media3.common)
 
     // Testing
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
