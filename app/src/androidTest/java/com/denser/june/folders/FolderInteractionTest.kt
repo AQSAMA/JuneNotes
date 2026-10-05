@@ -1,6 +1,5 @@
 package com.denser.june.folders
 
-import android.graphics.Bitmap
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -32,14 +31,18 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
-import java.io.File
 import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class FolderInteractionTest {
     @get:Rule val ui = createComposeRule()
+    @get:Rule(order = 1) val captureFailures = object : TestWatcher() {
+        override fun failed(error: Throwable, description: Description) { screenshot("failed-${description.methodName}") }
+    }
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private fun text(id: Int) = context.getString(id)
@@ -73,9 +76,13 @@ class FolderInteractionTest {
         val downTime = SystemClock.uptimeMillis()
         inject(MotionEvent.ACTION_DOWN, source, downTime)
         try {
+            // Native input keeps its real down time; Compose long-press timeouts use the test clock.
             SystemClock.sleep(750)
+            ui.mainClock.advanceTimeBy(800)
             ui.waitForIdle()
-            ui.runOnIdle { assertTrue("The actual grip must start a platform drag", active); assertFalse(tapped) }
+            ui.waitUntil(3000) { active }
+            ui.runOnIdle { assertFalse(tapped) }
+            screenshot("native-drag-active")
             repeat(16) { index ->
                 val fraction = (index + 1) / 16f
                 inject(MotionEvent.ACTION_MOVE, source + (target - source) * fraction, downTime)
@@ -113,6 +120,7 @@ class FolderInteractionTest {
             inject(MotionEvent.ACTION_DOWN, source, downTime)
             try {
                 SystemClock.sleep(750)
+                ui.mainClock.advanceTimeBy(800)
                 ui.waitForIdle()
                 repeat(12) { index ->
                     inject(MotionEvent.ACTION_MOVE, source + (target - source) * ((index + 1) / 12f), downTime)
@@ -163,7 +171,7 @@ class FolderInteractionTest {
             ui.onNodeWithContentDescription(text(R.string.folder_move)).performClick()
             ui.onNode(hasSetTextAction()).performTextInput(destination)
             ui.onNode(hasSetTextAction()).performImeAction()
-            ui.onNodeWithText(destination).performClick()
+            ui.onNode(hasText(destination) and !hasSetTextAction()).performClick()
             screenshot("note-folder-destination")
             ui.onNodeWithText(text(R.string.folder_move_here)).performClick()
             ui.waitUntil(5000) { runBlocking { folders.snapshot().journals.any { it.journalId == note.id && it.folderId == folder } } }
@@ -187,10 +195,10 @@ class FolderInteractionTest {
         try { assertTrue(instrumentation.uiAutomation.injectInputEvent(event, true)) } finally { event.recycle() }
     }
     private fun screenshot(name: String) {
-        val file = File(context.getExternalFilesDir("ui-checks"), "$name.png")
-        instrumentation.uiAutomation.takeScreenshot()?.let { bitmap ->
-            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-            bitmap.recycle()
+        // Shared output survives the connected-test runner uninstalling the app at teardown.
+        instrumentation.uiAutomation.executeShellCommand("mkdir -p /sdcard/Download/june-ui").close()
+        instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/june-ui/$name.png").use { descriptor ->
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
         }
     }
 }
