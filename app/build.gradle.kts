@@ -273,3 +273,6 @@ aboutLibraries {
         duplicationRule = DuplicateRule.SIMPLE
     }
 }
+androidComponents {
+    beforeVariants(selector().withBuildType("preview")) { it.enableUnitTest = true }
+}

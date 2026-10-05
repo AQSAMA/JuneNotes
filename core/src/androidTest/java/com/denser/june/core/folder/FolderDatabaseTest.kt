@@ -68,4 +68,18 @@ class FolderDatabaseTest {
             assertNull(repo.snapshot().journals.single().folderId)
         } finally { db.close() }
     }
+    @Test fun reorderOriginalRootNotesWithoutMembershipRows() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.inMemoryDatabaseBuilder(context, JournalDatabase::class.java).build()
+        try {
+            val repo = FolderRepositoryImpl(db)
+            listOf("a", "b", "c").forEachIndexed { index, id ->
+                db.journalDao().insertJournal(Journal(id, id, "Text", createdAt = index.toLong(), updatedAt = null, dateTime = (3 - index).toLong()).asEntity())
+            }
+            repo.moveJournal("c", null, "b")
+            assertEquals(listOf("a", "c", "b"), repo.snapshot().journals.sortedBy { it.position }.map { it.journalId })
+            repo.moveJournal("a", null)
+            assertEquals(listOf("c", "b", "a"), repo.snapshot().journals.sortedBy { it.position }.map { it.journalId })
+        } finally { db.close() }
+    }
 }

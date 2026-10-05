@@ -265,7 +265,7 @@ class ExportImpl(
 
             ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zos ->
                 val folders = folderRepo.snapshot()
-                writeFolders(zos, folders.copy(journals = folders.journals.filter { it.journalId == journal.id }))
+                writeFolders(zos, folders.forJournals(setOf(journal.id)))
                 val mdEntry = ZipEntry(fileName)
                 zos.putNextEntry(mdEntry)
                 zos.write(markdownText.toByteArray(Charsets.UTF_8))

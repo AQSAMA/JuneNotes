@@ -51,7 +51,13 @@ class FolderRepositoryImpl(private val database: JournalDatabase) : FolderReposi
         val s = read()
         require(validParent(s, folderId)) { "Folder no longer exists" }
         require(database.journalDao().getJournalById(id) != null) { "Note no longer exists" }
-        val ordered = s.journals.filter { it.folderId == folderId && it.journalId != id }.sortedWith(compareBy({ it.position }, { it.journalId })).map { it.journalId }.toMutableList()
+        val memberships = s.journals.associateBy { it.journalId }
+        // Root notes imported from June have no membership row yet. Include them before ordering.
+        val ordered = database.journalDao().getAllJournalsSync()
+            .filter { it.id != id && memberships[it.id]?.folderId == folderId }
+            .sortedWith(compareBy<com.denser.june.core.data.database.journal.JournalEntity> { memberships[it.id]?.position ?: Long.MAX_VALUE }
+                .thenByDescending { it.dateTime }.thenByDescending { it.createdAt })
+            .map { it.id }.toMutableList()
         ordered.add(ordered.indexOf(beforeId).takeIf { it >= 0 } ?: ordered.size, id)
         val time = stamp(s)
         val existing = s.journals.associateBy { it.journalId }.toMutableMap()

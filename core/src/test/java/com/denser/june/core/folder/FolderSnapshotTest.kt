@@ -54,6 +54,14 @@ class FolderSnapshotTest {
         assertEquals(snapshot.normalized(), FolderBackupCodec.read(FolderBackupCodec.encode(snapshot).byteInputStream()))
     }
 
+    @Test fun singleNoteExportIncludesOnlyItsAncestors() {
+        val snapshot = tree.copy(folders = tree.folders + Folder("private", "Unrelated"),
+            journals = listOf(FolderJournal("chosen", "c"), FolderJournal("other", "private")))
+        val selected = snapshot.forJournals(setOf("chosen"))
+        assertEquals(setOf("a", "b", "c"), selected.folders.map { it.id }.toSet())
+        assertEquals(listOf("chosen"), selected.journals.map { it.journalId })
+    }
+
     @Test(expected = IllegalArgumentException::class) fun duplicateIdsRejected() {
         FolderBackupCodec.decode(FolderBackupCodec.encode(tree.copy(folders = tree.folders + tree.folders.first())))
     }
