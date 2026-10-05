@@ -69,7 +69,8 @@ data class SyncAnalysis(
     val pendingMediaUploadsList: List<String> = emptyList(),
     val pendingMediaDownloadsList: List<String> = emptyList(),
     val pendingSongUploadsList: List<String> = emptyList(),
-    val pendingSongDownloadsList: List<String> = emptyList()
+    val pendingSongDownloadsList: List<String> = emptyList(),
+    val pendingFolderChanges: Boolean = false
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
@@ -300,7 +301,7 @@ class SyncManager(
             val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS)
             val hasTombstones = journalRepo.hasTombstones()
 
-            _status.value = if (hasUnsynced || hasTombstones) SyncStatus.Dirty else SyncStatus.Idle
+            _status.value = if (hasUnsynced || hasTombstones || folderRepo?.observeDirty()?.first() == true) SyncStatus.Dirty else SyncStatus.Idle
         }
     }
 
@@ -315,7 +316,7 @@ class SyncManager(
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Active provider: ${provider.name}")
             provider.connect().getOrThrow()
 
-            val remoteManifest = provider.getManifest().getOrNull()
+            val remoteManifest = provider.getManifest().getOrThrow()
             val remoteJournalMeta = remoteManifest?.journalMetadata ?: emptyMap()
 
             val remoteJournals = provider.listJournals().getOrThrow()
@@ -453,7 +454,11 @@ class SyncManager(
                     pendingSongDownloadsList = songsToDownload.toList(),
                     pendingDeletionsCount = localDeletions.size,
                     pendingMediaUploadsList = mediaToUpload,
-                    pendingMediaDownloadsList = mediaToDownload
+                    pendingMediaDownloadsList = mediaToDownload,
+                    pendingFolderChanges = folderRepo?.snapshot()?.let { local ->
+                        local != local.merge(remoteManifest?.folders ?: com.denser.june.core.domain.folders.FolderSnapshot()) ||
+                            folderRepo?.observeDirty()?.first() == true
+                    } ?: false
                 )
             )
         } catch (e: Exception) {
@@ -529,7 +534,7 @@ class SyncManager(
             provider.connect().getOrThrow()
 
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Fetching remote manifest...")
-            val remoteManifest = provider.getManifest().getOrNull()
+            val remoteManifest = provider.getManifest().getOrThrow()
             if (remoteManifest != null && remoteManifest.schemaVersion > SyncManifest.CURRENT_SCHEMA_VERSION) {
                 throw Exception("A newer version of the app is required to sync with this cloud database.")
             }

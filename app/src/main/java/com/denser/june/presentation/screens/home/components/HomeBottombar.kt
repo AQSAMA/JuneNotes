@@ -65,13 +65,14 @@ private fun rememberHomeFabConfig(
         null
     }
 
-    val (containerColor, contentColor, badgeColor) = if (activeTagCategory != null) {
+    val (containerColor, contentColor, categoryBadgeColor) = if (activeTagCategory != null) {
         val spec = TagUtils.getCategoryUiSpec(activeTagCategory)
         Triple(spec.containerColor, contentColorFor(spec.containerColor), spec.color)
     } else {
         Triple(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onPrimary, Color.Transparent)
     }
 
+    val badgeColor = if (currentTab == HomeTab.Folders) MaterialTheme.colorScheme.primary else categoryBadgeColor
     val badgeIconRes = if (currentTab == HomeTab.Folders) R.drawable.folder_open_24px else when (activeTagCategory) {
         TagCategory.Spaces -> R.drawable.view_cozy_24px_fill
         TagCategory.People -> R.drawable.person_24px_fill

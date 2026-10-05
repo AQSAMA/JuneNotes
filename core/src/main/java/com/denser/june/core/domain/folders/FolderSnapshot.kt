@@ -29,8 +29,8 @@ data class FolderSnapshot(
 ) {
     fun validate() {
         require(version == 1) { "Unsupported folder backup version" }
-        require(folders.all { it.id.isNotBlank() && it.name.isNotBlank() })
-        require(placements.all { it.journalId.isNotBlank() })
+        require(folders.all { it.id.isNotBlank() && it.name.isNotBlank() && it.name.length <= 120 && it.updatedAt in 0 until Long.MAX_VALUE && it.position >= 0 && (it.deletedAt == null || it.deletedAt >= 0) })
+        require(placements.all { it.journalId.isNotBlank() && it.updatedAt in 0 until Long.MAX_VALUE && it.position >= 0 })
         require(folders.map { it.id }.distinct().size == folders.size)
         require(placements.map { it.journalId }.distinct().size == placements.size)
     }
@@ -76,10 +76,11 @@ class FolderTree(snapshot: FolderSnapshot) {
         }
     }
 
+    private val childrenByParent = folders.values.groupBy { parents[it.id] }.mapValues { (_, children) ->
+        children.sortedWith(compareBy<NoteFolder> { it.position }.thenBy { it.id })
+    }
     fun parentOf(id: String): String? = parents[id]
-    fun children(parentId: String?): List<NoteFolder> = folders.values
-        .filter { parents[it.id] == parentId }
-        .sortedWith(compareBy<NoteFolder> { it.position }.thenBy { it.id })
+    fun children(parentId: String?): List<NoteFolder> = childrenByParent[parentId].orEmpty()
 
     fun path(id: String?): List<NoteFolder> {
         val result = mutableListOf<NoteFolder>()

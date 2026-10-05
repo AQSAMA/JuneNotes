@@ -473,4 +473,24 @@
     <string name="stadia_api_key_placeholder">مفتاح API ل Stadia</string>
     <string name="about_june">حول June</string>
     <string name="about_june_desc">الإصدار ورابط GitHub</string>
+
+    <!-- Nested folders -->
+    <string name="folders">المجلدات</string>
+    <string name="new_folder">مجلد جديد</string>
+    <string name="folder_options">خيارات المجلد</string>
+    <string name="rename_folder">تغيير اسم المجلد</string>
+    <string name="move">نقل</string>
+    <string name="delete_folder">حذف المجلد</string>
+    <string name="delete_folder_description">هل تريد حذف «%1$s» والمجلدات داخله؟ ستبقى ملاحظاتك في التطبيق وتعود إلى الصفحة الرئيسية للمجلدات.</string>
+    <string name="folder_drag_hint">أفلت على مجلد أو مسار. انتظر قليلاً لفتحه.</string>
+    <string name="folder_empty">لا يوجد شيء هنا بعد</string>
+    <string name="unfiled_notes">ملاحظات خارج المجلدات</string>
+    <string name="folder_counts">%1$d مجلدات · %2$d ملاحظات</string>
+    <string name="move_folder">نقل المجلد</string>
+    <string name="move_note">نقل الملاحظة</string>
+    <string name="move_here">نقل إلى هنا</string>
+    <string name="drop_here">أفلت هنا</string>
+    <string name="folder_moved">تم النقل</string>
+    <string name="folder_operation_failed">تعذّر حفظ التغيير. حاول مرة أخرى.</string>
+    <string name="folders_pending_sync">ستتم مزامنة تغييرات المجلدات</string>
 </resources>

@@ -23,6 +23,28 @@ class FolderRepositoryImpl(private val database: JournalDatabase) : FolderReposi
     override suspend fun markSynced(snapshot: FolderSnapshot) { dao.putSynced(FolderSyncState(snapshot = encode(snapshot))) }
     override suspend fun merge(snapshot: FolderSnapshot) = database.withTransaction { write(read().merge(snapshot)) }
 
+    override suspend fun restore(snapshot: FolderSnapshot) = database.withTransaction {
+        snapshot.validate()
+        val local = read()
+        val time = stamp(local)
+        val existingFolders = local.folders.associateBy { it.id }
+        val existingPlacements = local.placements.associateBy { it.journalId }
+        val importedFolders = snapshot.folders.map { folder ->
+            val existing = existingFolders[folder.id]
+            if (existing != null && existing != folder) folder.copy(updatedAt = time, deletedAt = folder.deletedAt?.let { time }) else folder
+        }
+        val importedPlacements = snapshot.placements.map { placement ->
+            val existing = existingPlacements[placement.journalId]
+            if (existing != null && existing != placement) placement.copy(updatedAt = time) else placement
+        }
+        val folderIds = importedFolders.map { it.id }.toSet()
+        val noteIds = importedPlacements.map { it.journalId }.toSet()
+        write(FolderSnapshot(
+            folders = local.folders.filter { it.id !in folderIds } + importedFolders,
+            placements = local.placements.filter { it.journalId !in noteIds } + importedPlacements
+        ))
+    }
+
     override suspend fun create(name: String, parentId: String?): String = database.withTransaction {
         val state = read()
         val tree = FolderTree(state)
@@ -58,8 +80,8 @@ class FolderRepositoryImpl(private val database: JournalDatabase) : FolderReposi
         val state = read()
         val tree = FolderTree(state)
         require(folderId == null || folderId in tree.folders) { "Folder no longer exists" }
-        require(database.journalDao().getJournalById(journalId)?.deletedAt == null &&
-            database.journalDao().getJournalById(journalId) != null) { "Note no longer exists" }
+        val note = database.journalDao().getJournalById(journalId)
+        require(note != null && note.deletedAt == null) { "Note no longer exists" }
         val placements = state.placements.associateBy { it.journalId }
         val siblings = database.journalDao().getAllJournalsSync()
             .filter { tree.folderFor(placements[it.id]) == folderId && it.id != journalId }

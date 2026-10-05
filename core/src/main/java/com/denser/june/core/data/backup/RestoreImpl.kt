@@ -157,47 +157,47 @@ class RestoreImpl(
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Found ${journalsList.size} journals to import. Inserting into DB...")
 
                 database.withTransaction {
-                journalsList.forEach { journal ->
-                    val updatedJournal = remapMediaPaths(journal, extractedMediaMap, mediaDir, songLibraryDir, songArtDir)
-                    val existing = journalRepo.getJournalById(updatedJournal.id)
-                    val journalToSave = if (existing != null) {
-                        updatedJournal.copy(
-                            cloudId = existing.cloudId,
-                            syncedAt = existing.syncedAt,
-                            createdAt = existing.createdAt
-                        )
-                    } else {
-                        updatedJournal
-                    }
-                    val id = journalRepo.insertJournal(journalToSave)
+                    journalsList.forEach { journal ->
+                        val updatedJournal = remapMediaPaths(journal, extractedMediaMap, mediaDir, songLibraryDir, songArtDir)
+                        val existing = journalRepo.getJournalById(updatedJournal.id)
+                        val journalToSave = if (existing != null) {
+                            updatedJournal.copy(
+                                cloudId = existing.cloudId,
+                                syncedAt = existing.syncedAt,
+                                createdAt = existing.createdAt
+                            )
+                        } else {
+                            updatedJournal
+                        }
+                        val id = journalRepo.insertJournal(journalToSave)
 
-                    journalToSave.songDetails?.let { song ->
-                        song.localPreviewPath?.let { path ->
-                            val audioFile = File(path)
-                            if (audioFile.exists()) {
-                                val contentHash = audioFile.nameWithoutExtension
-                                songLibraryDao.upsert(
-                                    SongLibraryEntity(
-                                        contentHash = contentHash,
-                                        localPath = audioFile.absolutePath,
-                                        localArtPath = song.localThumbnailPath,
-                                        sourceUrl = song.previewUrl,
-                                        sourceType = song.sourceType.name,
-                                        title = song.title,
-                                        artistName = song.artistName,
-                                        albumName = song.albumName,
-                                        genre = song.genre,
-                                        thumbnailUrl = song.thumbnailUrl
+                        journalToSave.songDetails?.let { song ->
+                            song.localPreviewPath?.let { path ->
+                                val audioFile = File(path)
+                                if (audioFile.exists()) {
+                                    val contentHash = audioFile.nameWithoutExtension
+                                    songLibraryDao.upsert(
+                                        SongLibraryEntity(
+                                            contentHash = contentHash,
+                                            localPath = audioFile.absolutePath,
+                                            localArtPath = song.localThumbnailPath,
+                                            sourceUrl = song.previewUrl,
+                                            sourceType = song.sourceType.name,
+                                            title = song.title,
+                                            artistName = song.artistName,
+                                            albumName = song.albumName,
+                                            genre = song.genre,
+                                            thumbnailUrl = song.thumbnailUrl
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
-                    }
 
-                    AppLogger.d(AppLogger.Category.BACKUP, TAG, "Successfully imported journal with ID: $id")
-                }
+                        AppLogger.d(AppLogger.Category.BACKUP, TAG, "Successfully imported journal with ID: $id")
+                    }
                 
-                folderSnapshot?.let { folderRepo.merge(it) }
+                    folderSnapshot?.let { folderRepo.restore(it) }
                 }
 
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Restore completed successfully.")

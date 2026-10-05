@@ -26,6 +26,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,6 +55,7 @@ fun FoldersPage(isSelected: Boolean, viewModel: FoldersVM = koinViewModel()) {
     val timeFormat by viewModel.timeFormat.collectAsStateWithLifecycle()
     val navigator = koinInject<AppNavigator>()
     val drag = remember { FolderDrag() }
+    val direction = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
     var newFolder by rememberSaveable { mutableStateOf(false) }
     var renameFolder by remember { mutableStateOf<NoteFolder?>(null) }
     var deleteFolder by remember { mutableStateOf<NoteFolder?>(null) }
@@ -113,8 +116,10 @@ fun FoldersPage(isSelected: Boolean, viewModel: FoldersVM = koinViewModel()) {
                 targetState = state.currentId,
                 modifier = Modifier.weight(1f),
                 transitionSpec = {
-                    (fadeIn(spring()) + slideInHorizontally { if (targetState == null) -it / 8 else it / 8 }) togetherWith
-                        (fadeOut(spring()) + slideOutHorizontally { if (targetState == null) it / 8 else -it / 8 })
+                    val forward = state.tree.path(targetState).size > state.tree.path(initialState).size
+                    val sign = (if (forward) 1 else -1) * direction
+                    (fadeIn(spring()) + slideInHorizontally { it / 8 * sign }) togetherWith
+                        (fadeOut(spring()) + slideOutHorizontally { -it / 8 * sign })
                 }, label = "folder_navigation"
             ) { folderId ->
                 // Outgoing content keeps its own parent during the animated transition.
@@ -201,7 +206,8 @@ private fun FolderContents(
         while (drag.item != null && scrollDirection != 0) { list.scrollBy(scrollStep * scrollDirection); delay(16) }
     }
     Box(Modifier.fillMaxSize()) {
-        LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp),
+        LazyColumn(state = list, modifier = Modifier.fillMaxSize()
+            .folderDropTarget("page:${state.currentId}", drag, { state.accepts(it, state.currentId) }, { viewModel.move(it, state.currentId) }), contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (!state.loaded) item { JunePlaceholderPage(isLoading = true, modifier = Modifier.fillParentMaxHeight(0.7f)) }
             if (state.loaded && state.children.isEmpty() && state.notes.isEmpty()) item {
@@ -286,7 +292,7 @@ private fun FolderTile(folder: NoteFolder, state: FoldersState, drag: FolderDrag
     val scale by animateFloatAsState(if (hovered) 1.025f else 1f, spring(), label = "folder_drop_scale")
     val rotation by animateFloatAsState(if (hovered) -7f else 0f, spring(), label = "folder_icon_tilt")
     val childCount = state.tree.children(folder.id).size
-    val noteCount = state.journals.count { state.tree.folderFor(state.placements[it.id]) == folder.id }
+    val noteCount = state.noteCounts[folder.id] ?: 0
     Surface(color = color, shape = RoundedCornerShape(24.dp),
         border = if (hovered) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }

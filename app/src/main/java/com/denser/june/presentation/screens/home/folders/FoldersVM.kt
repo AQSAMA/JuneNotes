@@ -31,6 +31,7 @@ data class FoldersState(
     val path get() = tree.path(currentId)
     val children get() = tree.children(currentId)
     val placements = snapshot.placements.associateBy { it.journalId }
+    val noteCounts = journals.groupingBy { tree.folderFor(placements[it.id]) }.eachCount()
     val notes get() = journals.filter { tree.folderFor(placements[it.id]) == currentId }
         .sortedWith(compareBy<Journal> { placements[it.id]?.position ?: Long.MAX_VALUE }
             .thenByDescending { it.dateTime }.thenByDescending { it.createdAt }.thenBy { it.id })

@@ -41,7 +41,7 @@ class FolderStorageTest {
     @After fun close() { db.close() }
     private fun note(id: String) = Journal(id, "Note $id", "Body", createdAt = 1, updatedAt = 1, dateTime = 1, isDraft = false)
 
-    @Test fun `folder and note moves reorder and survive note replacement`() = runBlocking {
+    @Test fun `folder and note moves reorder and survive note replacement`() = runBlocking<Unit> {
         val a = folders.create("A", null)
         val b = folders.create("B", a)
         val c = folders.create("C", b)
@@ -59,13 +59,13 @@ class FolderStorageTest {
         try { folders.moveFolder(c, d); Assert.fail("Cycle must be rejected") } catch (_: IllegalArgumentException) { }
     }
 
-    @Test fun `unfiled original notes can be reordered before any placement exists`() = runBlocking {
+    @Test fun `unfiled original notes can be reordered before any placement exists`() = runBlocking<Unit> {
         notes.insertJournal(note("one")); notes.insertJournal(note("two"))
         folders.moveNote("two", null, "one")
         Assert.assertEquals(listOf("two", "one"), folders.snapshot().placements.sortedBy { it.position }.map { it.journalId })
     }
 
-    @Test fun `subtree deletion preserves notes and a removed editor destination falls back to root`() = runBlocking {
+    @Test fun `subtree deletion preserves notes and a removed editor destination falls back to root`() = runBlocking<Unit> {
         val a = folders.create("A", null)
         val b = folders.create("B", a)
         notes.insertJournalInFolder(note("one"), b)
@@ -78,7 +78,20 @@ class FolderStorageTest {
         Assert.assertNull(FolderTree(folders.snapshot()).folderFor(folders.snapshot().placements.firstOrNull { it.journalId == "two" }))
     }
 
-    @Test fun `sync acknowledges only the uploaded snapshot and retains a concurrent edit`() = runBlocking {
+    @Test fun `restoring an older backup recovers a deleted folder without deleting newer notes`() = runBlocking<Unit> {
+        val a = folders.create("A", null)
+        notes.insertJournalInFolder(note("old"), a)
+        val backup = folders.snapshot()
+        folders.remove(a)
+        notes.insertJournal(note("new"))
+        folders.restore(backup)
+        Assert.assertEquals("A", FolderTree(folders.snapshot()).folders[a]!!.name)
+        Assert.assertEquals(a, folders.snapshot().placements.first { it.journalId == "old" }.folderId)
+        Assert.assertNotNull(notes.getJournalById("new"))
+        Assert.assertTrue(folders.observeDirty().first())
+    }
+
+    @Test fun `sync acknowledges only the uploaded snapshot and retains a concurrent edit`() = runBlocking<Unit> {
         val a = folders.create("A", null)
         Assert.assertTrue(folders.observeDirty().first())
         val uploaded = folders.snapshot()
@@ -89,7 +102,7 @@ class FolderStorageTest {
         Assert.assertFalse(folders.observeDirty().first())
     }
 
-    @Test fun `ZIP and Markdown backups round trip folders notes and media without changing original records`() = runBlocking {
+    @Test fun `ZIP and Markdown backups round trip folders notes and media without changing original records`() = runBlocking<Unit> {
         val a = folders.create("Parent", null)
         val b = folders.create("Child", a)
         val media = File(context.filesDir, "journal_media/sample.jpg").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1, 2, 3)) }
@@ -120,7 +133,7 @@ class FolderStorageTest {
         }
     }
 
-    @Test fun `original ZIP import and empty folder backup import both work`() = runBlocking {
+    @Test fun `original ZIP import and empty folder backup import both work`() = runBlocking<Unit> {
         val originalZip = File(context.cacheDir, "original.zip")
         ZipOutputStream(originalZip.outputStream()).use { out ->
             out.putNextEntry(ZipEntry("journals/one.json"))
@@ -139,7 +152,7 @@ class FolderStorageTest {
         Assert.assertEquals(snapshot, folders.snapshot())
     }
 
-    @Test fun `migration from original version 5 preserves notes and creates validated folder tables`() = runBlocking {
+    @Test fun `migration from original version 5 preserves notes and creates validated folder tables`() = runBlocking<Unit> {
         val name = "migration-test.db"
         context.deleteDatabase(name)
         val schemaPath = File(System.getProperty("june.schemaDir"), "com.denser.june.core.data.database.journal.JournalDatabase/5.json")

@@ -41,7 +41,7 @@ class SyncTestHarness {
     lateinit var songMediaDir: File
     lateinit var syncManager: SyncManager
 
-    fun setUp() {
+    fun setUp(folderRepo: com.denser.june.core.domain.folders.FolderRepository? = null) {
         Dispatchers.setMain(testDispatcher)
         cloud = FakeCloudProvider()
         repo = FakeJournalRepository()
@@ -58,7 +58,8 @@ class SyncTestHarness {
             syncScheduler = FakeSyncScheduler(),
             applicationScope = CoroutineScope(testDispatcher),
             songLibraryDao = songDao,
-            songMediaDir = songMediaDir
+            songMediaDir = songMediaDir,
+            folderRepo = folderRepo
         )
     }
 

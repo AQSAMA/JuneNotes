@@ -7,6 +7,7 @@ interface FolderRepository {
     fun observeDirty(): Flow<Boolean>
     suspend fun snapshot(): FolderSnapshot
     suspend fun merge(snapshot: FolderSnapshot)
+    suspend fun restore(snapshot: FolderSnapshot) = merge(snapshot)
     suspend fun markSynced(snapshot: FolderSnapshot)
     suspend fun create(name: String, parentId: String?): String
     suspend fun rename(id: String, name: String)
