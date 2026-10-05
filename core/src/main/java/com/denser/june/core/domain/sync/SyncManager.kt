@@ -130,8 +130,8 @@ class SyncManager(
                 else {
                     combine(
                         journalRepo.observeHasUnsyncedJournals(SYNC_THRESHOLD_MS),
-                        combine(journalRepo.observeHasTombstones(), folderRepo.observe(), syncPrefs.getLastSyncTime()) { tombstones, folders, lastSync ->
-                            tombstones || folders.folders.any { it.updatedAt > lastSync } || folders.journals.any { it.updatedAt > lastSync }
+                        combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync()) { tombstones, foldersDirty ->
+                            tombstones || foldersDirty
                         },
                         songLibraryDao.observeAll(),
                         syncPrefs.getLastSyncTime()
@@ -165,8 +165,8 @@ class SyncManager(
                     else {
                         combine(
                             journalRepo.observeHasUnsyncedJournals(SYNC_THRESHOLD_MS),
-                            combine(journalRepo.observeHasTombstones(), folderRepo.observe(), syncPrefs.getLastSyncTime()) { tombstones, folders, lastSync ->
-                            tombstones || folders.folders.any { it.updatedAt > lastSync } || folders.journals.any { it.updatedAt > lastSync }
+                            combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync()) { tombstones, foldersDirty ->
+                            tombstones || foldersDirty
                         },
                             songLibraryDao.observeAll(),
                             syncPrefs.getLastSyncTime()
@@ -299,10 +299,7 @@ class SyncManager(
                 _status.value = SyncStatus.Idle
                 return@launch
             }
-            val lastFolderSync = syncPrefs.getLastSyncTime().first()
-            val folderSnapshot = folderRepo.snapshot()
-            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) ||
-                folderSnapshot.folders.any { it.updatedAt > lastFolderSync } || folderSnapshot.journals.any { it.updatedAt > lastFolderSync }
+            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync()
             val hasTombstones = journalRepo.hasTombstones()
 
             _status.value = if (hasUnsynced || hasTombstones) SyncStatus.Dirty else SyncStatus.Idle
@@ -320,7 +317,7 @@ class SyncManager(
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Active provider: ${provider.name}")
             provider.connect().getOrThrow()
 
-            val remoteManifest = provider.getManifest().getOrNull()
+            val remoteManifest = provider.getManifest().getOrThrow()
             val remoteJournalMeta = remoteManifest?.journalMetadata ?: emptyMap()
 
             val remoteJournals = provider.listJournals().getOrThrow()
@@ -521,7 +518,6 @@ class SyncManager(
     }
 
     suspend fun sync(isFullRevalidation: Boolean = false): Result<Unit> = syncMutex.withLock {
-        val syncStartedAt = System.currentTimeMillis()
         val isSyncEnabled = syncPrefs.getSyncEnabled().first()
         if (!isSyncEnabled) return@withLock Result.failure(Exception("Sync is disabled"))
 
@@ -535,7 +531,7 @@ class SyncManager(
             provider.connect().getOrThrow()
 
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Fetching remote manifest...")
-            val remoteManifest = provider.getManifest().getOrNull()
+            val remoteManifest = provider.getManifest().getOrThrow()
             if (remoteManifest != null && remoteManifest.schemaVersion > SyncManifest.CURRENT_SCHEMA_VERSION) {
                 throw Exception("A newer version of the app is required to sync with this cloud database.")
             }
@@ -565,10 +561,7 @@ class SyncManager(
                 )
             }
 
-            val lastFolderSync = syncPrefs.getLastSyncTime().first()
-            val folderSnapshot = folderRepo.snapshot()
-            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) ||
-                folderSnapshot.folders.any { it.updatedAt > lastFolderSync } || folderSnapshot.journals.any { it.updatedAt > lastFolderSync }
+            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync()
             val hasTombstones = journalRepo.hasTombstones()
 
             val localsToSync = if (hasUnsynced || hasTombstones || isFullRevalidation) {
@@ -1028,9 +1021,10 @@ class SyncManager(
                     sha256Cache = sha256Cache
                 )
                 provider.updateManifest(finalManifest).getOrThrow()
-                syncPrefs.setLastSyncTime(syncStartedAt)
+                folderRepo.markSynced(finalManifest.folderData ?: com.denser.june.core.domain.folder.FolderSnapshot())
+                syncPrefs.setLastSyncTime(System.currentTimeMillis())
 
-                _status.value = SyncStatus.Success
+                _status.value = if (folderRepo.hasPendingSync()) SyncStatus.Dirty else SyncStatus.Success
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Sync successfully completed.")
                 Result.success(Unit)
             } else {

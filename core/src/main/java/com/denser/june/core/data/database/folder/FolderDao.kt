@@ -22,8 +22,14 @@ data class FolderJournalEntity(
     val updatedAt: Long
 )
 
+@Entity(tableName = "folder_sync_state")
+data class FolderSyncStateEntity(@PrimaryKey val id: Int = 1, val acknowledgedHash: String)
+
 @Dao
 interface FolderDao {
+    @Query("SELECT * FROM folder_sync_state WHERE id = 1") fun observeSyncState(): Flow<FolderSyncStateEntity?>
+    @Query("SELECT * FROM folder_sync_state WHERE id = 1") suspend fun syncState(): FolderSyncStateEntity?
+    @Upsert suspend fun upsertSyncState(state: FolderSyncStateEntity)
     @Query("SELECT * FROM folders") fun observeFolders(): Flow<List<FolderEntity>>
     @Query("SELECT * FROM folder_journals") fun observeJournals(): Flow<List<FolderJournalEntity>>
     @Query("SELECT * FROM folders") suspend fun folders(): List<FolderEntity>

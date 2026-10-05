@@ -4,6 +4,9 @@ import kotlinx.coroutines.flow.Flow
 
 interface FolderRepository {
     fun observe(): Flow<FolderSnapshot>
+    fun observePendingSync(): Flow<Boolean>
+    suspend fun hasPendingSync(): Boolean
+    suspend fun markSynced(snapshot: FolderSnapshot)
     suspend fun snapshot(): FolderSnapshot
     suspend fun merge(snapshot: FolderSnapshot)
     suspend fun create(name: String, parentId: String?): String

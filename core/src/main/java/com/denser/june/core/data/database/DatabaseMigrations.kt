@@ -187,6 +187,7 @@ object DatabaseMigrations {
     }
     val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `folder_sync_state` (`id` INTEGER NOT NULL, `acknowledgedHash` TEXT NOT NULL, PRIMARY KEY(`id`))")
             db.execSQL("CREATE TABLE IF NOT EXISTS `folders` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `parentId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_folders_parentId` ON `folders` (`parentId`)")
             db.execSQL("CREATE TABLE IF NOT EXISTS `folder_journals` (`journalId` TEXT NOT NULL, `folderId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`journalId`))")

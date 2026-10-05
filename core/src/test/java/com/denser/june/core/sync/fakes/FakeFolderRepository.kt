@@ -1,10 +1,14 @@
 package com.denser.june.core.sync.fakes
 
 import com.denser.june.core.domain.folder.*
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.*
 
 class FakeFolderRepository : FolderRepository {
     val data = MutableStateFlow(FolderSnapshot())
+    private val acknowledged = MutableStateFlow(FolderSnapshot())
+    override fun observePendingSync() = combine(data, acknowledged) { snapshot, ack -> snapshot.normalized() != ack }
+    override suspend fun hasPendingSync() = data.value.normalized() != acknowledged.value
+    override suspend fun markSynced(snapshot: FolderSnapshot) { acknowledged.value = snapshot.normalized() }
     override fun observe() = data
     override suspend fun snapshot() = data.value
     override suspend fun merge(snapshot: FolderSnapshot) { data.value = data.value.merge(snapshot) }

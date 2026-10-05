@@ -25,4 +25,21 @@ class SyncFolderTest : BaseSyncTest() {
         harness.syncManager.sync().getOrThrow()
         assertEquals("a", harness.cloud.manifest!!.folderData!!.folders.single().id)
     }
+    @Test fun manifestReadFailureNeverOverwritesRemoteFolders() = runTest(harness.testDispatcher) {
+        val remote = SyncManifest(0, "other", 5, totalJournals = 0,
+            folderData = FolderSnapshot(folders = listOf(Folder("remote", "Remote", updatedAt = 20))))
+        harness.cloud.manifest = remote
+        harness.cloud.failNextManifestRead = true
+        assertTrue(harness.syncManager.sync().isFailure)
+        assertEquals(remote, harness.cloud.manifest)
+    }
+
+    @Test fun failedManifestWriteKeepsFolderChangesPending() = runTest(harness.testDispatcher) {
+        harness.folders.data.value = FolderSnapshot(folders = listOf(Folder("a", "Local", updatedAt = 10)))
+        harness.cloud.failNextManifestWrite = true
+        assertTrue(harness.syncManager.sync().isFailure)
+        assertTrue(harness.folders.hasPendingSync())
+        harness.syncManager.sync().getOrThrow()
+        assertFalse(harness.folders.hasPendingSync())
+    }
 }

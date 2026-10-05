@@ -84,7 +84,6 @@ dependencies {
 
 // Use the variant API to avoid AGP 9.3.1's library source-set interface cast regression.
 androidComponents {
-    beforeVariants(selector().withBuildType("release")) { it.enableUnitTest = true }
     onVariants { variant ->
         variant.androidTest?.sources?.assets?.addStaticSourceDirectory("schemas")
     }

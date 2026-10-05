@@ -82,4 +82,21 @@ class FolderDatabaseTest {
             assertEquals(listOf("c", "b", "a"), repo.snapshot().journals.sortedBy { it.position }.map { it.journalId })
         } finally { db.close() }
     }
+    @Test fun acknowledgingAnOlderUploadDoesNotClearLaterEditsOrOldBackupImports() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.inMemoryDatabaseBuilder(context, JournalDatabase::class.java).build()
+        try {
+            val repo = FolderRepositoryImpl(db)
+            assertFalse(repo.hasPendingSync())
+            repo.create("First", null)
+            val upload = repo.snapshot()
+            repo.create("During upload", null)
+            repo.markSynced(upload)
+            assertTrue(repo.hasPendingSync())
+            repo.markSynced(repo.snapshot())
+            assertFalse(repo.hasPendingSync())
+            repo.merge(com.denser.june.core.domain.folder.FolderSnapshot(folders = listOf(com.denser.june.core.domain.folder.Folder("old", "Imported old record", updatedAt = 1))))
+            assertTrue(repo.hasPendingSync())
+        } finally { db.close() }
+    }
 }

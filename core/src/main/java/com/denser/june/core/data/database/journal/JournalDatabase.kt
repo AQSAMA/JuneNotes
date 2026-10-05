@@ -14,7 +14,8 @@ import com.denser.june.core.data.database.song.SongLibraryEntity
         DeletedJournalTombstone::class,
         SongLibraryEntity::class,
         com.denser.june.core.data.database.folder.FolderEntity::class,
-        com.denser.june.core.data.database.folder.FolderJournalEntity::class
+        com.denser.june.core.data.database.folder.FolderJournalEntity::class,
+        com.denser.june.core.data.database.folder.FolderSyncStateEntity::class
     ],
     version = JournalDatabase.VERSION,
     exportSchema = true

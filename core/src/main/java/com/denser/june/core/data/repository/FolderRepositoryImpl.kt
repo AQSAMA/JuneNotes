@@ -14,6 +14,18 @@ class FolderRepositoryImpl(private val database: JournalDatabase) : FolderReposi
     override fun observe(): Flow<FolderSnapshot> = combine(dao.observeFolders(), dao.observeJournals()) { folders, journals ->
         FolderSnapshot(folders = folders.domain(), journals = journals.memberships()).normalized()
     }.distinctUntilChanged()
+    private fun fingerprint(snapshot: FolderSnapshot): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(FolderBackupCodec.encode(snapshot.normalized()).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    override fun observePendingSync(): Flow<Boolean> = combine(observe(), dao.observeSyncState()) { snapshot, ack ->
+        fingerprint(snapshot) != (ack?.acknowledgedHash ?: fingerprint(FolderSnapshot()))
+    }
+    override suspend fun hasPendingSync(): Boolean = database.withTransaction {
+        fingerprint(read()) != (dao.syncState()?.acknowledgedHash ?: fingerprint(FolderSnapshot()))
+    }
+    override suspend fun markSynced(snapshot: FolderSnapshot) {
+        // Acknowledge exactly what was uploaded. Edits made during the upload remain pending.
+        dao.upsertSyncState(FolderSyncStateEntity(acknowledgedHash = fingerprint(snapshot)))
+    }
     override suspend fun snapshot(): FolderSnapshot = database.withTransaction { read() }
     private suspend fun read() = FolderSnapshot(folders = dao.folders().domain(), journals = dao.journals().memberships()).normalized()
     private suspend fun write(snapshot: FolderSnapshot) {
