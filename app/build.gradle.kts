@@ -54,7 +54,8 @@ android {
         applicationId = appId
         minSdk = 28
         targetSdk = 36
-        versionCode = appVersionCode
+        versionCode = if (project.gradle.startParameter.taskNames.any { it.contains("Preview", ignoreCase = true) })
+            providers.gradleProperty("previewVersionCode").orNull?.toInt() ?: appVersionCode else appVersionCode
         versionName = appVersionName
         buildConfigField("String", "HYPHEN_VERSION", "\"${libs.versions.hyphen.get()}\"")
 
@@ -77,6 +78,14 @@ android {
                 keyPassword = fossKeyPassword
                 storePassword = fossStorePassword
                 storeFile = file(fossStoreFile)
+            }
+        }
+        providers.gradleProperty("previewStoreFile").orNull?.let { previewStoreFile ->
+            create("preview") {
+                storeFile = file(previewStoreFile)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
             }
         }
         create("playRelease") {
@@ -133,6 +142,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+
+        create("preview") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            resValue("string", "app_name", "June Preview")
+            isDebuggable = false
+            signingConfig = signingConfigs.findByName("preview") ?: signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
 
         debug {
@@ -204,6 +223,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.10.1")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.10.1")
 
 
     // Essential

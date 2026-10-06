@@ -22,7 +22,8 @@ import com.denser.june.core.data.database.song.SongLibraryEntity
 class RestoreImpl(
     private val journalRepo: JournalRepository,
     private val songLibraryDao: SongLibraryDao,
-    private val context: Context
+    private val context: Context,
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) : RestoreRepo {
 
     companion object {
@@ -37,6 +38,7 @@ class RestoreImpl(
                 val songLibraryDir = File(context.filesDir, "song_media/library").apply { if (!exists()) mkdirs() }
                 val songArtDir = File(context.filesDir, "song_media/art").apply { if (!exists()) mkdirs() }
                 val journalsList = mutableListOf<Journal>()
+                var folders: com.denser.june.core.domain.folder.FolderSnapshot? = null
                 var isLegacy = false
                 var isMarkdown = false
 
@@ -67,6 +69,9 @@ class RestoreImpl(
                         while (entry != null) {
                             val entryName = entry.name
                             when {
+                                entryName == com.denser.june.core.domain.folder.FolderBackupCodec.ENTRY_NAME -> {
+                                    folders = com.denser.june.core.domain.folder.FolderBackupCodec.read(zis)
+                                }
                                 isLegacy -> {
                                     if (entryName == "journal_data.json") {
                                         val jsonString = String(zis.readBytes(), Charsets.UTF_8)
@@ -138,7 +143,7 @@ class RestoreImpl(
                     }
                 }
 
-                if (journalsList.isEmpty()) {
+                if (journalsList.isEmpty() && folders == null) {
                     AppLogger.e(AppLogger.Category.BACKUP, TAG, "No journals found in backup file to restore")
                     return@withContext Result.failure(RestoreException.InvalidFile)
                 }
@@ -185,6 +190,7 @@ class RestoreImpl(
                     AppLogger.d(AppLogger.Category.BACKUP, TAG, "Successfully imported journal with ID: $id")
                 }
                 
+                folders?.let { folderRepo.merge(it) }
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Restore completed successfully.")
                 Result.success(Unit)
             } catch (e: IllegalArgumentException) {

@@ -473,4 +473,22 @@
     <string name="stadia_api_key_placeholder">مفتاح API ل Stadia</string>
     <string name="about_june">حول June</string>
     <string name="about_june_desc">الإصدار ورابط GitHub</string>
+
+    <string name="folders">المجلدات</string>
+    <string name="new_folder">مجلد جديد</string>
+    <string name="folder_name">اسم المجلد</string>
+    <string name="folder_drag_or_move">اضغط مطولًا للسحب، أو انقر للنقل</string>
+    <string name="folder_move">نقل إلى مجلد</string>
+    <string name="folder_move_here">نقل إلى هنا</string>
+    <string name="folder_add_existing">إضافة ملاحظة موجودة</string>
+    <string name="folder_no_other_notes">لا توجد ملاحظات أخرى لإضافتها</string>
+    <string name="folder_options">خيارات المجلد</string>
+    <string name="folder_empty">هذا المجلد فارغ</string>
+    <string name="folder_drop_here">أفلت هنا</string>
+    <string name="folder_delete_title">حذف المجلد؟</string>
+    <string name="folder_delete_description">ستنتقل الملاحظات والمجلدات الفرعية إلى المستوى الأعلى. سيتم الاحتفاظ بملاحظاتك.</string>
+    <string name="folder_search_notes">البحث في الملاحظات</string>
+    <string name="folder_search_folders">البحث عن مجلد</string>
+    <string name="folder_note_added">أضيفت الملاحظة إلى المجلد</string>
+    <string name="folder_move_failed">تعذر نقل الملاحظة. حاول مرة أخرى.</string>
 </resources>

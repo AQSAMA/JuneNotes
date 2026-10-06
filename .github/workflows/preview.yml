@@ -1,0 +1,128 @@
+name: Preview APK
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Restore stable preview signing key
+        id: preview-key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: june-preview-signing-v1
+      - name: Create preview signing key if needed
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname 'CN=June Preview,O=June,C=US' -keyalg RSA -keysize 2048 -validity 10000
+          fi
+      - name: Validate and build Preview APK
+        run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((102010 + GITHUB_RUN_NUMBER)) -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
+      - name: Name Preview APK
+        run: |
+          cp app/build/outputs/apk/foss/preview/*.apk June-Preview.apk
+          preview_apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          preview_expected_cert="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
+          preview_actual_cert="$("$preview_apksigner" verify --print-certs June-Preview.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1)"
+          echo "Cached certificate: $preview_expected_cert"
+          echo "APK certificate: $preview_actual_cert"
+          test "$preview_expected_cert" = "$preview_actual_cert"
+          echo "Preview APK signing certificate matches the cached key."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Preview APK
+          path: June-Preview.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Test reports
+          path: |
+            core/build/reports/tests/
+            app/build/reports/tests/
+
+  folder-database-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash gradlew :core:connectedDebugAndroidTest --stacktrace
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Database test reports and Room schema
+          path: |
+            core/build/reports/androidTests/
+            core/schemas/
+
+  folder-ui-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash .github/scripts/check-folder-ui.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Folder UI tests and screenshots
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            app/build/ui-checks/
