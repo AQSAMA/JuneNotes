@@ -138,7 +138,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                         ReorderSlot(Modifier.align(Alignment.TopCenter).testTag("folder-before-${folder.id}"),
                                             accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
                                             onDrop = { viewModel.move(it, displayedId, folder.id) })
-                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("folder-after-${folder.id}"),
+                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("folder-after-${folder.id}"), markerAlignment = Alignment.BottomCenter,
                                             accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
                                             onDrop = { viewModel.move(it, displayedId, pane.children.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) })
                                     }
@@ -146,7 +146,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                             }
                         }
                         itemsIndexed(pane.visibleNotes, key = { _, note -> "note_${note.id}" }) { index, note ->
-                            val item = FolderDrag(note.id, false, note.title)
+                            val item = FolderDrag(note.id, false, note.title.ifBlank { note.content.take(80).replace('\n', ' ') })
                             FolderDragItem(item, Modifier.animateItem().testTag("note-row-${note.id}")) {
                                 Box {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -163,7 +163,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                         ReorderSlot(Modifier.align(Alignment.TopCenter).testTag("note-before-${note.id}"),
                                             accepts = { !it.folder && it.id != note.id },
                                             onDrop = { viewModel.move(it, displayedId, note.id) })
-                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("note-after-${note.id}"),
+                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("note-after-${note.id}"), markerAlignment = Alignment.BottomCenter,
                                             accepts = { !it.folder && it.id != note.id },
                                             onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) })
                                     }
@@ -274,8 +274,8 @@ private fun Breadcrumb(id: String?, label: String, accepts: (FolderDrag) -> Bool
 }
 
 @Composable
-private fun ReorderSlot(modifier: Modifier, accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
-    FolderDropSurface(accepts, onDrop, modifier.fillMaxWidth().height(22.dp), priority = 5, insertion = true) {
+private fun ReorderSlot(modifier: Modifier, markerAlignment: Alignment = Alignment.TopCenter, accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
+    FolderDropSurface(accepts, onDrop, modifier.fillMaxWidth().height(22.dp), priority = 5, insertion = true, markerAlignment = markerAlignment) {
         Box(Modifier.fillMaxSize())
     }
 }

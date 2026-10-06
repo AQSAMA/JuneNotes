@@ -19,6 +19,7 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
     private val sources = linkedMapOf<Any, Source>()
     private var hoverJob: Job? = null
     private var navigationArmed = true
+    private var navigationAnchor: Offset? = null
     var item by mutableStateOf<FolderDrag?>(null)
         private set
     var pointer by mutableStateOf<Offset?>(null)
@@ -43,12 +44,13 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
     fun begin(value: FolderDrag) { end(); item = value; navigationArmed = true }
     fun move(position: Offset) {
         // Navigation is deliberately re-armed by finger movement, never by new rows appearing.
-        if (pointer?.let { (it - position).getDistance() > 1f } == true) navigationArmed = true
+        val rearmed = !navigationArmed && navigationAnchor?.let { (it - position).getDistance() > 8f } == true
+        if (rearmed) navigationArmed = true
         pointer = position
-        refresh()
+        refresh(rearmed)
     }
     fun leave() { pointer = null; select(null) }
-    fun end() { item = null; pointer = null; select(null); hoverJob?.cancel() }
+    fun end() { item = null; pointer = null; navigationAnchor = null; select(null); hoverJob?.cancel() }
     fun drop(fallback: (FolderDrag) -> Boolean): Boolean {
         refresh()
         hoverJob?.cancel()
@@ -61,17 +63,17 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
         if (regions.values.any { it.bounds.contains(position) }) return false
         return fallback(value)
     }
-    private fun refresh() {
+    private fun refresh(restartHover: Boolean = false) {
         val position = pointer
         val value = item
         val region = if (position == null || value == null || viewport?.contains(position) == false) null
         else regions.entries.filter { it.value.bounds.contains(position) && it.value.bounds.width > 0 && it.value.bounds.height > 0 }
             .maxWithOrNull(compareBy<Map.Entry<Any, Region>> { it.value.priority }
                 .thenBy { -it.value.bounds.width * it.value.bounds.height })
-        select(region?.takeIf { it.value.accepts(value!!) }?.key)
+        select(region?.takeIf { it.value.accepts(value!!) }?.key, restartHover)
     }
-    private fun select(key: Any?) {
-        if (key == hovered) return
+    private fun select(key: Any?, restartHover: Boolean = false) {
+        if (key == hovered && !restartHover) return
         hovered = key
         hoverJob?.cancel()
         val region = regions[key] ?: return
@@ -80,6 +82,7 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
             delay(650)
             if (hovered == key && item != null) {
                 navigationArmed = false
+                navigationAnchor = pointer
                 region.open.invoke()
             }
         }

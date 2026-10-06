@@ -10,6 +10,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -199,6 +201,34 @@ class FolderInteractionTest {
             screenshot("hover-source-removed")
         } finally { inject(MotionEvent.ACTION_UP, target, downTime) }
         ui.waitUntil(3000) { destination == "child" && !active }
+    }
+
+    @Test fun rtlDragPreviewStaysInsideTheHostAndDropsAtTheFinger() {
+        var dropped = false
+        ui.setContent { Theme { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            FolderDragHost({ false }, {}, {}) {
+                Column(Modifier.fillMaxWidth().testTag("rtl-host")) {
+                    FolderDropSurface({ true }, { dropped = true }) {
+                        Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) { Text("وجهة") }
+                    }
+                    Spacer(Modifier.height(80.dp))
+                    FolderDragHandle(FolderDrag("rtl", true, "مجلد عربي")) {}
+                }
+            }
+        } } }
+        val source = screenCenter(ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)))
+        val target = screenCenter(ui.onNodeWithText("وجهة"))
+        val downTime = SystemClock.uptimeMillis()
+        inject(MotionEvent.ACTION_DOWN, source, downTime)
+        try {
+            inject(MotionEvent.ACTION_MOVE, target, downTime)
+            ui.waitForIdle()
+            val host = ui.onNodeWithTag("rtl-host").fetchSemanticsNode().boundsInRoot
+            val preview = ui.onNodeWithTag("folder-drag-preview").fetchSemanticsNode().boundsInRoot
+            assertTrue("RTL preview must stay within the host", preview.left >= host.left && preview.right <= host.right)
+            screenshot("touch-rtl-preview")
+        } finally { inject(MotionEvent.ACTION_UP, target, downTime) }
+        ui.waitUntil(3000) { dropped }
     }
 
     @Test fun actualSiblingReorderingAndAdjacentNoOpRetainFolderParents() {

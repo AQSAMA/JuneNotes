@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -25,6 +26,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -120,7 +122,7 @@ fun FolderDragHost(
             if (item != null && pointer != null) {
                 val density = LocalDensity.current
                 Surface(
-                    Modifier.width(180.dp).graphicsLayer {
+                    Modifier.align(AbsoluteAlignment.TopLeft).testTag("folder-drag-preview").width(180.dp).graphicsLayer {
                         translationX = (pointer.x - origin.x - size.width / 2).coerceIn(0f, ((controller.viewport?.width ?: size.width) - size.width).coerceAtLeast(0f))
                         translationY = (pointer.y - origin.y - with(density) { 76.dp.toPx() }).coerceIn(0f, ((controller.viewport?.height ?: size.height) - size.height).coerceAtLeast(0f))
                         rotationZ = -2f
@@ -131,7 +133,7 @@ fun FolderDragHost(
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(painterResource(if (item.folder) R.drawable.folder_open_24px else R.drawable.edit_note_24px), null)
                         Spacer(Modifier.width(10.dp))
-                        Text(item.label, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+                        Text(item.label.ifBlank { stringResource(if (item.folder) R.string.folders else R.string.journals) }, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
                     }
                 }
             }
@@ -147,6 +149,7 @@ fun FolderDropSurface(
     onHoverOpen: (() -> Unit)? = null,
     priority: Int = 0,
     insertion: Boolean = false,
+    markerAlignment: Alignment = Alignment.Center,
     enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
@@ -164,7 +167,7 @@ fun FolderDropSurface(
     }) {
         if (insertion) {
             content()
-            if (hovered) HorizontalDivider(Modifier.align(Alignment.Center).fillMaxWidth(), thickness = 3.dp, color = MaterialTheme.colorScheme.primary)
+            if (hovered) HorizontalDivider(Modifier.align(markerAlignment).fillMaxWidth(), thickness = 3.dp, color = MaterialTheme.colorScheme.primary)
         } else Surface(color = color, border = if (hovered) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
             shape = RoundedCornerShape(24.dp)) { content() }
     }
