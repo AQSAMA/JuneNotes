@@ -162,7 +162,7 @@ fun FolderDropSurface(
     val currentAccepts by rememberUpdatedState(accepts)
     val currentDrop by rememberUpdatedState(onDrop)
     val currentOpen by rememberUpdatedState(onHoverOpen)
-    val hovered = controller.hovered == key
+    val hovered = controller.hovered == key && priority >= 0
     DisposableEffect(controller, key, enabled) { onDispose { controller.unregister(key) } }
     val color by animateColorAsState(if (hovered) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "folder_drop_color")
     Box(modifier.onGloballyPositioned {
@@ -201,13 +201,16 @@ internal fun FolderDragAutoScroll(listState: LazyListState, modifier: Modifier =
     val speed by rememberUpdatedState(if (canScroll) penetration * kotlin.math.abs(penetration) * with(density) { 900.dp.toPx() } else 0f)
     LaunchedEffect(listState, controller.item, penetration != 0f && canScroll) {
         if (penetration == 0f || !canScroll) return@LaunchedEffect
-        var previous = withFrameNanos { it }
-        while (controller.item != null && speed != 0f) {
-            val now = withFrameNanos { it }
-            val elapsed = ((now - previous) / 1_000_000_000f).coerceAtMost(0.032f)
-            previous = now
-            listState.scrollBy(speed * elapsed)
-        }
+        controller.setScrolling(true)
+        try {
+            var previous = withFrameNanos { it }
+            while (controller.item != null && speed != 0f) {
+                val now = withFrameNanos { it }
+                val elapsed = ((now - previous) / 1_000_000_000f).coerceAtMost(0.032f)
+                previous = now
+                listState.scrollBy(speed * elapsed)
+            }
+        } finally { controller.setScrolling(false) }
     }
     Box(modifier.onGloballyPositioned { bounds = Rect(it.positionInRoot(), it.size.toSize()) }) { content() }
 }

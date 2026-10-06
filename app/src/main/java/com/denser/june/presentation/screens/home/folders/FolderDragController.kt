@@ -18,6 +18,7 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
     private val regions = linkedMapOf<Any, Region>()
     private val sources = linkedMapOf<Any, Source>()
     private var hoverJob: Job? = null
+    private var scrolling = false
     private var navigationArmed = true
     private var navigationAnchor: Offset? = null
     var item by mutableStateOf<FolderDrag?>(null)
@@ -49,8 +50,13 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
         pointer = position
         refresh(rearmed)
     }
+    fun setScrolling(active: Boolean) {
+        if (scrolling == active) return
+        scrolling = active
+        if (active) hoverJob?.cancel() else select(hovered, restartHover = true)
+    }
     fun leave() { pointer = null; select(null) }
-    fun end() { item = null; pointer = null; navigationAnchor = null; select(null); hoverJob?.cancel() }
+    fun end() { item = null; pointer = null; navigationAnchor = null; scrolling = false; select(null); hoverJob?.cancel() }
     fun drop(fallback: (FolderDrag) -> Boolean): Boolean {
         refresh()
         hoverJob?.cancel()
@@ -74,11 +80,12 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
     }
     private fun select(key: Any?, restartHover: Boolean = false) {
         if (key == hovered && !restartHover) return
+        val changed = key != hovered
         hovered = key
         hoverJob?.cancel()
         val region = regions[key] ?: return
-        onHover()
-        if (region.open != null && navigationArmed) hoverJob = scope.launch {
+        if (changed) onHover()
+        if (region.open != null && navigationArmed && !scrolling) hoverJob = scope.launch {
             delay(650)
             if (hovered == key && item != null) {
                 navigationArmed = false

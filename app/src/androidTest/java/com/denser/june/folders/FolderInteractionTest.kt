@@ -262,7 +262,7 @@ class FolderInteractionTest {
             ui.setContent { Theme { FoldersPage(model, true) } }
             ui.waitUntil(5000) { model.state.value.children.size == 2 }
             val source = screenCenter(grip(ids[2]))
-            val parent = screenCenter(ui.onNodeWithTag("folder-row-${ids[0]}"))
+            val parent = screenCenter(ui.onNodeWithText("Parent destination"))
             val downTime = SystemClock.uptimeMillis()
             inject(MotionEvent.ACTION_DOWN, source, downTime)
             try {
@@ -271,7 +271,7 @@ class FolderInteractionTest {
                 SystemClock.sleep(750)
                 ui.mainClock.advanceTimeBy(750)
                 ui.waitUntil(5000) { model.state.value.currentId == ids[0] }
-                val child = screenCenter(ui.onNodeWithTag("folder-row-${ids[1]}"))
+                val child = screenCenter(ui.onNodeWithText("Child destination"))
                 // Leave the previous position before intentionally hovering the next level.
                 inject(MotionEvent.ACTION_MOVE, child + Offset(80f, 0f), downTime)
                 inject(MotionEvent.ACTION_MOVE, child, downTime)
@@ -321,13 +321,14 @@ class FolderInteractionTest {
     @Test fun edgeScrollingContinuesWithStationaryFingerAndNewLazyRowsReceiveDrop() {
         lateinit var list: LazyListState
         var dropped = -1
+        var hoverOpened = false
         ui.setContent { Theme {
             list = rememberLazyListState()
             FolderDragHost({ false }, { fail("Drop on a lazy row") }, {}) {
                 Box(Modifier.fillMaxWidth().height(360.dp).padding(top = 24.dp).testTag("scroll-viewport")) {
                     LazyColumn(state = list, modifier = Modifier.fillMaxSize()) {
                         items(60) { index ->
-                            FolderDropSurface({ true }, { dropped = index }) {
+                            FolderDropSurface({ true }, { dropped = index }, onHoverOpen = { hoverOpened = true }) {
                                 Row(Modifier.fillMaxWidth().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text("Row $index", Modifier.weight(1f))
                                     FolderDragHandle(FolderDrag("row-$index", true, "Dragged row")) { fail("Not a tap") }
@@ -353,6 +354,7 @@ class FolderInteractionTest {
             ui.mainClock.advanceTimeBy(1800)
             val advanced = ui.runOnIdle { list.firstVisibleItemIndex }
             assertTrue("Stationary bottom-edge touch must scroll", advanced > 3)
+            assertFalse("Scrolling rows must not open beneath the finger", hoverOpened)
             inject(MotionEvent.ACTION_MOVE, top, downTime)
             ui.mainClock.advanceTimeBy(500)
             assertTrue("Top-edge touch must reverse scrolling", ui.runOnIdle { list.firstVisibleItemIndex } < advanced)

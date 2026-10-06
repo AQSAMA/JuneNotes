@@ -160,12 +160,20 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                         FolderDragHandle(item) { moveItem = item }
                                     }
                                     if (dragging && displayedId == state.currentId) {
-                                        ReorderSlot(Modifier.align(Alignment.TopCenter).testTag("note-before-${note.id}"),
-                                            accepts = { !it.folder && it.id != note.id },
-                                            onDrop = { viewModel.move(it, displayedId, note.id) })
-                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("note-after-${note.id}"), markerAlignment = Alignment.BottomCenter,
-                                            accepts = { !it.folder && it.id != note.id },
-                                            onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) })
+                                        Column(Modifier.matchParentSize()) {
+                                            FolderDropSurface(
+                                                accepts = { !it.folder && it.id != note.id },
+                                                onDrop = { viewModel.move(it, displayedId, note.id) },
+                                                modifier = Modifier.weight(1f).fillMaxWidth().testTag("note-before-${note.id}"),
+                                                priority = 5, insertion = true, markerAlignment = Alignment.TopCenter
+                                            ) { Box(Modifier.fillMaxSize()) }
+                                            FolderDropSurface(
+                                                accepts = { !it.folder && it.id != note.id },
+                                                onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) },
+                                                modifier = Modifier.weight(1f).fillMaxWidth().testTag("note-after-${note.id}"),
+                                                priority = 5, insertion = true, markerAlignment = Alignment.BottomCenter
+                                            ) { Box(Modifier.fillMaxSize()) }
+                                        }
                                     }
                                 }
                             }
