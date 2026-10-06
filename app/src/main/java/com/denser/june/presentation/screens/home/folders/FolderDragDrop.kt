@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
@@ -103,13 +102,18 @@ fun FolderDragHost(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 currentActive(true)
                 try {
-                    val released = drag(down.id) { change ->
+                    var released = false
+                    while (true) {
+                        // Keep the same pass for initiation and tracking. Switching to Main here
+                        // would read the slop event we just consumed and cancel an immediate drag.
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (change.isConsumed) break
                         controller.move(origin + change.position)
-                        change.consume()
+                        event.changes.forEach { it.consume() }
+                        if (!change.pressed) { released = true; break }
                     }
                     if (released) {
-                        // Include the up position, which may differ from the last move event.
-                        currentEvent.changes.firstOrNull { it.id == down.id }?.let { controller.move(origin + it.position) }
                         if (controller.drop { if (currentAccepts(it)) { currentDrop(it); true } else false })
                             haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
                     }
