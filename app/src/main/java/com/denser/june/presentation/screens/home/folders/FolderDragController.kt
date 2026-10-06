@@ -1,5 +1,7 @@
 package com.denser.june.presentation.screens.home.folders
 
+import android.util.Log
+import com.denser.june.BuildConfig
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -44,6 +46,7 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
     fun unregister(key: Any) { regions.remove(key); refresh() }
     fun begin(value: FolderDrag) { end(); item = value; navigationArmed = true }
     fun move(position: Offset) {
+        trace { "move=$position viewport=$viewport" }
         // Navigation is deliberately re-armed by finger movement, never by new rows appearing.
         val rearmed = !navigationArmed && navigationAnchor?.let { (it - position).getDistance() > 8f } == true
         if (rearmed) navigationArmed = true
@@ -76,7 +79,13 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
         else regions.entries.filter { it.value.bounds.contains(position) && it.value.bounds.width > 0 && it.value.bounds.height > 0 }
             .maxWithOrNull(compareBy<Map.Entry<Any, Region>> { it.value.priority }
                 .thenBy { -it.value.bounds.width * it.value.bounds.height })
+        if (value != null && position != null) trace {
+            "hit=$position regions=" + regions.values.filter { it.bounds.contains(position) }.joinToString { "${it.bounds}:priority=${it.priority},accepts=${it.accepts(value)},open=${it.open != null}" }
+        }
         select(region?.takeIf { it.value.accepts(value!!) }?.key, restartHover)
+    }
+    private inline fun trace(message: () -> String) {
+        if (BuildConfig.DEBUG && Log.isLoggable("JuneFolderDrag", Log.DEBUG)) Log.d("JuneFolderDrag", message())
     }
     private fun select(key: Any?, restartHover: Boolean = false) {
         if (key == hovered && !restartHover) return
@@ -85,11 +94,13 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
         hoverJob?.cancel()
         val region = regions[key] ?: return
         if (changed) onHover()
+        trace { "select=${region.bounds} open=${region.open != null} armed=$navigationArmed scrolling=$scrolling" }
         if (region.open != null && navigationArmed && !scrolling) hoverJob = scope.launch {
             delay(650)
             if (hovered == key && item != null) {
                 navigationArmed = false
                 navigationAnchor = pointer
+                trace { "open=${region.bounds}" }
                 region.open.invoke()
             }
         }

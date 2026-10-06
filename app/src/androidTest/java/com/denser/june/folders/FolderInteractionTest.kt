@@ -249,6 +249,7 @@ class FolderInteractionTest {
     }
 
     @Test fun actualTouchMovesAcrossTwoHoverLevelsAndBackToRoot() {
+        instrumentation.uiAutomation.executeShellCommand("setprop log.tag.JuneFolderDrag DEBUG").close()
         val folders = GlobalContext.get().get<FolderRepository>()
         val model = FoldersVM(folders, GlobalContext.get().get(), GlobalContext.get().get(), SavedStateHandle())
         val ids = runBlocking {
@@ -299,7 +300,10 @@ class FolderInteractionTest {
             inject(MotionEvent.ACTION_UP, root, rootDown)
             ui.waitUntil(5000) { runBlocking { folders.snapshot().folders.any { it.id == ids[2] && it.parentId == null } } }
             runBlocking { assertEquals(ids[2], folders.snapshot().folders.first { it.id == ids[3] }.parentId) }
-        } finally { runBlocking { ids.reversed().forEach { folders.delete(it) } } }
+        } finally {
+            instrumentation.uiAutomation.executeShellCommand("setprop log.tag.JuneFolderDrag INFO").close()
+            runBlocking { ids.reversed().forEach { folders.delete(it) } }
+        }
     }
 
     @Test fun actualNoteSiblingReorderingPreservesTheJournal() {
