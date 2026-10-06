@@ -53,7 +53,7 @@ class FolderInteractionTest {
         }
     }
 
-    @Test fun aRealTouchLongPressStartsNativeDragAndDropsOnTheTarget() {
+    @Test fun aRealTouchLongPressStartsDragAndDropsOnTheTarget() {
         var active = false
         var dropped = ""
         var tapped = false
@@ -75,7 +75,7 @@ class FolderInteractionTest {
         val downTime = SystemClock.uptimeMillis()
         inject(MotionEvent.ACTION_DOWN, source, downTime)
         try {
-            // Native input keeps its real down time; Compose long-press timeouts use the test clock.
+            // Inject Android MotionEvents through the actual input pipeline.
             SystemClock.sleep(750)
             ui.mainClock.advanceTimeBy(800)
             ui.waitForIdle()
@@ -95,8 +95,10 @@ class FolderInteractionTest {
 
     @Test fun tappingTheGripStillOpensTheDestinationControl() {
         var tapped = false
-        ui.setContent { Theme { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            FolderDragHandle(FolderDrag("tap", true)) { tapped = true }
+        ui.setContent { Theme { FolderDragHost({ true }, {}, {}) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                FolderDragHandle(FolderDrag("tap", true)) { tapped = true }
+            }
         } } }
         val source = screenCenter(ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)))
         val downTime = SystemClock.uptimeMillis()
@@ -125,6 +127,7 @@ class FolderInteractionTest {
                 ui.mainClock.advanceTimeBy(800)
                 ui.waitForIdle()
                 ui.onNodeWithContentDescription(text(R.string.folder_drop_here)).assertExists()
+                assertEquals(source, screenCenter(ui.onAllNodesWithContentDescription(text(R.string.folder_drag_or_move))[0]))
                 screenshot("folders-drag-active")
                 repeat(12) { index ->
                     inject(MotionEvent.ACTION_MOVE, source + (target - source) * ((index + 1) / 12f), downTime)
@@ -133,6 +136,67 @@ class FolderInteractionTest {
             } finally { inject(MotionEvent.ACTION_UP, target, downTime) }
             ui.waitUntil(5000) { runBlocking { folders.snapshot().folders.any { it.id == ids.first && it.parentId == ids.second } } }
         } finally { runBlocking { folders.delete(ids.first); folders.delete(ids.second) } }
+    }
+
+    @Test fun immediateGripMovementStartsWithoutLongPressAndCancelDoesNotDrop() {
+        var active = false
+        var drops = 0
+        var taps = 0
+        ui.setContent { Theme {
+            FolderDragHost({ true }, { drops++ }, { active = it }, Modifier.fillMaxSize().padding(top = 72.dp)) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    FolderDragHandle(FolderDrag("cancel", true, "Cancel")) { taps++ }
+                }
+            }
+        } }
+        val source = screenCenter(ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)))
+        val downTime = SystemClock.uptimeMillis()
+        inject(MotionEvent.ACTION_DOWN, source, downTime)
+        inject(MotionEvent.ACTION_MOVE, source + Offset(0f, 100f), downTime)
+        ui.waitUntil(3000) { active }
+        inject(MotionEvent.ACTION_CANCEL, source + Offset(0f, 100f), downTime)
+        ui.waitUntil(3000) { !active }
+        ui.runOnIdle { assertEquals(0, drops); assertEquals(0, taps) }
+    }
+
+    @Test fun hoverNavigationRemovesTheSourceButRetainsTheAndroidTouchStream() {
+        var navigated by mutableStateOf(false)
+        var active = false
+        var destination = ""
+        ui.setContent { Theme {
+            FolderDragHost({ false }, { fail("Use a visible target") }, { active = it }, Modifier.fillMaxSize().padding(top = 60.dp)) {
+                Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    if (!navigated) {
+                        FolderDropSurface({ true }, { destination = "parent" }, onHoverOpen = { navigated = true }) {
+                            Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { Text("Open parent") }
+                        }
+                        Spacer(Modifier.height(80.dp))
+                        FolderDragHandle(FolderDrag("removed-source", true, "Dragged")) { fail("Not a tap") }
+                    } else {
+                        FolderDropSurface({ true }, { destination = "child" }) {
+                            Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { Text("New child") }
+                        }
+                    }
+                }
+            }
+        } }
+        val source = screenCenter(ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)))
+        val target = screenCenter(ui.onNodeWithText("Open parent"))
+        val downTime = SystemClock.uptimeMillis()
+        inject(MotionEvent.ACTION_DOWN, source, downTime)
+        try {
+            inject(MotionEvent.ACTION_MOVE, source + Offset(0f, -80f), downTime)
+            ui.waitUntil(3000) { active }
+            inject(MotionEvent.ACTION_MOVE, target, downTime)
+            SystemClock.sleep(800)
+            ui.mainClock.advanceTimeBy(800)
+            ui.waitUntil(3000) { navigated }
+            ui.onNodeWithText("New child").assertIsDisplayed()
+            ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)).assertDoesNotExist()
+            assertTrue(active)
+            screenshot("hover-source-removed")
+        } finally { inject(MotionEvent.ACTION_UP, target, downTime) }
+        ui.waitUntil(3000) { destination == "child" && !active }
     }
 
     @Test fun existingNotePickerSearchesContentAndSelectsTheOriginalCard() {
