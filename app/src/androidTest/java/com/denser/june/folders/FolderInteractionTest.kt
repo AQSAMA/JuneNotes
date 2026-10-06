@@ -269,15 +269,15 @@ class FolderInteractionTest {
             inject(MotionEvent.ACTION_DOWN, source, downTime)
             try {
                 inject(MotionEvent.ACTION_MOVE, source + Offset(-80f, 0f), downTime)
-                inject(MotionEvent.ACTION_MOVE, parent, downTime)
+                moveAndSettle(source + Offset(-80f, 0f), parent, downTime)
                 screenshot("touch-first-hover")
                 SystemClock.sleep(750)
                 ui.mainClock.advanceTimeBy(750)
                 ui.waitUntil(5000) { model.state.value.currentId == ids[0] }
                 val child = screenCenter(ui.onNodeWithText("Child destination"))
                 // Leave the previous position before intentionally hovering the next level.
-                inject(MotionEvent.ACTION_MOVE, child + Offset(80f, 0f), downTime)
-                inject(MotionEvent.ACTION_MOVE, child, downTime)
+                moveAndSettle(parent, child + Offset(80f, 0f), downTime)
+                moveAndSettle(child + Offset(80f, 0f), child, downTime)
                 SystemClock.sleep(750)
                 ui.mainClock.advanceTimeBy(750)
                 ui.waitUntil(5000) { model.state.value.currentId == ids[1] }
@@ -444,6 +444,15 @@ class FolderInteractionTest {
             // Use rendered root bounds: size + positionOnScreen can miss an animateItem layer.
             root.positionOnScreen + semantics.boundsInRoot.center - root.boundsInRoot.topLeft
         }
+    }
+    private fun moveAndSettle(from: Offset, to: Offset, downTime: Long) {
+        // Android resamples MOVE input at vsync and may extrapolate a single fast injected jump.
+        // Use realistic touch sampling, then stationary samples before testing a hover timeout.
+        repeat(12) { index ->
+            inject(MotionEvent.ACTION_MOVE, from + (to - from) * ((index + 1) / 12f), downTime)
+            SystemClock.sleep(20)
+        }
+        repeat(2) { inject(MotionEvent.ACTION_MOVE, to, downTime); SystemClock.sleep(20) }
     }
     private fun inject(action: Int, position: Offset, downTime: Long) {
         val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, position.x, position.y, 0)
