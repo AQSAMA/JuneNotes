@@ -1,5 +1,7 @@
 package com.denser.june.presentation.screens.home.folders
 
+import android.util.Log
+import com.denser.june.BuildConfig
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
@@ -67,7 +69,11 @@ fun FolderDragHost(
 ) {
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val controller = remember { FolderDragController(scope) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) } }
+    val controller = remember {
+        FolderDragController(scope, debugTrace = if (BuildConfig.DEBUG) { { message ->
+            if (Log.isLoggable("JuneFolderDrag", Log.DEBUG)) Log.d("JuneFolderDrag", message())
+        } } else null) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+    }
     val currentAccepts by rememberUpdatedState(accepts)
     val currentDrop by rememberUpdatedState(onDrop)
     val currentActive by rememberUpdatedState(onDragActive)

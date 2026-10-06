@@ -1,14 +1,16 @@
 package com.denser.june.presentation.screens.home.folders
 
-import android.util.Log
-import com.denser.june.BuildConfig
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import kotlinx.coroutines.*
 
 /** One session outlives lazy rows and folder navigation. All geometry is in Compose root pixels. */
-internal class FolderDragController(private val scope: CoroutineScope, private val onHover: () -> Unit) {
+internal class FolderDragController(
+    private val scope: CoroutineScope,
+    private val debugTrace: ((() -> String) -> Unit)? = null,
+    private val onHover: () -> Unit
+) {
     private data class Region(
         val bounds: Rect,
         val accepts: (FolderDrag) -> Boolean,
@@ -84,9 +86,7 @@ internal class FolderDragController(private val scope: CoroutineScope, private v
         }
         select(region?.takeIf { it.value.accepts(value!!) }?.key, restartHover)
     }
-    private inline fun trace(message: () -> String) {
-        if (BuildConfig.DEBUG && Log.isLoggable("JuneFolderDrag", Log.DEBUG)) Log.d("JuneFolderDrag", message())
-    }
+    private fun trace(message: () -> String) { debugTrace?.invoke(message) }
     private fun select(key: Any?, restartHover: Boolean = false) {
         if (key == hovered && !restartHover) return
         val changed = key != hovered
