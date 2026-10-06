@@ -263,11 +263,13 @@ class FolderInteractionTest {
             ui.waitUntil(5000) { model.state.value.children.size == 2 }
             val source = screenCenter(grip(ids[2]))
             val parent = screenCenter(ui.onNodeWithText("Parent destination"))
+            println("Nested drag source=$source parent=$parent renderedParent=${ui.onNodeWithText("Parent destination").fetchSemanticsNode().boundsInRoot}")
             val downTime = SystemClock.uptimeMillis()
             inject(MotionEvent.ACTION_DOWN, source, downTime)
             try {
                 inject(MotionEvent.ACTION_MOVE, source + Offset(-80f, 0f), downTime)
                 inject(MotionEvent.ACTION_MOVE, parent, downTime)
+                screenshot("touch-first-hover")
                 SystemClock.sleep(750)
                 ui.mainClock.advanceTimeBy(750)
                 ui.waitUntil(5000) { model.state.value.currentId == ids[0] }
@@ -432,10 +434,11 @@ class FolderInteractionTest {
     }
 
     private fun screenCenter(node: SemanticsNodeInteraction): Offset {
+        val root = ui.onRoot().fetchSemanticsNode()
         val semantics = node.fetchSemanticsNode()
         return ui.runOnIdle {
-            // Use the node's actual screen position, including Compose view/window insets.
-            semantics.positionOnScreen + Offset(semantics.size.width / 2f, semantics.size.height / 2f)
+            // Use rendered root bounds: size + positionOnScreen can miss an animateItem layer.
+            root.positionOnScreen + semantics.boundsInRoot.center - root.boundsInRoot.topLeft
         }
     }
     private fun inject(action: Int, position: Offset, downTime: Long) {
