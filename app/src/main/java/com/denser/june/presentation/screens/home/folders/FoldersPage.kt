@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,7 +68,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     fun accepts(item: FolderDrag, parent: String?): Boolean = if (item.folder) state.snapshot.canMove(item.id, parent) else true
 
     FolderDragHost(
-        accepts = { accepts(it, state.currentId) }, onDrop = { viewModel.move(it, state.currentId) },
+        accepts = { false }, onDrop = {},
         modifier = Modifier.fillMaxSize(), onDragActive = { dragging = it }
     ) {
     Box(Modifier.fillMaxSize()) {
@@ -105,6 +106,11 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                 val pane = remember(state, displayedId) { state.copy(currentId = displayedId) }
                 val listState = rememberLazyListState()
                 Box(Modifier.fillMaxSize()) {
+                FolderDropSurface(
+                    accepts = { displayedId == state.currentId && accepts(it, displayedId) },
+                    onDrop = { viewModel.move(it, displayedId) },
+                    modifier = Modifier.fillMaxSize(), priority = -10, enabled = displayedId == state.currentId
+                ) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -116,7 +122,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                     } else {
                         itemsIndexed(pane.children, key = { _, folder -> "folder_${folder.id}" }) { index, folder ->
                             val item = FolderDrag(folder.id, true, folder.name)
-                            FolderDragItem(item, Modifier.animateItem()) {
+                            FolderDragItem(item, Modifier.animateItem().testTag("folder-row-${folder.id}")) {
                                 Box {
                                     FolderDropSurface(
                                         accepts = { displayedId == state.currentId && accepts(it, folder.id) },
@@ -129,19 +135,19 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                             onMove = { moveItem = item })
                                     }
                                     if (dragging && displayedId == state.currentId) {
-                                        ReorderSlot(Modifier.align(Alignment.TopCenter),
+                                        ReorderSlot(Modifier.align(Alignment.TopCenter).testTag("folder-before-${folder.id}"),
                                             accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
                                             onDrop = { viewModel.move(it, displayedId, folder.id) })
-                                        ReorderSlot(Modifier.align(Alignment.BottomCenter),
+                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("folder-after-${folder.id}"),
                                             accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
-                                            onDrop = { viewModel.move(it, displayedId, pane.children.getOrNull(index + 1)?.id) })
+                                            onDrop = { viewModel.move(it, displayedId, pane.children.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) })
                                     }
                                 }
                             }
                         }
                         itemsIndexed(pane.visibleNotes, key = { _, note -> "note_${note.id}" }) { index, note ->
-                            val item = FolderDrag(note.id, false, note.title.orEmpty())
-                            FolderDragItem(item, Modifier.animateItem()) {
+                            val item = FolderDrag(note.id, false, note.title)
+                            FolderDragItem(item, Modifier.animateItem().testTag("note-row-${note.id}")) {
                                 Box {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         JournalCard(
@@ -154,18 +160,18 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                         FolderDragHandle(item) { moveItem = item }
                                     }
                                     if (dragging && displayedId == state.currentId) {
-                                        ReorderSlot(Modifier.align(Alignment.TopCenter),
+                                        ReorderSlot(Modifier.align(Alignment.TopCenter).testTag("note-before-${note.id}"),
                                             accepts = { !it.folder && it.id != note.id },
                                             onDrop = { viewModel.move(it, displayedId, note.id) })
-                                        ReorderSlot(Modifier.align(Alignment.BottomCenter),
+                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("note-after-${note.id}"),
                                             accepts = { !it.folder && it.id != note.id },
-                                            onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.getOrNull(index + 1)?.id) })
+                                            onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) })
                                     }
                                 }
                             }
                         }
                         item(key = "drop_end") {
-                            FolderDropSurface(accepts = { displayedId == state.currentId && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) {
+                            FolderDropSurface(accepts = { displayedId == state.currentId && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }, enabled = displayedId == state.currentId) {
                                 if (pane.children.isEmpty() && pane.visibleNotes.isEmpty()) {
                                     Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
@@ -187,6 +193,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                             }
                         }
                     }
+                }
                 }
                 if (displayedId == state.currentId) {
                     FolderDragAutoScroll(listState, Modifier.fillMaxSize().padding(bottom = UiUtils.BOTTOM_BAR_PADDING)) { }

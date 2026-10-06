@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
@@ -49,7 +50,7 @@ fun FolderDragHandle(item: FolderDrag, onMove: () -> Unit) {
             contentDescription = description
             onClick { currentMove(); true }
         }.onGloballyPositioned {
-            controller.registerSource(key, item, Rect(it.positionInRoot(), it.size.toSize()), { currentMove() })
+            controller.registerSource(key, item, it.boundsInRoot(), { currentMove() })
         }, contentAlignment = Alignment.Center
     ) { Icon(painterResource(R.drawable.drag_indicator_24px), null) }
 }
@@ -121,7 +122,7 @@ fun FolderDragHost(
                 Surface(
                     Modifier.width(180.dp).graphicsLayer {
                         translationX = (pointer.x - origin.x - size.width / 2).coerceIn(0f, ((controller.viewport?.width ?: size.width) - size.width).coerceAtLeast(0f))
-                        translationY = pointer.y - origin.y - with(density) { 76.dp.toPx() }
+                        translationY = (pointer.y - origin.y - with(density) { 76.dp.toPx() }).coerceIn(0f, ((controller.viewport?.height ?: size.height) - size.height).coerceAtLeast(0f))
                         rotationZ = -2f
                     },
                     shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.secondaryContainer,
@@ -158,7 +159,7 @@ fun FolderDropSurface(
     DisposableEffect(controller, key, enabled) { onDispose { controller.unregister(key) } }
     val color by animateColorAsState(if (hovered) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "folder_drop_color")
     Box(modifier.onGloballyPositioned {
-        if (enabled) controller.register(key, Rect(it.positionInRoot(), it.size.toSize()), { currentAccepts(it) },
+        if (enabled) controller.register(key, it.boundsInRoot(), { currentAccepts(it) },
             { currentDrop(it) }, if (onHoverOpen == null) null else { { currentOpen?.invoke() } }, priority)
     }) {
         if (insertion) {
@@ -189,9 +190,10 @@ internal fun FolderDragAutoScroll(listState: LazyListState, modifier: Modifier =
         point.y in (bounds.bottom - edge)..bounds.bottom -> (point.y - bounds.bottom + edge) / edge
         else -> 0f
     }
-    val speed by rememberUpdatedState(penetration * kotlin.math.abs(penetration) * with(density) { 900.dp.toPx() })
-    LaunchedEffect(listState, controller.item, penetration != 0f) {
-        if (penetration == 0f) return@LaunchedEffect
+    val canScroll = if (penetration < 0f) listState.canScrollBackward else listState.canScrollForward
+    val speed by rememberUpdatedState(if (canScroll) penetration * kotlin.math.abs(penetration) * with(density) { 900.dp.toPx() } else 0f)
+    LaunchedEffect(listState, controller.item, penetration != 0f && canScroll) {
+        if (penetration == 0f || !canScroll) return@LaunchedEffect
         var previous = withFrameNanos { it }
         while (controller.item != null && speed != 0f) {
             val now = withFrameNanos { it }
