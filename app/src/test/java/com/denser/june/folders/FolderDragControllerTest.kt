@@ -4,10 +4,88 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import com.denser.june.presentation.screens.home.folders.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.test.*
 import org.junit.Assert.*
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FolderDragControllerTest {
+    @Test fun targetRejectedDuringTheHoldDoesNotOpenWithoutFurtherPointerEvents() = runTest {
+        var accepted = true
+        var opened = false
+        val controller = FolderDragController(backgroundScope) { }
+        controller.register("target", Rect(0f, 0f, 100f, 100f), { accepted }, {}, { opened = true }, 0)
+        controller.begin(FolderDrag("source", true))
+        controller.move(Offset(50f, 50f))
+        runCurrent()
+        advanceTimeBy(400)
+        accepted = false
+        advanceTimeBy(300)
+        runCurrent()
+        assertFalse(opened)
+        assertNull(controller.hovered)
+        assertFalse(controller.drop { fail("Rejected target must not fall through"); true })
+        controller.end()
+    }
+
+    @Test fun hoverUsesTheReplacementCallbackForTheSameTarget() = runTest {
+        var opened = ""
+        val controller = FolderDragController(backgroundScope) { }
+        val bounds = Rect(0f, 0f, 100f, 100f)
+        controller.register("target", bounds, { true }, {}, { opened = "old" }, 0)
+        controller.begin(FolderDrag("source", true))
+        controller.move(Offset(50f, 50f))
+        runCurrent()
+        advanceTimeBy(400)
+        controller.register("target", bounds, { true }, {}, { opened = "current" }, 0)
+        advanceTimeBy(300)
+        runCurrent()
+        assertEquals("current", opened)
+        controller.end()
+    }
+
+    @Test fun removingTheOpenActionDuringTheHoldPreservesTheDropTarget() = runTest {
+        var opened = false
+        var dropped = false
+        val controller = FolderDragController(backgroundScope) { }
+        val bounds = Rect(0f, 0f, 100f, 100f)
+        controller.register("target", bounds, { true }, { dropped = true }, { opened = true }, 0)
+        controller.begin(FolderDrag("source", true))
+        controller.move(Offset(50f, 50f))
+        runCurrent()
+        advanceTimeBy(400)
+        controller.register("target", bounds, { true }, { dropped = true }, null, 0)
+        advanceTimeBy(300)
+        runCurrent()
+        assertFalse(opened)
+        assertTrue(controller.drop { false })
+        assertTrue(dropped)
+        controller.end()
+    }
+
+    @Test fun scrollingSuspendsHoverAndStoppingRequiresACompleteNewHold() = runTest {
+        var opened = false
+        val controller = FolderDragController(backgroundScope) { }
+        controller.register("target", Rect(0f, 0f, 100f, 100f), { true }, {}, { opened = true }, 0)
+        controller.begin(FolderDrag("source", true))
+        controller.move(Offset(50f, 50f))
+        runCurrent()
+        advanceTimeBy(400)
+        controller.setScrolling(true)
+        advanceTimeBy(1000)
+        runCurrent()
+        assertFalse(opened)
+        controller.setScrolling(false)
+        runCurrent()
+        advanceTimeBy(649)
+        runCurrent()
+        assertFalse(opened)
+        advanceTimeBy(1)
+        runCurrent()
+        assertTrue(opened)
+        controller.end()
+    }
+
     @Test fun newlyComposedFolderAndScrolledRowCanReceiveExistingDrag() {
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {

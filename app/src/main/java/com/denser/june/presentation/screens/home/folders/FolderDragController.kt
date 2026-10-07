@@ -97,11 +97,17 @@ internal class FolderDragController(
         trace { "select=${region.bounds} open=${region.open != null} armed=$navigationArmed scrolling=$scrolling" }
         if (region.open != null && navigationArmed && !scrolling) hoverJob = scope.launch {
             delay(650)
-            if (hovered == key && item != null) {
+            // Acceptance and callbacks can change without a pointer event or new layout.
+            // Resolve the live target again rather than opening the captured Region.
+            refresh()
+            val currentRegion = regions[key]
+            val value = item
+            if (hovered == key && value != null && navigationArmed && !scrolling &&
+                currentRegion?.open != null && currentRegion.accepts(value)) {
                 navigationArmed = false
                 navigationAnchor = pointer
-                trace { "open=${region.bounds}" }
-                region.open.invoke()
+                trace { "open=${currentRegion.bounds}" }
+                currentRegion.open.invoke()
             }
         }
     }

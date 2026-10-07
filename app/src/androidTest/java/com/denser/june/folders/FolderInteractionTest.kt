@@ -111,6 +111,40 @@ class FolderInteractionTest {
         ui.waitUntil(3000) { tapped }
     }
 
+    @Test fun targetInvalidatedDuringStationaryTouchDoesNotHoverOpenOrReceiveDrop() {
+        var accepting = true
+        var opened = false
+        var dropped = false
+        var active = false
+        ui.setContent { Theme {
+            FolderDragHost({ false }, { fail("Invalid target must not receive a fallback drop") }, { active = it }) {
+                Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    FolderDropSurface({ accepting }, { dropped = true }, onHoverOpen = { opened = true }) {
+                        Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { Text("Changing target") }
+                    }
+                    Spacer(Modifier.height(80.dp))
+                    FolderDragHandle(FolderDrag("changing-target-source", true)) { fail("Not a tap") }
+                }
+            }
+        } }
+        val source = screenCenter(ui.onNodeWithContentDescription(text(R.string.folder_drag_or_move)))
+        val target = screenCenter(ui.onNodeWithText("Changing target"))
+        val downTime = SystemClock.uptimeMillis()
+        inject(MotionEvent.ACTION_DOWN, source, downTime)
+        try {
+            inject(MotionEvent.ACTION_MOVE, source + Offset(-80f, 0f), downTime)
+            ui.waitUntil(3000) { active }
+            moveAndSettle(source + Offset(-80f, 0f), target, downTime)
+            // No further layout or pointer updates: the pending hold must recheck acceptance.
+            ui.runOnIdle { accepting = false }
+            SystemClock.sleep(750)
+            ui.mainClock.advanceTimeBy(750)
+            ui.runOnIdle { assertFalse(opened); assertTrue(active) }
+        } finally { inject(MotionEvent.ACTION_UP, target, downTime) }
+        ui.waitUntil(3000) { !active }
+        ui.runOnIdle { assertFalse(opened); assertFalse(dropped) }
+    }
+
     @Test fun actualFolderRowsMoveIntoAnotherFolderWithTouchDragging() {
         val folders = GlobalContext.get().get<FolderRepository>()
         val journals = GlobalContext.get().get<JournalRepository>()
