@@ -390,15 +390,17 @@ class FolderInteractionTest {
         val downTime = SystemClock.uptimeMillis()
         inject(MotionEvent.ACTION_DOWN, source, downTime)
         try {
-            inject(MotionEvent.ACTION_MOVE, bottom, downTime)
+            // Settle real Android input before advancing Compose's animation clock.
+            // A single large MOVE can be resampled beyond the edge-scroll viewport.
+            moveAndSettle(source, bottom, downTime)
             ui.mainClock.advanceTimeBy(1800)
             val advanced = ui.runOnIdle { list.firstVisibleItemIndex }
             assertTrue("Stationary bottom-edge touch must scroll", advanced > 3)
             assertFalse("Scrolling rows must not open beneath the finger", hoverOpened)
-            inject(MotionEvent.ACTION_MOVE, top, downTime)
+            moveAndSettle(bottom, top, downTime)
             ui.mainClock.advanceTimeBy(500)
             assertTrue("Top-edge touch must reverse scrolling", ui.runOnIdle { list.firstVisibleItemIndex } < advanced)
-            inject(MotionEvent.ACTION_MOVE, center, downTime)
+            moveAndSettle(top, center, downTime)
             ui.mainClock.advanceTimeBy(100)
             screenshot("touch-auto-scroll-new-rows")
         } finally { inject(MotionEvent.ACTION_UP, center, downTime); ui.mainClock.autoAdvance = true }
