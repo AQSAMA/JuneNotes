@@ -33,7 +33,8 @@ class EditorVM(
     private val journalRepo: JournalRepository,
     private val journalPrefs: JournalPreferences,
     private val songRepo: SongRepository,
-    private val navigator: AppNavigator
+    private val navigator: AppNavigator,
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) : ViewModel() {
     private val editorRoute = savedStateHandle.tryRoute<Route.Editor>()
     private val journalId = editorRoute?.journalId
@@ -465,7 +466,8 @@ class EditorVM(
             )
 
             if (isNewEntry) {
-                val newId = journalRepo.insertJournalInFolder(journalToSave, editorRoute?.initialFolderId)
+                val newId = journalRepo.insertJournal(journalToSave)
+                assignInitialFolder(newId)
                 val savedDraft = journalToSave.copy(id = newId)
                 existingJournal = savedDraft
                 _state.update { it.copy(journalId = newId, content = currentMarkdown, isDirty = false, isDraft = true) }
@@ -476,6 +478,17 @@ class EditorVM(
                 existingJournal = journalToSave
                 _state.update { it.copy(content = currentMarkdown, isDirty = false) }
             }
+        }
+    }
+
+    private suspend fun assignInitialFolder(id: String) {
+        val folderId = editorRoute?.initialFolderId ?: return
+        try {
+            folderRepo.moveJournal(id, folderId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: IllegalArgumentException) {
+            // If its destination disappeared, the saved note remains available at the root.
         }
     }
 
@@ -507,7 +520,8 @@ class EditorVM(
                 journalRepo.updateJournal(journalToSave)
                 existingJournal = journalToSave
             } else {
-                val newId = journalRepo.insertJournalInFolder(journalToSave, editorRoute?.initialFolderId)
+                val newId = journalRepo.insertJournal(journalToSave)
+                assignInitialFolder(newId)
                 existingJournal = journalToSave.copy(id = newId)
                 _state.update { it.copy(journalId = newId) }
             }

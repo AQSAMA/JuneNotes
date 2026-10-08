@@ -141,7 +141,3 @@ Official APK releases are cryptographically signed to prove they were built unmo
   ```
 
 [Privacy Policy](https://densermeerkat.github.io/June/PRIVACY)
-
-## Folder preview in this fork
-
-Nested folders use June’s existing notes and editor, independently of spaces, people, and topics. See [folder controls, backups, and Preview APK testing](docs/FOLDERS.md). Pull requests provide an installable **Preview APK** as **June Preview**, which can run alongside June.

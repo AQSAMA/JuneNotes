@@ -1,7 +1,5 @@
 package com.denser.june.core.data.backup
 
-import com.denser.june.core.domain.folders.FolderRepository
-import com.denser.june.core.domain.folders.FolderSnapshot
 import android.content.Context
 import com.denser.june.core.data.database.journal.JournalDatabase
 import com.denser.june.core.domain.logging.AppLogger
@@ -26,7 +24,7 @@ import java.time.format.DateTimeFormatter
 class ExportImpl(
     private val journalRepo: JournalRepository,
     private val context: Context,
-    private val folderRepo: FolderRepository
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) : ExportRepo {
 
     override suspend fun exportData(includeMedia: Boolean, includeSongFiles: Boolean): Result<File> = withContext(Dispatchers.IO) {
@@ -66,7 +64,7 @@ class ExportImpl(
             val manifest = SyncManifest(
                 lastSyncTime = System.currentTimeMillis(),
                 lastSyncDeviceId = "backup_export",
-                databaseVersion = JournalDatabase.VERSION,
+                databaseVersion = 5,
                 schemaVersion = SyncManifest.CURRENT_SCHEMA_VERSION,
                 totalJournals = cleanedJournals.size,
                 totalMedia = totalMedia,
@@ -253,12 +251,6 @@ class ExportImpl(
         }
     }
 
-    private fun writeFolders(zos: ZipOutputStream, snapshot: FolderSnapshot) {
-        zos.putNextEntry(ZipEntry("folders.json"))
-        zos.write(Json.encodeToString(FolderSnapshot.serializer(), snapshot).toByteArray(Charsets.UTF_8))
-        zos.closeEntry()
-    }
-
     override suspend fun exportSingleJournalZip(journal: Journal): Result<File> = withContext(Dispatchers.IO) {
         return@withContext try {
             val fileName = com.denser.june.core.domain.markdown.MarkdownEngine.generateFileName(journal, forSingleExport = true)
@@ -272,6 +264,8 @@ class ExportImpl(
             )
 
             ZipOutputStream(BufferedOutputStream(FileOutputStream(zipFile))).use { zos ->
+                val folders = folderRepo.snapshot()
+                writeFolders(zos, folders.forJournals(setOf(journal.id)))
                 val mdEntry = ZipEntry(fileName)
                 zos.putNextEntry(mdEntry)
                 zos.write(markdownText.toByteArray(Charsets.UTF_8))
@@ -299,5 +293,10 @@ class ExportImpl(
             AppLogger.e(AppLogger.Category.BACKUP, "ExportImpl", "Failed to export single journal zip", e)
             Result.failure(e)
         }
+    }
+    private fun writeFolders(zos: ZipOutputStream, snapshot: com.denser.june.core.domain.folder.FolderSnapshot) {
+        zos.putNextEntry(ZipEntry(com.denser.june.core.domain.folder.FolderBackupCodec.ENTRY_NAME))
+        zos.write(com.denser.june.core.domain.folder.FolderBackupCodec.encode(snapshot).toByteArray(Charsets.UTF_8))
+        zos.closeEntry()
     }
 }

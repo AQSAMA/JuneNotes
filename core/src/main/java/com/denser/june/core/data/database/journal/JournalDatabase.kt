@@ -1,6 +1,5 @@
 package com.denser.june.core.data.database.journal
 
-import com.denser.june.core.data.database.folders.*
 import androidx.room.Database
 import androidx.room.RoomDatabase
 
@@ -14,13 +13,15 @@ import com.denser.june.core.data.database.song.SongLibraryEntity
         JournalTagCrossRef::class,
         DeletedJournalTombstone::class,
         SongLibraryEntity::class,
-        FolderEntity::class, PlacementEntity::class, FolderSyncState::class
+        com.denser.june.core.data.database.folder.FolderEntity::class,
+        com.denser.june.core.data.database.folder.FolderJournalEntity::class,
+        com.denser.june.core.data.database.folder.FolderSyncStateEntity::class
     ],
     version = JournalDatabase.VERSION,
     exportSchema = true
 )
 abstract class JournalDatabase : RoomDatabase() {
-    abstract fun folderDao(): FolderDao
+    abstract fun folderDao(): com.denser.june.core.data.database.folder.FolderDao
     abstract fun journalDao(): JournalDao
     abstract fun songLibraryDao(): SongLibraryDao
 

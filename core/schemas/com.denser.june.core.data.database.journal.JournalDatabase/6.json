@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 6,
-    "identityHash": "f69bbab3fa206f2063ea17685cd905b0",
+    "identityHash": "097e92ecfdbc53a968da5acea143fa5e",
     "entities": [
       {
         "tableName": "journals",
@@ -263,8 +263,8 @@
         }
       },
       {
-        "tableName": "note_folders",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `parentId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deletedAt` INTEGER, PRIMARY KEY(`id`))",
+        "tableName": "folders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `parentId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -296,9 +296,10 @@
             "notNull": true
           },
           {
-            "fieldPath": "deletedAt",
-            "columnName": "deletedAt",
-            "affinity": "INTEGER"
+            "fieldPath": "deleted",
+            "columnName": "deleted",
+            "affinity": "INTEGER",
+            "notNull": true
           }
         ],
         "primaryKey": {
@@ -306,10 +307,21 @@
           "columnNames": [
             "id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_folders_parentId",
+            "unique": false,
+            "columnNames": [
+              "parentId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folders_parentId` ON `${TABLE_NAME}` (`parentId`)"
+          }
+        ]
       },
       {
-        "tableName": "note_placements",
+        "tableName": "folder_journals",
         "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`journalId` TEXT NOT NULL, `folderId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`journalId`))",
         "fields": [
           {
@@ -341,11 +353,22 @@
           "columnNames": [
             "journalId"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_folder_journals_folderId",
+            "unique": false,
+            "columnNames": [
+              "folderId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_folder_journals_folderId` ON `${TABLE_NAME}` (`folderId`)"
+          }
+        ]
       },
       {
         "tableName": "folder_sync_state",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `snapshot` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `acknowledgedHash` TEXT NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -354,8 +377,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "snapshot",
-            "columnName": "snapshot",
+            "fieldPath": "acknowledgedHash",
+            "columnName": "acknowledgedHash",
             "affinity": "TEXT",
             "notNull": true
           }
@@ -370,7 +393,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f69bbab3fa206f2063ea17685cd905b0')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '097e92ecfdbc53a968da5acea143fa5e')"
     ]
   }
 }

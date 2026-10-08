@@ -569,23 +569,21 @@
     <string name="take_photo_or_video">Take photo / video</string>
     <string name="whats_on_your_mind">What\'s on your mind?</string>
 
-    <!-- Nested folders -->
-    <string name="folders_pending_sync">Folder changes will be synced</string>
-    <string name="move">Move</string>
     <string name="folders">Folders</string>
     <string name="new_folder">New folder</string>
+    <string name="folder_name">Folder name</string>
+    <string name="folder_drag_or_move">Hold to drag, or tap to move</string>
+    <string name="folder_move">Move to folder</string>
+    <string name="folder_move_here">Move here</string>
+    <string name="folder_add_existing">Add an existing note</string>
+    <string name="folder_no_other_notes">No other notes to add</string>
     <string name="folder_options">Folder options</string>
-    <string name="rename_folder">Rename folder</string>
-    <string name="delete_folder">Delete folder</string>
-    <string name="delete_folder_description">Delete “%1$s” and its subfolders? Your notes will stay in June and return to the Folders root.</string>
-    <string name="folder_drag_hint">Drop on a folder or path. Hold to open.</string>
-    <string name="folder_empty">Nothing here yet</string>
-    <string name="unfiled_notes">Unfiled notes</string>
-    <string name="folder_counts">%1$d folders · %2$d notes</string>
-    <string name="move_folder">Move folder</string>
-    <string name="move_note">Move note</string>
-    <string name="move_here">Move here</string>
-    <string name="drop_here">Drop here</string>
-    <string name="folder_moved">Moved</string>
-    <string name="folder_operation_failed">Could not save this change. Please try again.</string>
+    <string name="folder_empty">This folder is empty</string>
+    <string name="folder_drop_here">Drop here</string>
+    <string name="folder_delete_title">Delete folder?</string>
+    <string name="folder_delete_description">Notes and child folders will move up one level. Your notes will be kept.</string>
+    <string name="folder_search_notes">Search notes</string>
+    <string name="folder_search_folders">Find a folder</string>
+    <string name="folder_note_added">Note added to folder</string>
+    <string name="folder_move_failed">Could not move this note. Please try again.</string>
 </resources>

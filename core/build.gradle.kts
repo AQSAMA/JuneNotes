@@ -30,9 +30,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    testOptions {
-        unitTests.isIncludeAndroidResources = true
-    }
     buildFeatures {
         buildConfig = true
     }
@@ -79,12 +76,16 @@ dependencies {
     implementation(libs.media3.common)
 
     // Testing
-    testImplementation("org.robolectric:robolectric:4.17")
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.room:room-testing:${libs.versions.room.get()}")
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
-
-tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
-    systemProperty("june.schemaDir", file("schemas").absolutePath)
+// Use the variant API to avoid AGP 9.3.1's library source-set interface cast regression.
+androidComponents {
+    onVariants { variant ->
+        variant.androidTest?.sources?.assets?.addStaticSourceDirectory("schemas")
+    }
 }

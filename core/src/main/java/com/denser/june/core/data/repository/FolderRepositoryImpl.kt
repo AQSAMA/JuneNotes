@@ -1,130 +1,96 @@
 package com.denser.june.core.data.repository
 
 import androidx.room.withTransaction
-import com.denser.june.core.data.database.folders.*
+import com.denser.june.core.data.database.folder.*
 import com.denser.june.core.data.database.journal.JournalDatabase
-import com.denser.june.core.domain.folders.*
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.serialization.json.Json
+import com.denser.june.core.domain.folder.*
+import kotlinx.coroutines.flow.*
 import java.util.UUID
 
 class FolderRepositoryImpl(private val database: JournalDatabase) : FolderRepository {
     private val dao = database.folderDao()
-    override fun observe(): Flow<FolderSnapshot> = combine(dao.observeFolders(), dao.observePlacements()) { folders, placements ->
-        domain(folders, placements)
+    private fun List<FolderEntity>.domain() = map { Folder(it.id, it.name, it.parentId, it.position, it.updatedAt, it.deleted) }
+    private fun List<FolderJournalEntity>.memberships() = map { FolderJournal(it.journalId, it.folderId, it.position, it.updatedAt) }
+    override fun observe(): Flow<FolderSnapshot> = combine(dao.observeFolders(), dao.observeJournals()) { folders, journals ->
+        FolderSnapshot(folders = folders.domain(), journals = journals.memberships()).normalized()
+    }.distinctUntilChanged()
+    private fun fingerprint(snapshot: FolderSnapshot): String = java.security.MessageDigest.getInstance("SHA-256")
+        .digest(FolderBackupCodec.encode(snapshot.normalized()).toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    override fun observePendingSync(): Flow<Boolean> = combine(observe(), dao.observeSyncState()) { snapshot, ack ->
+        fingerprint(snapshot) != (ack?.acknowledgedHash ?: fingerprint(FolderSnapshot()))
     }
-    override fun observeDirty(): Flow<Boolean> = combine(observe(), dao.observeSynced()) { state, synced ->
-        encode(state) != (synced ?: encode(FolderSnapshot()))
+    override suspend fun hasPendingSync(): Boolean = database.withTransaction {
+        fingerprint(read()) != (dao.syncState()?.acknowledgedHash ?: fingerprint(FolderSnapshot()))
+    }
+    override suspend fun markSynced(snapshot: FolderSnapshot) {
+        // Acknowledge exactly what was uploaded. Edits made during the upload remain pending.
+        dao.upsertSyncState(FolderSyncStateEntity(acknowledgedHash = fingerprint(snapshot)))
     }
     override suspend fun snapshot(): FolderSnapshot = database.withTransaction { read() }
-    private suspend fun read() = domain(dao.folders(), dao.placements())
-    private fun encode(state: FolderSnapshot) = Json.encodeToString(FolderSnapshot.serializer(), state)
-    override suspend fun markSynced(snapshot: FolderSnapshot) { dao.putSynced(FolderSyncState(snapshot = encode(snapshot))) }
-    override suspend fun merge(snapshot: FolderSnapshot) = database.withTransaction { write(read().merge(snapshot)) }
-
-    override suspend fun restore(snapshot: FolderSnapshot) = database.withTransaction {
-        snapshot.validate()
-        val local = read()
-        val time = stamp(local)
-        val existingFolders = local.folders.associateBy { it.id }
-        val existingPlacements = local.placements.associateBy { it.journalId }
-        val importedFolders = snapshot.folders.map { folder ->
-            val existing = existingFolders[folder.id]
-            if (existing != null && existing != folder) folder.copy(updatedAt = time, deletedAt = folder.deletedAt?.let { time }) else folder
-        }
-        val importedPlacements = snapshot.placements.map { placement ->
-            val existing = existingPlacements[placement.journalId]
-            if (existing != null && existing != placement) placement.copy(updatedAt = time) else placement
-        }
-        val folderIds = importedFolders.map { it.id }.toSet()
-        val noteIds = importedPlacements.map { it.journalId }.toSet()
-        write(FolderSnapshot(
-            folders = local.folders.filter { it.id !in folderIds } + importedFolders,
-            placements = local.placements.filter { it.journalId !in noteIds } + importedPlacements
-        ))
+    private suspend fun read() = FolderSnapshot(folders = dao.folders().domain(), journals = dao.journals().memberships()).normalized()
+    private suspend fun write(snapshot: FolderSnapshot) {
+        dao.upsertFolders(snapshot.folders.map { FolderEntity(it.id, it.name, it.parentId, it.position, it.updatedAt, it.deleted) })
+        dao.upsertJournals(snapshot.journals.map { FolderJournalEntity(it.journalId, it.folderId, it.position, it.updatedAt) })
     }
-
+    private fun stamp(s: FolderSnapshot) = maxOf(System.currentTimeMillis(), (s.folders.map { it.updatedAt } + s.journals.map { it.updatedAt }).maxOrNull()?.plus(1) ?: 0)
+    private fun validParent(s: FolderSnapshot, id: String?) = id == null || s.folders.any { it.id == id && !it.deleted }
+    override suspend fun merge(snapshot: FolderSnapshot) = database.withTransaction { write(read().merge(snapshot)) }
     override suspend fun create(name: String, parentId: String?): String = database.withTransaction {
-        val state = read()
-        val tree = FolderTree(state)
-        require(parentId == null || parentId in tree.folders) { "Folder no longer exists" }
+        val s = read()
+        require(name.trim().isNotEmpty())
+        require(validParent(s, parentId)) { "Folder no longer exists" }
         val id = UUID.randomUUID().toString()
-        val siblings = tree.children(parentId)
-        val time = stamp(state)
-        val positions = siblings.withIndex().associate { it.value.id to it.index.toLong() }
-        val ordered = state.folders.map { existing ->
-            positions[existing.id]?.let { existing.copy(parentId = parentId, position = it, updatedAt = time) } ?: existing
-        }
-        val folder = NoteFolder(id, clean(name), parentId, siblings.size.toLong(), time)
-        write(state.copy(folders = ordered + folder))
+        val position = (s.folders.filter { it.parentId == parentId && !it.deleted }.maxOfOrNull { it.position } ?: -1) + 1
+        write(s.copy(folders = s.folders + Folder(id, name.trim(), parentId, position, stamp(s))))
         id
     }
-
     override suspend fun rename(id: String, name: String) = database.withTransaction {
-        val state = read()
-        require(id in FolderTree(state).folders) { "Folder no longer exists" }
-        val time = stamp(state)
-        write(state.copy(folders = state.folders.map { if (it.id == id) it.copy(name = clean(name), updatedAt = time) else it }))
+        require(name.trim().isNotEmpty())
+        val s = read()
+        val time = stamp(s)
+        write(s.copy(folders = s.folders.map { if (it.id == id && !it.deleted) it.copy(name = name.trim(), updatedAt = time) else it }))
     }
-
     override suspend fun moveFolder(id: String, parentId: String?, beforeId: String?) = database.withTransaction {
-        val state = read()
-        val tree = FolderTree(state)
-        require(tree.canMove(id, parentId)) { "A folder cannot contain itself" }
-        val siblings = tree.children(parentId).map { it.id }.filter { it != id }.toMutableList()
-        require(beforeId == null || beforeId in siblings) { "Destination changed" }
-        siblings.add(if (beforeId == null) siblings.size else siblings.indexOf(beforeId), id)
-        val positions = siblings.withIndex().associate { it.value to it.index.toLong() }
-        val time = stamp(state)
-        write(state.copy(folders = state.folders.map { folder ->
-            positions[folder.id]?.let { position -> folder.copy(parentId = parentId, position = position, updatedAt = time) } ?: folder
-        }))
+        val s = read()
+        require(s.canMove(id, parentId)) { "A folder cannot be moved into itself or its children" }
+        val ordered = s.folders.filter { !it.deleted && it.parentId == parentId && it.id != id }.sortedWith(compareBy({ it.position }, { it.id })).map { it.id }.toMutableList()
+        ordered.add(ordered.indexOf(beforeId).takeIf { it >= 0 } ?: ordered.size, id)
+        val positions = ordered.withIndex().associate { it.value to it.index.toLong() }
+        val time = stamp(s)
+        write(s.copy(folders = s.folders.map { f -> positions[f.id]?.let { f.copy(parentId = parentId, position = it, updatedAt = time) } ?: f }))
     }
-
-    override suspend fun moveNote(journalId: String, folderId: String?, beforeId: String?) = database.withTransaction {
-        val state = read()
-        val tree = FolderTree(state)
-        require(folderId == null || folderId in tree.folders) { "Folder no longer exists" }
-        val note = database.journalDao().getJournalById(journalId)
-        require(note != null && note.deletedAt == null) { "Note no longer exists" }
-        val placements = state.placements.associateBy { it.journalId }
-        val siblings = database.journalDao().getAllJournalsSync()
-            .filter { tree.folderFor(placements[it.id]) == folderId && it.id != journalId }
-            .sortedWith(compareBy<com.denser.june.core.data.database.journal.JournalEntity> { placements[it.id]?.position ?: Long.MAX_VALUE }
-                .thenByDescending { it.dateTime }.thenByDescending { it.createdAt }.thenBy { it.id })
+    override suspend fun moveJournal(id: String, folderId: String?, beforeId: String?) = database.withTransaction {
+        val s = read()
+        require(validParent(s, folderId)) { "Folder no longer exists" }
+        require(database.journalDao().getJournalById(id) != null) { "Note no longer exists" }
+        val memberships = s.journals.associateBy { it.journalId }
+        // Root notes imported from June have no membership row yet. Include them before ordering.
+        val ordered = database.journalDao().getAllJournalsSync()
+            .filter { it.id != id && memberships[it.id]?.folderId == folderId }
+            .sortedWith(compareBy<com.denser.june.core.data.database.journal.JournalEntity> { memberships[it.id]?.position ?: Long.MAX_VALUE }
+                .thenByDescending { it.dateTime }.thenByDescending { it.createdAt })
             .map { it.id }.toMutableList()
-        require(beforeId == null || beforeId in siblings) { "Destination changed" }
-        siblings.add(if (beforeId == null) siblings.size else siblings.indexOf(beforeId), journalId)
-        val positions = siblings.withIndex().associate { it.value to it.index.toLong() }
-        val time = stamp(state)
-        val remaining = state.placements.filter { it.journalId !in positions }
-        write(state.copy(placements = remaining + positions.map { (id, position) -> NotePlacement(id, folderId, position, time) }))
+        ordered.add(ordered.indexOf(beforeId).takeIf { it >= 0 } ?: ordered.size, id)
+        val time = stamp(s)
+        val existing = s.journals.associateBy { it.journalId }.toMutableMap()
+        ordered.forEachIndexed { index, key -> existing[key] = FolderJournal(key, folderId, index.toLong(), time) }
+        write(s.copy(journals = existing.values.toList()))
     }
-
-    override suspend fun remove(id: String) = database.withTransaction {
-        val state = read()
-        val tree = FolderTree(state)
-        require(id in tree.folders) { "Folder no longer exists" }
-        val removed = tree.descendants(id)
-        val time = stamp(state)
-        // Keep tombstones so another device cannot resurrect a deleted subtree.
-        write(state.copy(
-            folders = state.folders.map { if (it.id in removed) it.copy(deletedAt = time, updatedAt = time) else it },
-            placements = state.placements.map { if (it.folderId in removed) it.copy(folderId = null, updatedAt = time) else it }
+    override suspend fun delete(id: String) = database.withTransaction {
+        val s = read()
+        val folder = s.folders.firstOrNull { it.id == id && !it.deleted } ?: return@withTransaction
+        val time = stamp(s)
+        var folderPosition = (s.folders.filter { it.parentId == folder.parentId }.maxOfOrNull { it.position } ?: -1) + 1
+        var notePosition = (s.journals.filter { it.folderId == folder.parentId }.maxOfOrNull { it.position } ?: -1) + 1
+        write(s.copy(
+            folders = s.folders.map {
+                when {
+                    it.id == id -> it.copy(deleted = true, updatedAt = time)
+                    !it.deleted && it.parentId == id -> it.copy(parentId = folder.parentId, position = folderPosition++, updatedAt = time)
+                    else -> it
+                }
+            },
+            journals = s.journals.map { if (it.folderId == id) it.copy(folderId = folder.parentId, position = notePosition++, updatedAt = time) else it }
         ))
     }
-
-    private fun clean(name: String): String = name.trim().also { require(it.isNotEmpty() && it.length <= 120) { "Enter a folder name (1–120 characters)" } }
-    private fun stamp(state: FolderSnapshot) = maxOf(System.currentTimeMillis(),
-        (state.folders.maxOfOrNull { it.updatedAt } ?: 0) + 1,
-        (state.placements.maxOfOrNull { it.updatedAt } ?: 0) + 1)
-    private suspend fun write(state: FolderSnapshot) {
-        dao.putFolders(state.folders.map { FolderEntity(it.id, it.name, it.parentId, it.position, it.updatedAt, it.deletedAt) })
-        dao.putPlacements(state.placements.map { PlacementEntity(it.journalId, it.folderId, it.position, it.updatedAt) })
-    }
-    private fun domain(folders: List<FolderEntity>, placements: List<PlacementEntity>) = FolderSnapshot(
-        folders = folders.map { NoteFolder(it.id, it.name, it.parentId, it.position, it.updatedAt, it.deletedAt) },
-        placements = placements.map { NotePlacement(it.journalId, it.folderId, it.position, it.updatedAt) }
-    )
 }

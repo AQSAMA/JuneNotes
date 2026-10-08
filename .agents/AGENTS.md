@@ -32,7 +32,8 @@ Any developer or AI agent modifying database schemas, sync manifests, or export/
   - `schemaVersion = 1`: Initial release (basic file listing).
   - `schemaVersion = 2`: Added `deletedIds` array for cloud deletion tracking.
   - `schemaVersion = 3`: Added `journalMetadata` (`rev` counter + SHA-256 `contentHash`) and `mediaMetadata` (`size` + SHA-256 file `hash`).
-  - `schemaVersion = 4` (Current): Added `songMediaMetadata` (`size` + SHA-256 `hash`) and `totalSongMedia` count for cached audio files in `song_media/`.
+  - `schemaVersion = 4`: Added `songMediaMetadata` (`size` + SHA-256 `hash`) and `totalSongMedia` count for cached audio files in `song_media/`.
+  - `schemaVersion = 5` (Current): Added `folderData` for folder records, note memberships, and deletion tombstones. The version is always serialized so older clients reject the manifest before writing.
 
 ---
 

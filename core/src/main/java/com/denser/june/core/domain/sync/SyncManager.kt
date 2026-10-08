@@ -69,8 +69,7 @@ data class SyncAnalysis(
     val pendingMediaUploadsList: List<String> = emptyList(),
     val pendingMediaDownloadsList: List<String> = emptyList(),
     val pendingSongUploadsList: List<String> = emptyList(),
-    val pendingSongDownloadsList: List<String> = emptyList(),
-    val pendingFolderChanges: Boolean = false
+    val pendingSongDownloadsList: List<String> = emptyList()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
@@ -83,7 +82,7 @@ class SyncManager(
     private val applicationScope: CoroutineScope,
     private val songLibraryDao: SongLibraryDao,
     private val songMediaDir: File,
-    private val folderRepo: com.denser.june.core.domain.folders.FolderRepository? = null
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) {
     private val songMediaLibraryDir = File(songMediaDir, "library").apply { if (!exists()) mkdirs() }
     private val songMediaArtDir = File(songMediaDir, "art").apply { if (!exists()) mkdirs() }
@@ -131,12 +130,13 @@ class SyncManager(
                 else {
                     combine(
                         journalRepo.observeHasUnsyncedJournals(SYNC_THRESHOLD_MS),
-                        journalRepo.observeHasTombstones(),
+                        combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync()) { tombstones, foldersDirty ->
+                            tombstones || foldersDirty
+                        },
                         songLibraryDao.observeAll(),
-                        syncPrefs.getLastSyncTime(),
-                        folderRepo?.observeDirty() ?: kotlinx.coroutines.flow.flowOf(false)
-                    ) { hasUnsynced, hasTombstones, songs, lastSyncTime, foldersDirty ->
-                        foldersDirty || hasUnsynced || hasTombstones || songs.any { it.addedAt > (lastSyncTime + SYNC_THRESHOLD_MS) }
+                        syncPrefs.getLastSyncTime()
+                    ) { hasUnsynced, hasTombstones, songs, lastSyncTime ->
+                        hasUnsynced || hasTombstones || songs.any { it.addedAt > (lastSyncTime + SYNC_THRESHOLD_MS) }
                     }
                 }
             }.collect { isDirty ->
@@ -165,12 +165,13 @@ class SyncManager(
                     else {
                         combine(
                             journalRepo.observeHasUnsyncedJournals(SYNC_THRESHOLD_MS),
-                            journalRepo.observeHasTombstones(),
+                            combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync()) { tombstones, foldersDirty ->
+                            tombstones || foldersDirty
+                        },
                             songLibraryDao.observeAll(),
-                            syncPrefs.getLastSyncTime(),
-                        folderRepo?.observeDirty() ?: kotlinx.coroutines.flow.flowOf(false)
-                        ) { hasUnsynced, hasTombstones, songs, lastSyncTime, foldersDirty ->
-                            foldersDirty || hasUnsynced || hasTombstones || songs.any { it.addedAt > (lastSyncTime + SYNC_THRESHOLD_MS) }
+                            syncPrefs.getLastSyncTime()
+                        ) { hasUnsynced, hasTombstones, songs, lastSyncTime ->
+                            hasUnsynced || hasTombstones || songs.any { it.addedAt > (lastSyncTime + SYNC_THRESHOLD_MS) }
                         }.debounce(10000L)
                     }
                 }.collect { shouldSync ->
@@ -298,10 +299,10 @@ class SyncManager(
                 _status.value = SyncStatus.Idle
                 return@launch
             }
-            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS)
+            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync()
             val hasTombstones = journalRepo.hasTombstones()
 
-            _status.value = if (hasUnsynced || hasTombstones || folderRepo?.observeDirty()?.first() == true) SyncStatus.Dirty else SyncStatus.Idle
+            _status.value = if (hasUnsynced || hasTombstones) SyncStatus.Dirty else SyncStatus.Idle
         }
     }
 
@@ -454,11 +455,7 @@ class SyncManager(
                     pendingSongDownloadsList = songsToDownload.toList(),
                     pendingDeletionsCount = localDeletions.size,
                     pendingMediaUploadsList = mediaToUpload,
-                    pendingMediaDownloadsList = mediaToDownload,
-                    pendingFolderChanges = folderRepo?.snapshot()?.let { local ->
-                        local != local.merge(remoteManifest?.folders ?: com.denser.june.core.domain.folders.FolderSnapshot()) ||
-                            folderRepo?.observeDirty()?.first() == true
-                    } ?: false
+                    pendingMediaDownloadsList = mediaToDownload
                 )
             )
         } catch (e: Exception) {
@@ -538,7 +535,6 @@ class SyncManager(
             if (remoteManifest != null && remoteManifest.schemaVersion > SyncManifest.CURRENT_SCHEMA_VERSION) {
                 throw Exception("A newer version of the app is required to sync with this cloud database.")
             }
-            remoteManifest?.folders?.let { folderRepo?.merge(it) }
             val remoteDeletedIds = remoteManifest?.deletedIds ?: emptyList()
             val remoteJournalMeta = remoteManifest?.journalMetadata ?: emptyMap()
             val remoteMediaMeta = remoteManifest?.mediaMetadata ?: emptyMap()
@@ -565,7 +561,7 @@ class SyncManager(
                 )
             }
 
-            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS)
+            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync()
             val hasTombstones = journalRepo.hasTombstones()
 
             val localsToSync = if (hasUnsynced || hasTombstones || isFullRevalidation) {
@@ -1013,6 +1009,7 @@ class SyncManager(
                 }
 
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Updating remote manifest...")
+                remoteManifest?.folderData?.let { folderRepo.merge(it) }
                 val finalManifest = createCurrentManifest(
                     provider = provider,
                     journals = allLocalJournals,
@@ -1024,10 +1021,10 @@ class SyncManager(
                     sha256Cache = sha256Cache
                 )
                 provider.updateManifest(finalManifest).getOrThrow()
-                finalManifest.folders?.let { folderRepo?.markSynced(it) }
+                folderRepo.markSynced(finalManifest.folderData ?: com.denser.june.core.domain.folder.FolderSnapshot())
                 syncPrefs.setLastSyncTime(System.currentTimeMillis())
 
-                _status.value = SyncStatus.Success
+                _status.value = if (folderRepo.hasPendingSync()) SyncStatus.Dirty else SyncStatus.Success
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Sync successfully completed.")
                 Result.success(Unit)
             } else {
@@ -1206,7 +1203,7 @@ class SyncManager(
         return SyncManifest(
             lastSyncTime = System.currentTimeMillis(),
             lastSyncDeviceId = devId,
-            databaseVersion = JournalDatabase.VERSION,
+            databaseVersion = 5,
             schemaVersion = SyncManifest.CURRENT_SCHEMA_VERSION,
             totalJournals = total,
             totalMedia = updatedMediaMeta.size,
@@ -1215,7 +1212,7 @@ class SyncManager(
             journalMetadata = updatedJournalMeta,
             mediaMetadata = updatedMediaMeta,
             songMediaMetadata = updatedSongMediaMeta,
-            folders = folderRepo?.snapshot()
+            folderData = folderRepo.snapshot()
         )
     }
 

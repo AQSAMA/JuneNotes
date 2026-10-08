@@ -1,7 +1,5 @@
 package com.denser.june.core.di
 
-import com.denser.june.core.data.repository.FolderRepositoryImpl
-import com.denser.june.core.domain.folders.FolderRepository
 import com.denser.june.core.data.backup.ExportImpl
 import com.denser.june.core.data.backup.MarkdownImportImpl
 import com.denser.june.core.data.backup.RestoreImpl
@@ -17,6 +15,7 @@ import com.denser.june.core.data.remote.SongLinkScraper
 import com.denser.june.core.data.remote.SpotifyScraper
 import com.denser.june.core.data.remote.DeezerFetcher
 import com.denser.june.core.data.remote.ItunesFetcher
+import com.denser.june.core.data.repository.FolderRepositoryImpl
 import com.denser.june.core.data.repository.JournalRepositoryImpl
 import com.denser.june.core.data.repository.SongRepositoryImpl
 import com.denser.june.core.data.sync.WebDAVProvider
@@ -59,7 +58,7 @@ val coreModule = module {
     singleOf(::RestoreImpl).bind<RestoreRepo>()
     singleOf(::MarkdownImportImpl).bind<MarkdownImportRepo>()
 
-    singleOf(::FolderRepositoryImpl).bind<FolderRepository>()
+    singleOf(::FolderRepositoryImpl).bind<com.denser.june.core.domain.folder.FolderRepository>()
     singleOf(::JournalRepositoryImpl).bind<JournalRepository>()
     singleOf(::ReminderSchedulerImpl).bind<ReminderScheduler>()
 
@@ -108,7 +107,7 @@ val coreModule = module {
             get(named("ApplicationScope")),
             get(),
             File(context.filesDir, "song_media"),
-            get<FolderRepository>()
+            get()
         )
     }
 }

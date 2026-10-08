@@ -1,9 +1,6 @@
 package com.denser.june.core.data.backup
 
-import com.denser.june.core.domain.folders.FolderRepository
-import com.denser.june.core.domain.folders.FolderSnapshot
 import android.content.Context
-import androidx.room.withTransaction
 import androidx.core.net.toUri
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.domain.backup.ExportSchema
@@ -26,8 +23,7 @@ class RestoreImpl(
     private val journalRepo: JournalRepository,
     private val songLibraryDao: SongLibraryDao,
     private val context: Context,
-    private val folderRepo: FolderRepository,
-    private val database: com.denser.june.core.data.database.journal.JournalDatabase
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) : RestoreRepo {
 
     companion object {
@@ -42,7 +38,7 @@ class RestoreImpl(
                 val songLibraryDir = File(context.filesDir, "song_media/library").apply { if (!exists()) mkdirs() }
                 val songArtDir = File(context.filesDir, "song_media/art").apply { if (!exists()) mkdirs() }
                 val journalsList = mutableListOf<Journal>()
-                var folderSnapshot: FolderSnapshot? = null
+                var folders: com.denser.june.core.domain.folder.FolderSnapshot? = null
                 var isLegacy = false
                 var isMarkdown = false
 
@@ -73,10 +69,8 @@ class RestoreImpl(
                         while (entry != null) {
                             val entryName = entry.name
                             when {
-                                entryName == "folders.json" -> {
-                                    folderSnapshot = Json { ignoreUnknownKeys = true }
-                                        .decodeFromString<FolderSnapshot>(String(zis.readBytes(), Charsets.UTF_8))
-                                    folderSnapshot!!.validate()
+                                entryName == com.denser.june.core.domain.folder.FolderBackupCodec.ENTRY_NAME -> {
+                                    folders = com.denser.june.core.domain.folder.FolderBackupCodec.read(zis)
                                 }
                                 isLegacy -> {
                                     if (entryName == "journal_data.json") {
@@ -149,57 +143,54 @@ class RestoreImpl(
                     }
                 }
 
-                if (journalsList.isEmpty() && folderSnapshot == null) {
+                if (journalsList.isEmpty() && folders == null) {
                     AppLogger.e(AppLogger.Category.BACKUP, TAG, "No journals found in backup file to restore")
                     return@withContext Result.failure(RestoreException.InvalidFile)
                 }
 
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Found ${journalsList.size} journals to import. Inserting into DB...")
 
-                database.withTransaction {
-                    journalsList.forEach { journal ->
-                        val updatedJournal = remapMediaPaths(journal, extractedMediaMap, mediaDir, songLibraryDir, songArtDir)
-                        val existing = journalRepo.getJournalById(updatedJournal.id)
-                        val journalToSave = if (existing != null) {
-                            updatedJournal.copy(
-                                cloudId = existing.cloudId,
-                                syncedAt = existing.syncedAt,
-                                createdAt = existing.createdAt
-                            )
-                        } else {
-                            updatedJournal
-                        }
-                        val id = journalRepo.insertJournal(journalToSave)
+                journalsList.forEach { journal ->
+                    val updatedJournal = remapMediaPaths(journal, extractedMediaMap, mediaDir, songLibraryDir, songArtDir)
+                    val existing = journalRepo.getJournalById(updatedJournal.id)
+                    val journalToSave = if (existing != null) {
+                        updatedJournal.copy(
+                            cloudId = existing.cloudId,
+                            syncedAt = existing.syncedAt,
+                            createdAt = existing.createdAt
+                        )
+                    } else {
+                        updatedJournal
+                    }
+                    val id = journalRepo.insertJournal(journalToSave)
 
-                        journalToSave.songDetails?.let { song ->
-                            song.localPreviewPath?.let { path ->
-                                val audioFile = File(path)
-                                if (audioFile.exists()) {
-                                    val contentHash = audioFile.nameWithoutExtension
-                                    songLibraryDao.upsert(
-                                        SongLibraryEntity(
-                                            contentHash = contentHash,
-                                            localPath = audioFile.absolutePath,
-                                            localArtPath = song.localThumbnailPath,
-                                            sourceUrl = song.previewUrl,
-                                            sourceType = song.sourceType.name,
-                                            title = song.title,
-                                            artistName = song.artistName,
-                                            albumName = song.albumName,
-                                            genre = song.genre,
-                                            thumbnailUrl = song.thumbnailUrl
-                                        )
+                    journalToSave.songDetails?.let { song ->
+                        song.localPreviewPath?.let { path ->
+                            val audioFile = File(path)
+                            if (audioFile.exists()) {
+                                val contentHash = audioFile.nameWithoutExtension
+                                songLibraryDao.upsert(
+                                    SongLibraryEntity(
+                                        contentHash = contentHash,
+                                        localPath = audioFile.absolutePath,
+                                        localArtPath = song.localThumbnailPath,
+                                        sourceUrl = song.previewUrl,
+                                        sourceType = song.sourceType.name,
+                                        title = song.title,
+                                        artistName = song.artistName,
+                                        albumName = song.albumName,
+                                        genre = song.genre,
+                                        thumbnailUrl = song.thumbnailUrl
                                     )
-                                }
+                                )
                             }
                         }
-
-                        AppLogger.d(AppLogger.Category.BACKUP, TAG, "Successfully imported journal with ID: $id")
                     }
-                
-                    folderSnapshot?.let { folderRepo.restore(it) }
-                }
 
+                    AppLogger.d(AppLogger.Category.BACKUP, TAG, "Successfully imported journal with ID: $id")
+                }
+                
+                folders?.let { folderRepo.merge(it) }
                 AppLogger.d(AppLogger.Category.BACKUP, TAG, "Restore completed successfully.")
                 Result.success(Unit)
             } catch (e: IllegalArgumentException) {

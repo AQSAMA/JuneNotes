@@ -16,7 +16,8 @@ import java.util.zip.ZipInputStream
 
 class MarkdownImportImpl(
     private val journalRepo: JournalRepository,
-    private val context: Context
+    private val context: Context,
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
 ) : MarkdownImportRepo {
 
     companion object {
@@ -73,6 +74,7 @@ class MarkdownImportImpl(
             AppLogger.d(AppLogger.Category.BACKUP, TAG, "Starting markdown zip import from $uri")
             val mediaDir = File(context.filesDir, MEDIA_FOLDER).apply { if (!exists()) mkdirs() }
             val parsedJournals = mutableListOf<Journal>()
+            var folders: com.denser.june.core.domain.folder.FolderSnapshot? = null
             val extractedMediaMap = mutableMapOf<String, String>()
 
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
@@ -81,7 +83,9 @@ class MarkdownImportImpl(
                     while (entry != null) {
                         val entryName = entry.name
                         if (!entry.isDirectory) {
-                            if (entryName.startsWith("media/")) {
+                            if (entryName == com.denser.june.core.domain.folder.FolderBackupCodec.ENTRY_NAME) {
+                                folders = com.denser.june.core.domain.folder.FolderBackupCodec.read(zis)
+                            } else if (entryName.startsWith("media/")) {
                                 val originalFileName = File(entryName).name
                                 val extension = originalFileName.substringAfterLast('.', "jpg")
                                 val safeFileName = "media_${System.currentTimeMillis()}_${(0..9999).random()}_$originalFileName"
@@ -131,6 +135,7 @@ class MarkdownImportImpl(
                 importedCount++
             }
 
+            folders?.let { folderRepo.merge(it) }
             AppLogger.d(AppLogger.Category.BACKUP, TAG, "Markdown ZIP import completed. Imported: $importedCount")
             Result.success(importedCount)
         } catch (e: Exception) {

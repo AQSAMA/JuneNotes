@@ -35,7 +35,7 @@ fun SyncAnalysisSection(
     val songChanges = (analysis?.pendingSongUploadsCount ?: 0) +
             (analysis?.pendingSongDownloadsCount ?: 0)
 
-    val totalChanges = journalChanges + mediaChanges + songChanges + if (analysis?.pendingFolderChanges == true) 1 else 0
+    val totalChanges = journalChanges + mediaChanges + songChanges
 
     Box(
         modifier = Modifier.fillMaxWidth(),
@@ -73,13 +73,6 @@ fun SyncAnalysisSection(
                         analysis?.remoteSongFiles,
                         Modifier.weight(1f)
                     )
-                }
-
-                if (analysis?.pendingFolderChanges == true) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text(stringResource(R.string.folders_pending_sync), style = MaterialTheme.typography.labelLarge)
-                    }
                 }
 
                 Row(

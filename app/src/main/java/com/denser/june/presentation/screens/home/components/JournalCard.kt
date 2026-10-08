@@ -46,7 +46,7 @@ fun JournalCard(
     onJournalClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     colors: JournalCardColors = rememberJournalCardColors(journal),
-    trailingContent: (@Composable () -> Unit)? = null
+    actionContentDescription: String? = null
 ) {
     val navigator = if (onJournalClick == null) koinInject<AppNavigator>() else null
     val mediaOperations = remember { MediaOperations(onMediaClick = null) }
@@ -122,9 +122,9 @@ fun JournalCard(
                 innerContainerColor = colors.innerContainerColor,
                 actionIcon = actionIcon,
                 onActionClick = onActionClick,
-                onToggleBookmark = onToggleBookmark
+                onToggleBookmark = onToggleBookmark,
+                actionContentDescription = actionContentDescription
             )
-            trailingContent?.invoke()
         }
     }
 }

@@ -1,9 +1,5 @@
 package com.denser.june.core.data.repository
 
-import androidx.room.withTransaction
-import com.denser.june.core.data.database.journal.JournalDatabase
-import com.denser.june.core.domain.folders.FolderRepository
-import com.denser.june.core.domain.folders.FolderTree
 import android.content.Context
 import com.denser.june.core.data.database.journal.JournalDao
 import com.denser.june.core.data.database.journal.TagEntity
@@ -23,9 +19,7 @@ import kotlinx.coroutines.runBlocking
 class JournalRepositoryImpl(
     private val journalDao: JournalDao,
     private val syncPrefs: SyncPreferences,
-    private val context: Context,
-    private val database: JournalDatabase,
-    private val folders: FolderRepository
+    private val context: Context
 ) : JournalRepository {
 
     override fun getJournals(
@@ -74,14 +68,6 @@ class JournalRepositoryImpl(
         journalDao.insertJournal(journalToInsert.asEntity())
         updateJournalTags(journalToInsert)
         return journalToInsert.id
-    }
-
-    override suspend fun insertJournalInFolder(journal: Journal, folderId: String?): String = database.withTransaction {
-        val id = insertJournal(journal)
-        // If the destination was removed while editing, retain the note at the root.
-        val destination = folderId?.takeIf { it in FolderTree(folders.snapshot()).folders }
-        if (destination != null) folders.moveNote(id, destination)
-        id
     }
 
     override suspend fun softDeleteJournal(id: String) {

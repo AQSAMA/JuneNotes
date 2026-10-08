@@ -246,7 +246,8 @@ fun JournalActionButton(
     modifier: Modifier = Modifier,
     actionIcon: Int? = null,
     onActionClick: (() -> Unit)? = null,
-    onToggleBookmark: (() -> Unit)? = null
+    onToggleBookmark: (() -> Unit)? = null,
+    actionContentDescription: String? = null
 ) {
     if (actionIcon == null && onToggleBookmark == null) return
 
@@ -271,7 +272,7 @@ fun JournalActionButton(
                 actionIcon ?: if (isBookmarked) R.drawable.bookmark_added_24px_fill
                 else R.drawable.bookmark_24px
             ),
-            contentDescription = if (actionIcon != null) "Action" else stringResource(R.string.bookmark),
+            contentDescription = actionContentDescription ?: if (actionIcon != null) "Action" else stringResource(R.string.bookmark),
         )
     }
 }
