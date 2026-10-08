@@ -58,7 +58,7 @@ class FolderSidebarTest {
                 FolderSidebarLayout(open, { open = it }, sidebar = {
                     FolderSidebar(vm, true, {}, { chosen = it; vm.open(it); open = false }, { open = false })
                 }) { Button(onClick = { open = true }, Modifier.testTag("reopen")) { Text("Open") } }
-            }
+            } }
             ui.waitUntil(5000) { ui.onAllNodesWithTag("sidebar-expand-$parent").fetchSemanticsNodes().isNotEmpty() }
             ui.onNodeWithTag("sidebar-folder-$child").assertDoesNotExist()
             ui.onNodeWithTag("sidebar-expand-$parent").performClick()
@@ -72,7 +72,7 @@ class FolderSidebarTest {
         } finally { runBlocking { repository.delete(child); repository.delete(parent) } }
     }
 
-    @Test fun realLabelLongPressNestsAndGripReordersWithoutMovingNotes() {
+    @Test fun realLabelLongPressNestsAndGripReorders() {
         val vm = model()
         val first = runBlocking { repository.create("Sidebar first", null) }
         val second = runBlocking { repository.create("Sidebar second", null) }
