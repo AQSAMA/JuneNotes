@@ -36,7 +36,7 @@ import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
+fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boolean = true, onOpenSidebar: (() -> Unit)? = null) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val time by viewModel.preferences.timeFormat().collectAsStateWithLifecycle(TimeFormat.TWELVE_HOUR)
     val navigator = koinInject<AppNavigator>()
@@ -89,9 +89,10 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                 }
             } }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(state.path.lastOrNull()?.name ?: stringResource(R.string.folders), style = MaterialTheme.typography.headlineSmall,
+                if (onOpenSidebar != null) IconButton(onClick = onOpenSidebar) { Icon(painterResource(R.drawable.folder_open_24px), stringResource(R.string.folder_open_sidebar)) }
+                Text(state.path.lastOrNull()?.name ?: stringResource(if (showFolderRows) R.string.folders else R.string.folder_unfiled), style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                IconButton(onClick = { nameDialog = true }) { Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder)) }
+                if (showFolderRows) IconButton(onClick = { nameDialog = true }) { Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder)) }
                 IconButton(onClick = { addingError = null; addExisting = true }) { Icon(painterResource(R.drawable.edit_note_24px), stringResource(R.string.folder_add_existing)) }
             }
             AnimatedContent(
@@ -120,7 +121,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                     if (state.loading) {
                         item { JunePlaceholderPage(Modifier.fillParentMaxHeight(0.7f), isLoading = true) }
                     } else {
-                        itemsIndexed(pane.children, key = { _, folder -> "folder_${folder.id}" }) { index, folder ->
+                        if (showFolderRows) itemsIndexed(pane.children, key = { _, folder -> "folder_${folder.id}" }) { index, folder ->
                             val item = FolderDrag(folder.id, true, folder.name)
                             FolderDragItem(item, Modifier.animateItem().testTag("folder-row-${folder.id}")) {
                                 Box {
@@ -180,7 +181,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                         }
                         item(key = "drop_end") {
                             FolderDropSurface(accepts = { displayedId == state.currentId && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }, enabled = displayedId == state.currentId) {
-                                if (pane.children.isEmpty() && pane.visibleNotes.isEmpty()) {
+                                if ((!showFolderRows || pane.children.isEmpty()) && pane.visibleNotes.isEmpty()) {
                                     Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
                                         Spacer(Modifier.height(16.dp))

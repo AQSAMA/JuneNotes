@@ -586,4 +586,14 @@
     <string name="folder_search_folders">Find a folder</string>
     <string name="folder_note_added">Note added to folder</string>
     <string name="folder_move_failed">Could not move this note. Please try again.</string>
+    <string name="folder_all_notes">All notes</string>
+    <string name="folder_unfiled">Unfiled notes</string>
+    <string name="folder_open_sidebar">Open folders</string>
+    <string name="folder_close_sidebar">Close folders</string>
+    <string name="folder_expand">Expand folder</string>
+    <string name="folder_collapse">Collapse folder</string>
+    <string name="folder_new_subfolder">New subfolder</string>
+    <string name="folder_organize">Organize folders</string>
+    <string name="folder_drop_root">Move to top level</string>
+    <string name="folder_sidebar_empty">Create a folder to organize your notes</string>
 </resources>

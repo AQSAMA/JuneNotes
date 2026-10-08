@@ -56,13 +56,13 @@ class FoldersVM(
         FoldersState(snapshot, journals, id.takeIf { key -> snapshot.folders.any { it.id == key && !it.deleted } }, false)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FoldersState())
     private val messages = Channel<String>(Channel.BUFFERED)
-    val errors = messages.receiveAsFlow()
+    val errors = messages.receiveAsFlow().shareIn(viewModelScope, SharingStarted.WhileSubscribed(5000), replay = 0)
     fun open(id: String?) { savedStateHandle["currentFolder"] = id }
     fun back() { open(state.value.path.lastOrNull()?.parentId) }
     private fun mutate(block: suspend () -> Unit) = viewModelScope.launch {
         try { block() } catch (e: CancellationException) { throw e } catch (e: Exception) { messages.send(e.message ?: "Unable to update folders") }
     }
-    fun create(name: String) { val parent = state.value.currentId; mutate { folderRepo.create(name, parent) } }
+    fun create(name: String, parentId: String? = state.value.currentId) { mutate { folderRepo.create(name, parentId) } }
     fun rename(id: String, name: String) { mutate { folderRepo.rename(id, name) } }
     fun delete(id: String) { mutate { folderRepo.delete(id) } }
     fun move(item: FolderDrag, parent: String?, beforeId: String? = null) {

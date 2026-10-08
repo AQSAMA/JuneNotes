@@ -105,7 +105,8 @@ fun HomeBottomBar(
     selectedCategory: TagCategory,
     activeTag: String?,
     onFabClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFoldersClick: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     val animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Rect>()
@@ -186,9 +187,8 @@ fun HomeBottomBar(
                                         .selectable(
                                             selected = isSelected,
                                             onClick = {
-                                                scope.launch {
-                                                    pagerState.animateScrollToPage(index)
-                                                }
+                                                if (tab == HomeTab.Folders && onFoldersClick != null) onFoldersClick()
+                                                else scope.launch { pagerState.animateScrollToPage(index) }
                                             },
                                             role = Role.Tab,
                                             indication = null,

@@ -18,7 +18,7 @@ internal class FolderDragController(
         val open: (() -> Unit)?,
         val priority: Int
     )
-    internal data class Source(val item: FolderDrag, val bounds: Rect, val tap: () -> Unit)
+    internal data class Source(val item: FolderDrag, val bounds: Rect, val tap: () -> Unit, val immediate: Boolean)
     private val regions = linkedMapOf<Any, Region>()
     private val sources = linkedMapOf<Any, Source>()
     private var hoverJob: Job? = null
@@ -34,11 +34,12 @@ internal class FolderDragController(
     var viewport: Rect? = null
         set(value) { field = value; refresh() }
 
-    fun registerSource(key: Any, item: FolderDrag, bounds: Rect, tap: () -> Unit) {
-        sources[key] = Source(item, bounds, tap)
+    fun registerSource(key: Any, item: FolderDrag, bounds: Rect, tap: () -> Unit, immediate: Boolean = true) {
+        sources[key] = Source(item, bounds, tap, immediate)
     }
     fun unregisterSource(key: Any) { sources.remove(key) }
-    fun sourceAt(position: Offset): Source? = sources.values.lastOrNull { it.bounds.contains(position) }
+    fun sourceAt(position: Offset): Source? = sources.values.filter { it.bounds.contains(position) }
+        .minByOrNull { it.bounds.width * it.bounds.height }
 
     fun register(key: Any, bounds: Rect, accepts: (FolderDrag) -> Boolean, drop: (FolderDrag) -> Unit,
                  open: (() -> Unit)?, priority: Int) {
