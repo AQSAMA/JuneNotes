@@ -33,15 +33,32 @@ class ExternalIntentProcessor(
                 ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
             val content: String
             val displayName: String?
-            if (uri != null) {
-                displayName = FileUtils.getDisplayName(context, uri)
-                content = context.contentResolver.openInputStream(uri)?.use(MarkdownInput::read)
-                    ?: throw IOException("Cannot read Markdown file")
+            var uriFailure: Exception? = null
+            val uriContent = if (uri != null) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use(MarkdownInput::read)
+                        ?.takeUnless { it.isBlank() }
+                        ?: throw IOException("Cannot read Markdown file or file is empty")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    uriFailure = e
+                    null
+                }
+            } else null
+            if (uriContent != null) {
+                displayName = uri?.let { FileUtils.getDisplayName(context, it) }
+                content = uriContent
             } else {
+                // A share can carry both a URI and text. Try the text before reporting a URI error.
                 displayName = "Shared Note"
                 val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
                     ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
-                    ?: return@withContext Result.success(null)
+                    ?: run {
+                        uriFailure?.let { throw it }
+                        return@withContext Result.success(null)
+                    }
+                if (text.isBlank()) uriFailure?.let { throw it }
                 content = MarkdownInput.validateText(text)
             }
             if (content.isBlank()) throw IOException("Markdown file is empty")
