@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="markdown_file_too_large">ملف Markdown كبير جدًا. الحد الأقصى 1 MiB؛ قسّمه إلى ملفات أصغر.</string>
+    <string name="markdown_file_open_failed">تعذّر فتح ملف Markdown. تأكد من إمكانية قراءته واحتوائه على نص صالح.</string>
+</resources>

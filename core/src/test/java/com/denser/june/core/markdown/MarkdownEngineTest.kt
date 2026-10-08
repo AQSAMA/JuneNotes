@@ -14,6 +14,22 @@ import org.junit.Test
 class MarkdownEngineTest {
 
     @Test
+    fun largeDocumentPreservesEveryBodyLine() {
+        val body = "| col | value |\n".repeat(30000).trimEnd()
+        val parsed = MarkdownEngine.fromMarkdown("# Large note\n\n$body", "large.md")
+        assertEquals("Large note", parsed.title)
+        assertEquals(body, parsed.content)
+    }
+
+    @Test
+    fun hugeHeadingRemainsEditableBodyInsteadOfBecomingAHugeTitle() {
+        val body = "# " + "a".repeat(100000)
+        val parsed = MarkdownEngine.fromMarkdown(body, "large.md")
+        assertEquals("large", parsed.title)
+        assertEquals(body, parsed.content)
+    }
+
+    @Test
     fun testSerializationRoundTrip() {
         val original = Journal(
             id = "test-journal-123",

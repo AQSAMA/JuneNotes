@@ -6,11 +6,15 @@ import android.net.Uri
 import androidx.core.content.IntentCompat
 import com.denser.june.core.domain.logging.AppLogger
 import com.denser.june.core.domain.markdown.MarkdownEngine
+import com.denser.june.core.domain.markdown.MarkdownInput
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.utils.FileUtils
 import com.denser.june.presentation.navigation.Route
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.util.UUID
 
 class ExternalIntentProcessor(
     private val context: Context,
@@ -20,75 +24,42 @@ class ExternalIntentProcessor(
         private const val TAG = "ExternalIntentProcessor"
     }
 
-    suspend fun processIntent(intent: Intent?): Route.Editor? = withContext(Dispatchers.IO) {
-        if (intent == null) return@withContext null
-        val action = intent.action ?: return@withContext null
-
-        if (action != Intent.ACTION_VIEW &&
-            action != Intent.ACTION_EDIT &&
-            action != Intent.ACTION_SEND
-        ) {
-            return@withContext null
-        }
-
-        val uri: Uri? = intent.data
-            ?: IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
-            ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
-
-        val textExtra: String? = intent.getStringExtra(Intent.EXTRA_TEXT)
-            ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-            ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
-
+    suspend fun processIntent(intent: Intent?): Result<Route.Editor?> = withContext(Dispatchers.IO) {
         try {
+            if (intent == null || intent.action !in setOf(Intent.ACTION_VIEW, Intent.ACTION_EDIT, Intent.ACTION_SEND)) {
+                return@withContext Result.success(null)
+            }
+            val uri: Uri? = intent.data
+                ?: IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+            val content: String
+            val displayName: String?
             if (uri != null) {
-                val displayName = FileUtils.getDisplayName(context, uri)
-                val contentString = try {
-                    context.contentResolver.openInputStream(uri)?.use { stream ->
-                        stream.bufferedReader(Charsets.UTF_8).readText()
-                    }
-                } catch (e: Exception) {
-                    AppLogger.e(AppLogger.Category.DATABASE, TAG, "Failed to read stream from URI: $uri", e)
-                    null
-                }
+                displayName = FileUtils.getDisplayName(context, uri)
+                content = context.contentResolver.openInputStream(uri)?.use(MarkdownInput::read)
+                    ?: throw IOException("Cannot read Markdown file")
+            } else {
+                displayName = "Shared Note"
+                val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+                    ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+                    ?: return@withContext Result.success(null)
+                content = MarkdownInput.validateText(text)
+            }
+            if (content.isBlank()) throw IOException("Markdown file is empty")
 
-                if (!contentString.isNullOrBlank()) {
-                    val journal = MarkdownEngine.fromMarkdown(contentString, displayName, isDraft = true)
-                    val existing = journalRepo.getJournalById(journal.id)
-                        ?: journalRepo.getAllJournals().firstOrNull {
-                            it.isDraft && it.title == journal.title && it.content == journal.content
-                        }
-                    val targetId = if (existing != null) {
-                        AppLogger.d(AppLogger.Category.DATABASE, TAG, "Reusing existing draft journal: ${existing.id}")
-                        existing.id
-                    } else {
-                        journalRepo.insertJournal(journal)
-                        AppLogger.d(AppLogger.Category.DATABASE, TAG, "Successfully created draft journal from intent URI: ${journal.id}")
-                        journal.id
-                    }
-                    return@withContext Route.Editor(journalId = targetId)
-                }
-            }
-            
-            if (!textExtra.isNullOrBlank()) {
-                val journal = MarkdownEngine.fromMarkdown(textExtra, "Shared Note", isDraft = true)
-                val existing = journalRepo.getJournalById(journal.id)
-                    ?: journalRepo.getAllJournals().firstOrNull {
-                        it.isDraft && it.title == journal.title && it.content == journal.content
-                    }
-                val targetId = if (existing != null) {
-                    AppLogger.d(AppLogger.Category.DATABASE, TAG, "Reusing existing draft journal from shared text: ${existing.id}")
-                    existing.id
-                } else {
-                    journalRepo.insertJournal(journal)
-                    AppLogger.d(AppLogger.Category.DATABASE, TAG, "Successfully created draft journal from shared text: ${journal.id}")
-                    journal.id
-                }
-                return@withContext Route.Editor(journalId = targetId)
-            }
+            val journal = MarkdownEngine.fromMarkdown(content, displayName, isDraft = true)
+            // Query only an ID: loading every journal can exhaust memory on a large library.
+            val targetId = journalRepo.findMatchingDraftId(journal.title, journal.content)
+                ?: journalRepo.insertJournal(journal.copy(id = UUID.randomUUID().toString()))
+            Result.success(Route.Editor(journalId = targetId))
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            AppLogger.e(AppLogger.Category.DATABASE, TAG, "Failed to process external intent", e)
+            AppLogger.e(AppLogger.Category.DATABASE, TAG, "Failed to open external Markdown", e)
+            Result.failure(e)
+        } catch (e: StackOverflowError) {
+            // Recursive third-party parsers can fail on deeply nested input, even when it is small.
+            Result.failure(IOException("Markdown structure is too deeply nested", e))
         }
-
-        null
     }
 }

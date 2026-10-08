@@ -148,6 +148,9 @@ object MarkdownEngine {
             } catch (e: Exception) {
                 AppLogger.w(AppLogger.Category.BACKUP, TAG, "Failed to parse YAML frontmatter: ${e.message}")
                 null
+            } catch (_: StackOverflowError) {
+                AppLogger.w(AppLogger.Category.BACKUP, TAG, "YAML frontmatter is too deeply nested")
+                null
             }
             parsedFm to body
         } else {
@@ -159,25 +162,25 @@ object MarkdownEngine {
 
         var title = frontmatter?.title ?: ""
         if (title.isBlank()) {
-            val firstLine = content.lines().firstOrNull()?.trim() ?: ""
-            if (firstLine.startsWith("# ") || firstLine.startsWith("## ")) {
+            val firstLine = content.substringBefore('\n').trim()
+            if (firstLine.length <= 256 && (firstLine.startsWith("# ") || firstLine.startsWith("## "))) {
                 title = firstLine.removePrefix("## ").removePrefix("# ").trim()
-                content = content.lines().drop(1).joinToString("\n").trimStart('\n', ' ')
+                content = content.substringAfter('\n', "").trimStart('\n', ' ')
             } else if (!fallbackTitle.isNullOrBlank()) {
                 title = cleanFallbackTitle(fallbackTitle)
             }
         } else {
-            val firstLine = content.lines().firstOrNull()?.trim() ?: ""
+            val firstLine = content.substringBefore('\n').trim()
             if (firstLine.equals("# $title", ignoreCase = true) || firstLine.equals("## $title", ignoreCase = true)) {
-                content = content.lines().drop(1).joinToString("\n").trimStart('\n', ' ')
+                content = content.substringAfter('\n', "").trimStart('\n', ' ')
             }
         }
 
-        val lines = content.lines()
-        val firstNonEmptyLine = lines.firstOrNull { it.isNotBlank() }?.trim() ?: ""
+        val firstNonEmptyLine = content.lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: ""
         if (firstNonEmptyLine.startsWith("*") && firstNonEmptyLine.endsWith("*") && (firstNonEmptyLine.contains("📍") || firstNonEmptyLine.contains("🎵"))) {
-            val dropIndex = lines.indexOfFirst { it.trim() == firstNonEmptyLine }
-            content = lines.drop(dropIndex + 1).joinToString("\n").trimStart('\n', ' ')
+            val firstNonEmptyOffset = content.indexOfFirst { !it.isWhitespace() }
+            val nextLine = content.indexOf('\n', firstNonEmptyOffset)
+            content = if (nextLine < 0) "" else content.substring(nextLine + 1).trimStart('\n', ' ')
         }
 
         val images = mediaRegex.findAll(rawBody).mapNotNull { matchResult ->

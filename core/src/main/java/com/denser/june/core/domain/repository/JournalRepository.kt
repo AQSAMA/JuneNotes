@@ -15,6 +15,7 @@ interface JournalRepository {
 
     suspend fun getAllJournals(): List<Journal>
     suspend fun getJournalById(id: String): Journal?
+    suspend fun findMatchingDraftId(title: String, content: String): String?
     suspend fun getLatestJournal(): Journal?
     fun getJournalsByDateRange(startDate: Long, endDate: Long): Flow<List<Journal>>
     fun getJournalsByMultipleTags(tags: List<String>): Flow<List<Journal>>
