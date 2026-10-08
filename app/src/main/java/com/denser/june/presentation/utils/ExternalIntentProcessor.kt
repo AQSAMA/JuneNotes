@@ -14,7 +14,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
-import java.util.UUID
 
 class ExternalIntentProcessor(
     private val context: Context,
@@ -49,8 +48,9 @@ class ExternalIntentProcessor(
 
             val journal = MarkdownEngine.fromMarkdown(content, displayName, isDraft = true)
             // Query only an ID: loading every journal can exhaust memory on a large library.
-            val targetId = journalRepo.findMatchingDraftId(journal.title, journal.content)
-                ?: journalRepo.insertJournal(journal.copy(id = UUID.randomUUID().toString()))
+            val targetId = journalRepo.getJournalById(journal.id)?.id
+                ?: journalRepo.findMatchingDraftId(journal.title, journal.content)
+                ?: journalRepo.insertJournal(journal)
             Result.success(Route.Editor(journalId = targetId))
         } catch (e: CancellationException) {
             throw e

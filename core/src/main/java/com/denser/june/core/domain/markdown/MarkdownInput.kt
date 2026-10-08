@@ -9,6 +9,7 @@ class MarkdownTooLargeException : Exception("Markdown files must be 1 MiB or sma
 object MarkdownInput {
     const val MAX_BYTES = 1024 * 1024
     const val RICH_TEXT_MAX_CHARS = 32 * 1024
+    const val RICH_TEXT_MAX_LINES = 512
 
     fun read(stream: InputStream): String {
         val output = ByteArrayOutputStream()
@@ -33,5 +34,12 @@ object MarkdownInput {
         return text.removePrefix("\uFEFF")
     }
 
-    fun supportsRichText(text: String): Boolean = text.length <= RICH_TEXT_MAX_CHARS
+    fun supportsRichText(text: String): Boolean {
+        if (text.length > RICH_TEXT_MAX_CHARS) return false
+        var lines = 1
+        for (char in text) {
+            if (char == '\n' && ++lines > RICH_TEXT_MAX_LINES) return false
+        }
+        return true
+    }
 }

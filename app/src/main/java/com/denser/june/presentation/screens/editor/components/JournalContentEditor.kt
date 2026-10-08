@@ -29,7 +29,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
-import com.denser.june.core.domain.markdown.MarkdownInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -175,7 +174,7 @@ fun JournalContentEditor(
                     onValueChange = onMarkdownChange,
                     enabled = !isLoading,
                     // A large paragraph must scroll inside the field instead of measuring an unbounded canvas.
-                    maxLines = if (MarkdownInput.supportsRichText(rawContent)) Int.MAX_VALUE else 20,
+                    maxLines = 20,
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)

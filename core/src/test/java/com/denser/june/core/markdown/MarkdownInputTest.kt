@@ -43,6 +43,12 @@ class MarkdownInputTest {
         assertEquals(text, MarkdownInput.read(stream))
     }
 
+    @Test fun manyShortTableRowsBypassRecursiveParserEvenBelowCharacterLimit() {
+        assertFalse(MarkdownInput.supportsRichText("| a | b |\n".repeat(3000)))
+        assertTrue(MarkdownInput.supportsRichText("a\n".repeat(MarkdownInput.RICH_TEXT_MAX_LINES - 1)))
+        assertFalse(MarkdownInput.supportsRichText("a\n".repeat(MarkdownInput.RICH_TEXT_MAX_LINES)))
+    }
+
     @Test fun largeNotesBypassRichParser() {
         assertTrue(MarkdownInput.supportsRichText("a".repeat(MarkdownInput.RICH_TEXT_MAX_CHARS)))
         assertFalse(MarkdownInput.supportsRichText("a".repeat(MarkdownInput.RICH_TEXT_MAX_CHARS + 1)))
