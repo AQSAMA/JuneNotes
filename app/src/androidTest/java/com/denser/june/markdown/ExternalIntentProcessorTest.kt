@@ -87,8 +87,9 @@ class ExternalIntentProcessorTest {
 
     private suspend fun assertSharedTextOpens(intent: Intent, expectedBody: String) {
         val route = processor.processIntent(intent).getOrThrow()!!
-        ids.add(route.journalId)
-        val journal = repository.getJournalById(route.journalId)!!
+        val id = requireNotNull(route.journalId)
+        ids.add(id)
+        val journal = repository.getJournalById(id)!!
         assertEquals("Shared Note", journal.title)
         assertEquals(expectedBody, journal.content)
         assertTrue(journal.isDraft)
@@ -121,8 +122,9 @@ class ExternalIntentProcessorTest {
         file.writeText("# $title\n\nURI body")
         // Even an oversized text alternative must not replace a usable URI.
         val route = processor.processIntent(share("x".repeat(MarkdownInput.MAX_BYTES + 1))).getOrThrow()!!
-        ids.add(route.journalId)
-        val journal = repository.getJournalById(route.journalId)!!
+        val id = requireNotNull(route.journalId)
+        ids.add(id)
+        val journal = repository.getJournalById(id)!!
         assertEquals(title, journal.title)
         assertEquals("URI body", journal.content)
     }
