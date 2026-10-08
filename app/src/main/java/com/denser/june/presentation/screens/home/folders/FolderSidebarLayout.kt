@@ -83,8 +83,16 @@ internal fun FolderSidebarLayout(
                 .background(scrim.copy(alpha = 0.20f)).then(gesture)
                 .clickable(onClickLabel = dismissLabel) { releaseVelocity = 0f; onOpenChange(false) }
                 .testTag("folder-sidebar-scrim"))
-        } else {
-            Box(Modifier.align(Alignment.CenterStart).width(24.dp).fillMaxHeight().then(gesture).testTag("folder-sidebar-edge"))
         }
+        // Keep the edge gesture node alive for its entire stream, including the first reveal frame.
+        Box(Modifier.align(Alignment.CenterStart).width(24.dp).fillMaxHeight()
+            .draggable(state = dragState, orientation = Orientation.Horizontal, enabled = !open,
+                onDragStarted = { dragging = true; releaseVelocity = 0f },
+                onDragStopped = { velocity ->
+                    releaseVelocity = velocity * direction
+                    onOpenChange(sidebarShouldOpen(offset, width, releaseVelocity, flingThreshold))
+                    dragging = false
+                })
+            .testTag("folder-sidebar-edge"))
     }
 }
