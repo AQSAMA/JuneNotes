@@ -2,6 +2,8 @@ package com.denser.june.core.domain.sync
 
 import com.denser.june.core.domain.model.Journal
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -113,11 +115,14 @@ interface CloudProvider {
     suspend fun deleteSongMedia(filename: String): Result<Unit>
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SyncManifest(
     val lastSyncTime: Long,
     val lastSyncDeviceId: String,
     val databaseVersion: Int,
+    // Always write the version: legacy readers otherwise default an omitted value to 4.
+    @EncodeDefault
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
     val totalJournals: Int,
     val totalMedia: Int = 0,
@@ -129,6 +134,6 @@ data class SyncManifest(
     val folderData: com.denser.june.core.domain.folder.FolderSnapshot? = null
 ) {
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 4
+        const val CURRENT_SCHEMA_VERSION = 5
     }
 }

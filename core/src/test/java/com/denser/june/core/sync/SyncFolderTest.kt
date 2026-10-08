@@ -21,10 +21,21 @@ class SyncFolderTest : BaseSyncTest() {
 
     @Test fun originalJuneManifestDoesNotEraseLocalFolders() = runTest(harness.testDispatcher) {
         harness.folders.data.value = FolderSnapshot(folders = listOf(Folder("a", "Local", updatedAt = 10)))
-        harness.cloud.manifest = SyncManifest(0, "original", 5, totalJournals = 0)
+        harness.cloud.manifest = SyncManifest(0, "original", 5, schemaVersion = 4, totalJournals = 0)
         harness.syncManager.sync().getOrThrow()
         assertEquals("a", harness.cloud.manifest!!.folderData!!.folders.single().id)
+        assertEquals(5, harness.cloud.manifest!!.schemaVersion)
     }
+    @Test fun versionFourFolderManifestIsUpgradedWithoutLosingRemoteFolders() = runTest(harness.testDispatcher) {
+        val remote = FolderSnapshot(folders = listOf(Folder("remote", "Remote", updatedAt = 20)))
+        harness.cloud.manifest = SyncManifest(0, "older-fork", 6, schemaVersion = 4,
+            totalJournals = 0, folderData = remote)
+        harness.syncManager.sync().getOrThrow()
+        assertEquals(remote, harness.folders.snapshot())
+        assertEquals(remote, harness.cloud.manifest!!.folderData)
+        assertEquals(5, harness.cloud.manifest!!.schemaVersion)
+    }
+
     @Test fun manifestReadFailureNeverOverwritesRemoteFolders() = runTest(harness.testDispatcher) {
         val remote = SyncManifest(0, "other", 5, totalJournals = 0,
             folderData = FolderSnapshot(folders = listOf(Folder("remote", "Remote", updatedAt = 20))))
