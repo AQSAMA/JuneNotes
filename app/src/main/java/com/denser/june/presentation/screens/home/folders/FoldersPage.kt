@@ -5,7 +5,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -19,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,7 +68,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
     fun accepts(item: FolderDrag, parent: String?): Boolean = if (item.folder) state.snapshot.canMove(item.id, parent) else true
 
     FolderDragHost(
-        accepts = { accepts(it, state.currentId) }, onDrop = { viewModel.move(it, state.currentId) },
+        accepts = { false }, onDrop = {},
         modifier = Modifier.fillMaxSize(), onDragActive = { dragging = it }
     ) {
     Box(Modifier.fillMaxSize()) {
@@ -96,13 +96,21 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
             }
             AnimatedContent(
                 targetState = state.currentId,
-                transitionSpec = { (fadeIn(tween(180)) + slideInVertically { it / 12 }) togetherWith (fadeOut(tween(100)) + slideOutVertically { -it / 12 }) },
+                transitionSpec = {
+                    if (dragging) fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    else (fadeIn(tween(180)) + slideInVertically { it / 12 }) togetherWith (fadeOut(tween(100)) + slideOutVertically { -it / 12 })
+                },
                 label = "folder_navigation"
             ) { displayedId ->
                 // Use the target ID for each animated pane, avoiding duplicate note IDs during transitions.
                 val pane = remember(state, displayedId) { state.copy(currentId = displayedId) }
                 val listState = rememberLazyListState()
                 Box(Modifier.fillMaxSize()) {
+                FolderDropSurface(
+                    accepts = { displayedId == state.currentId && accepts(it, displayedId) },
+                    onDrop = { viewModel.move(it, displayedId) },
+                    modifier = Modifier.fillMaxSize(), priority = -10, enabled = displayedId == state.currentId
+                ) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -112,43 +120,66 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                     if (state.loading) {
                         item { JunePlaceholderPage(Modifier.fillParentMaxHeight(0.7f), isLoading = true) }
                     } else {
-                        items(pane.children, key = { "folder_${it.id}" }) { folder ->
-                            Column(Modifier.animateItem()) {
-                                ReorderSlot(
-                                    active = dragging && displayedId == state.currentId,
-                                    accepts = { displayedId == state.currentId && it.folder && it.id != folder.id && accepts(it, displayedId) },
-                                    onDrop = { viewModel.move(it, displayedId, folder.id) }
-                                )
-                                FolderDropSurface(
-                                    accepts = { displayedId == state.currentId && accepts(it, folder.id) },
-                                    onDrop = { viewModel.move(it, folder.id) },
-                                    onHoverOpen = { viewModel.open(folder.id) }
-                                ) {
-                                    FolderRow(folder, state.folderCounts[folder.id] ?: 0, state.noteCounts[folder.id] ?: 0, onOpen = { viewModel.open(folder.id) },
-                                        onOptions = { optionsFolder = folder }, onMove = { moveItem = FolderDrag(folder.id, true) })
+                        itemsIndexed(pane.children, key = { _, folder -> "folder_${folder.id}" }) { index, folder ->
+                            val item = FolderDrag(folder.id, true, folder.name)
+                            FolderDragItem(item, Modifier.animateItem().testTag("folder-row-${folder.id}")) {
+                                Box {
+                                    FolderDropSurface(
+                                        accepts = { displayedId == state.currentId && accepts(it, folder.id) },
+                                        onDrop = { viewModel.move(it, folder.id) },
+                                        enabled = displayedId == state.currentId,
+                                        onHoverOpen = { viewModel.open(folder.id) }
+                                    ) {
+                                        FolderRow(folder, state.folderCounts[folder.id] ?: 0, state.noteCounts[folder.id] ?: 0,
+                                            onOpen = { viewModel.open(folder.id) }, onOptions = { optionsFolder = folder },
+                                            onMove = { moveItem = item })
+                                    }
+                                    if (dragging && displayedId == state.currentId) {
+                                        ReorderSlot(Modifier.align(Alignment.TopCenter).testTag("folder-before-${folder.id}"),
+                                            accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
+                                            onDrop = { viewModel.move(it, displayedId, folder.id) })
+                                        ReorderSlot(Modifier.align(Alignment.BottomCenter).testTag("folder-after-${folder.id}"), markerAlignment = Alignment.BottomCenter,
+                                            accepts = { it.folder && it.id != folder.id && accepts(it, displayedId) },
+                                            onDrop = { viewModel.move(it, displayedId, pane.children.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) })
+                                    }
                                 }
                             }
                         }
-                        if (pane.children.isNotEmpty()) {
-                            item(key = "folder_end") { ReorderSlot(active = dragging && displayedId == state.currentId, accepts = { displayedId == state.currentId && it.folder && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) }
-                        }
-                        items(pane.visibleNotes, key = { "note_${it.id}" }) { note ->
-                            Column(Modifier.animateItem()) {
-                                ReorderSlot(active = dragging && displayedId == state.currentId, accepts = { displayedId == state.currentId && !it.folder && it.id != note.id }, onDrop = { viewModel.move(it, displayedId, note.id) })
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    JournalCard(
-                                        journal = note, is24Hour = is24Hour, showDate = true,
-                                        modifier = Modifier.weight(1f),
-                                        onToggleBookmark = { viewModel.bookmark(note.id) },
-                                        onJournalClick = { navigator.navigateTo(Route.Editor(note.id), isSingleTop = true) },
-                                        onLongClick = { optionsNote = note }
-                                    )
-                                    FolderDragHandle(FolderDrag(note.id, false)) { moveItem = FolderDrag(note.id, false) }
+                        itemsIndexed(pane.visibleNotes, key = { _, note -> "note_${note.id}" }) { index, note ->
+                            val item = FolderDrag(note.id, false, note.title.ifBlank { note.content.take(80).replace('\n', ' ') })
+                            FolderDragItem(item, Modifier.animateItem().testTag("note-row-${note.id}")) {
+                                Box {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        JournalCard(
+                                            journal = note, is24Hour = is24Hour, showDate = true,
+                                            modifier = Modifier.weight(1f),
+                                            onToggleBookmark = { viewModel.bookmark(note.id) },
+                                            onJournalClick = { navigator.navigateTo(Route.Editor(note.id), isSingleTop = true) },
+                                            onLongClick = { optionsNote = note }
+                                        )
+                                        FolderDragHandle(item) { moveItem = item }
+                                    }
+                                    if (dragging && displayedId == state.currentId) {
+                                        Column(Modifier.matchParentSize()) {
+                                            FolderDropSurface(
+                                                accepts = { !it.folder && it.id != note.id },
+                                                onDrop = { viewModel.move(it, displayedId, note.id) },
+                                                modifier = Modifier.weight(1f).fillMaxWidth().testTag("note-before-${note.id}"),
+                                                priority = 5, insertion = true, markerAlignment = Alignment.TopCenter
+                                            ) { Box(Modifier.fillMaxSize()) }
+                                            FolderDropSurface(
+                                                accepts = { !it.folder && it.id != note.id },
+                                                onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) },
+                                                modifier = Modifier.weight(1f).fillMaxWidth().testTag("note-after-${note.id}"),
+                                                priority = 5, insertion = true, markerAlignment = Alignment.BottomCenter
+                                            ) { Box(Modifier.fillMaxSize()) }
+                                        }
+                                    }
                                 }
                             }
                         }
                         item(key = "drop_end") {
-                            FolderDropSurface(accepts = { displayedId == state.currentId && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }) {
+                            FolderDropSurface(accepts = { displayedId == state.currentId && accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) }, enabled = displayedId == state.currentId) {
                                 if (pane.children.isEmpty() && pane.visibleNotes.isEmpty()) {
                                     Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
@@ -161,9 +192,9 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                                             Text(stringResource(R.string.new_journal))
                                         }
                                     }
-                                } else if (dragging) {
+                                } else {
                                     Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.Center) {
-                                        Icon(painterResource(R.drawable.drive_folder_upload_24px), stringResource(R.string.folder_drop_here), tint = MaterialTheme.colorScheme.primary)
+                                        if (dragging) Icon(painterResource(R.drawable.drive_folder_upload_24px), stringResource(R.string.folder_drop_here), tint = MaterialTheme.colorScheme.primary)
                                     }
                                 }
 
@@ -171,17 +202,9 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean) {
                         }
                     }
                 }
-                if (dragging && displayedId == state.currentId) {
-                    FolderDropSurface(
-                        accepts = { accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) },
-                        modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().height(40.dp),
-                        onHoverScroll = { listState.scrollBy(-24f) }
-                    ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.expand_less_24px), null) } }
-                    FolderDropSurface(
-                        accepts = { accepts(it, displayedId) }, onDrop = { viewModel.move(it, displayedId) },
-                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = UiUtils.BOTTOM_BAR_PADDING).height(40.dp),
-                        onHoverScroll = { listState.scrollBy(24f) }
-                    ) { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(painterResource(R.drawable.expand_more_24px), null) } }
+                }
+                if (displayedId == state.currentId) {
+                    FolderDragAutoScroll(listState, Modifier.fillMaxSize().padding(bottom = UiUtils.BOTTOM_BAR_PADDING)) { }
                 }
                 }
             }
@@ -259,11 +282,9 @@ private fun Breadcrumb(id: String?, label: String, accepts: (FolderDrag) -> Bool
 }
 
 @Composable
-private fun ReorderSlot(active: Boolean, accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
-    FolderDropSurface(accepts, onDrop, modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(8.dp), contentAlignment = Alignment.Center) {
-            if (active) HorizontalDivider(Modifier.fillMaxWidth(0.8f), color = MaterialTheme.colorScheme.outlineVariant)
-        }
+private fun ReorderSlot(modifier: Modifier, markerAlignment: Alignment = Alignment.TopCenter, accepts: (FolderDrag) -> Boolean, onDrop: (FolderDrag) -> Unit) {
+    FolderDropSurface(accepts, onDrop, modifier.fillMaxWidth().height(22.dp), priority = 5, insertion = true, markerAlignment = markerAlignment) {
+        Box(Modifier.fillMaxSize())
     }
 }
 
@@ -287,7 +308,7 @@ private fun FolderRow(folder: Folder, folders: Int, notes: Int, onOpen: () -> Un
                 }
             }
             IconButton(onClick = onOptions) { Icon(painterResource(R.drawable.more_vert_24px), stringResource(R.string.folder_options)) }
-            FolderDragHandle(FolderDrag(folder.id, true), onMove)
+            FolderDragHandle(FolderDrag(folder.id, true, folder.name), onMove)
         }
     }
 }

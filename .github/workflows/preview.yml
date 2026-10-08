@@ -33,12 +33,20 @@ jobs:
         with:
           path: ~/.android/debug.keystore
           key: june-preview-signing-v1
-      - name: Create preview signing key if needed
+      - name: Require the existing Preview signing key
+        env:
+          PREVIEW_KEYSTORE_BASE64: ${{ secrets.JUNE_PREVIEW_KEYSTORE_BASE64 }}
         run: |
           mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname 'CN=June Preview,O=June,C=US' -keyalg RSA -keysize 2048 -validity 10000
+          if [ -n "$PREVIEW_KEYSTORE_BASE64" ]; then
+            printf '%s' "$PREVIEW_KEYSTORE_BASE64" | base64 --decode > ~/.android/debug.keystore
           fi
+          if [ ! -f ~/.android/debug.keystore ]; then
+            echo '::error::Preview signing key is missing. Restore the existing key via JUNE_PREVIEW_KEYSTORE_BASE64; do not generate a replacement.'
+            exit 1
+          fi
+          preview_cert="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
+          test "$preview_cert" = '8550b3514bf050d00665eea91f3a8cc939ec398576359fe73bc8725f05861448'
       - name: Validate and build Preview APK
         run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((102010 + GITHUB_RUN_NUMBER)) -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
       - name: Name Preview APK

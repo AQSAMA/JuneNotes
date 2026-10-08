@@ -79,4 +79,4 @@ class FoldersVM(
     fun deleteNote(id: String) { mutate { journalRepo.softDeleteJournal(id) } }
 }
 
-data class FolderDrag(val id: String, val folder: Boolean)
+data class FolderDrag(val id: String, val folder: Boolean, val label: String = "")
