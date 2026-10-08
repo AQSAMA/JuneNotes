@@ -22,6 +22,9 @@ import com.denser.june.core.domain.model.AppTheme
 import com.denser.june.core.domain.model.enums.ThemeMode
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.presentation.screens.home.folders.*
+import com.denser.june.presentation.screens.home.HomeScreen
+import com.denser.june.core.domain.model.Journal
+import java.util.UUID
 import com.denser.june.presentation.theme.*
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
@@ -104,6 +107,33 @@ class FolderSidebarTest {
             }
             screenshot("sidebar-manual-order")
         } finally { runBlocking { repository.delete(first); repository.delete(third); repository.delete(second) } }
+    }
+
+    @Test fun homeMenuSelectsFolderContentsAndBackClosesSidebarFirst() {
+        val vmRepository = repository
+        val journals = GlobalContext.get().get<JournalRepository>()
+        val folder = runBlocking { vmRepository.create("Research", null) }
+        val child = runBlocking { vmRepository.create("Reading", folder) }
+        val journal = Journal("sidebar-home-${UUID.randomUUID()}", "Reading notes", "Original June note content", createdAt = 1, updatedAt = null, dateTime = 1)
+        runBlocking { journals.insertJournal(journal); vmRepository.moveJournal(journal.id, child) }
+        try {
+            ui.setContent { Theme { HomeScreen() } }
+            ui.onNodeWithContentDescription(instrumentation.targetContext.getString(com.denser.june.core.R.string.folder_open_sidebar)).performClick()
+            ui.waitUntil(5000) { ui.onAllNodesWithTag("sidebar-expand-$folder").fetchSemanticsNodes().isNotEmpty() }
+            ui.onNodeWithTag("sidebar-expand-$folder").performClick()
+            screenshot("sidebar-in-june-home")
+            ui.onNodeWithText("Reading").performClick()
+            ui.onNodeWithText("Reading notes").assertIsDisplayed()
+            ui.onNodeWithTag("folder-sidebar").assertDoesNotExist()
+            ui.onAllNodesWithContentDescription(instrumentation.targetContext.getString(com.denser.june.core.R.string.folder_open_sidebar))[0].performClick()
+            ui.waitForIdle()
+            // System Back must dismiss the drawer, keeping the selected folder and note pane.
+            instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            ui.waitForIdle()
+            ui.onNodeWithTag("folder-sidebar").assertDoesNotExist()
+            ui.onNodeWithText("Reading notes").assertIsDisplayed()
+            screenshot("sidebar-selected-folder-notes")
+        } finally { runBlocking { journals.hardDeleteJournal(journal.id); vmRepository.delete(child); vmRepository.delete(folder) } }
     }
 
     @Test fun nativeEdgeSwipeRevealsBothPanesAndSwipeClosesInLtr() = verifyReveal(LayoutDirection.Ltr)

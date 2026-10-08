@@ -110,7 +110,15 @@ fun HomeScreen() {
             FolderSidebar(
                 viewModel = foldersVM,
                 folderSelected = pagerState.currentPage == HomeTab.Folders.ordinal,
-                onAllNotes = { sidebarOpen = false; scope.launch { pagerState.scrollToPage(HomeTab.Journals.ordinal) } },
+                allNotesSelected = pagerState.currentPage == HomeTab.Journals.ordinal,
+                onAllNotes = {
+                    isSearchActive = false
+                    journalsVM.resetAllFilters()
+                    keyboardController?.hide()
+                    focusManager.clearFocus(force = true)
+                    sidebarOpen = false
+                    scope.launch { pagerState.scrollToPage(HomeTab.Journals.ordinal) }
+                },
                 onFolder = { id ->
                     foldersVM.open(id)
                     isSearchActive = false
