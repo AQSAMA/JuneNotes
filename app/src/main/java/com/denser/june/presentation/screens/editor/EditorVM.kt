@@ -9,6 +9,8 @@ import androidx.navigation.toRoute
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.domain.repository.SongRepository
 import com.denser.june.core.domain.preferences.JournalPreferences
+import com.denser.june.core.domain.markdown.MarkdownInput
+import kotlinx.coroutines.CancellationException
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.SongDetails
 import com.denser.june.core.domain.model.SongFetchEvent
@@ -42,7 +44,7 @@ class EditorVM(
         ?: savedStateHandle.tryRoute<Route.JournalMediaDetail>()?.journalId
 
     val hyphenState = HyphenTextState(
-        initialText = editorRoute?.initialContent ?: "",
+        initialText = (editorRoute?.initialContent ?: "").takeIf(MarkdownInput::supportsRichText) ?: "",
         initialTriggerConfigs = listOf(
             TriggerConfig(trigger = "@", scheme = "person"),
             TriggerConfig(trigger = "#", scheme = "topic")
@@ -63,6 +65,7 @@ class EditorVM(
                 journalId = journalId,
                 title = initialTitle,
                 content = initialContent,
+                usePlainTextEditor = !MarkdownInput.supportsRichText(initialContent),
                 emoji = initialEmoji,
                 dateTime = routeDate ?: getTodayAtMidnight(),
                 tags = editorRoute?.initialTags ?: emptyList(),
@@ -393,9 +396,20 @@ class EditorVM(
                 }
                 existingJournal = journal.copy(songDetails = details)
                 val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
-                val parsedContent = if (isMarkdownEnabled && journal.content.isNotBlank()) {
-                    hyphenState.setMarkdownAsync(journal.content)
-                    hyphenState.toMarkdown()
+                var usePlainText = !MarkdownInput.supportsRichText(journal.content)
+                val parsedContent = if (isMarkdownEnabled && !usePlainText && journal.content.isNotBlank()) {
+                    try {
+                        hyphenState.setMarkdownAsync(journal.content)
+                        hyphenState.toMarkdown()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        usePlainText = true
+                        journal.content
+                    } catch (_: StackOverflowError) {
+                        usePlainText = true
+                        journal.content
+                    }
                 } else {
                     journal.content
                 }
@@ -405,6 +419,7 @@ class EditorVM(
                         journalId = journal.id,
                         title = journal.title,
                         content = parsedContent,
+                        usePlainTextEditor = usePlainText,
                         emoji = journal.emoji,
                         images = journal.images,
                         location = journal.location,
@@ -434,7 +449,7 @@ class EditorVM(
             if (existingJournal != null && !existingJournal!!.isDraft) return@launch
 
             val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
-            val currentMarkdown = if (isMarkdownEnabled && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
+            val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
 
             if (currentState.title.isBlank() &&
                 currentMarkdown.isBlank() &&
@@ -497,7 +512,7 @@ class EditorVM(
             val currentState = _state.value
             val currentTime = System.currentTimeMillis()
             val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
-            val currentMarkdown = if (isMarkdownEnabled && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
+            val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
 
             val journalToSave = Journal(
                 id = existingJournal?.id ?: "",

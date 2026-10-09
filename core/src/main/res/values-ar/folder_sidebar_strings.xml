@@ -1,0 +1,12 @@
+<resources>
+    <string name="folder_all_notes">كل الملاحظات</string>
+    <string name="folder_unfiled">ملاحظات بلا مجلد</string>
+    <string name="folder_open_sidebar">فتح المجلدات</string>
+    <string name="folder_close_sidebar">إغلاق المجلدات</string>
+    <string name="folder_expand">توسيع المجلد</string>
+    <string name="folder_collapse">طي المجلد</string>
+    <string name="folder_new_subfolder">مجلد فرعي جديد</string>
+    <string name="folder_organize">ترتيب المجلدات</string>
+    <string name="folder_drop_root">نقل إلى المستوى الرئيسي</string>
+    <string name="folder_sidebar_empty">أنشئ مجلدًا لتنظيم ملاحظاتك</string>
+</resources>

@@ -23,6 +23,7 @@ data class EditorState(
     val isBookmarked: Boolean = false,
     val isArchived: Boolean = false,
     val isLoading: Boolean = false,
+    val usePlainTextEditor: Boolean = false,
     val isDirty: Boolean = false,
     val isDraft: Boolean = true,
     val isFetchingSong: Boolean = false,

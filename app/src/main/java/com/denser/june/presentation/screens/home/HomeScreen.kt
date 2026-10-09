@@ -34,6 +34,9 @@ import com.denser.june.MainVM
 import org.koin.compose.viewmodel.koinViewModel
 
 import androidx.compose.animation.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.denser.june.presentation.screens.home.folders.FolderSidebar
+import com.denser.june.presentation.screens.home.folders.FolderSidebarLayout
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
@@ -77,6 +80,7 @@ fun HomeScreen() {
     val journalsVM: JournalsVM = koinViewModel()
     val searchQuery by journalsVM.searchQuery.collectAsStateWithLifecycle()
     var isSearchActive by remember { mutableStateOf(false) }
+    var sidebarOpen by rememberSaveable { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -95,150 +99,187 @@ fun HomeScreen() {
         journalsVM.resetAllFilters()
     }
 
-    BackHandler(enabled = !isSearchActive && pagerState.currentPage != 0) {
+    BackHandler(enabled = !sidebarOpen && !isSearchActive && pagerState.currentPage != 0) {
         scope.launch { pagerState.animateScrollToPage(0) }
     }
 
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.BottomCenter
+    FolderSidebarLayout(
+        open = sidebarOpen,
+        onOpenChange = { sidebarOpen = it },
+        sidebar = {
+            FolderSidebar(
+                viewModel = foldersVM,
+                folderSelected = pagerState.currentPage == HomeTab.Folders.ordinal,
+                allNotesSelected = pagerState.currentPage == HomeTab.Journals.ordinal,
+                onAllNotes = {
+                    isSearchActive = false
+                    journalsVM.resetAllFilters()
+                    keyboardController?.hide()
+                    focusManager.clearFocus(force = true)
+                    sidebarOpen = false
+                    scope.launch { pagerState.scrollToPage(HomeTab.Journals.ordinal) }
+                },
+                onFolder = { id ->
+                    foldersVM.open(id)
+                    isSearchActive = false
+                    keyboardController?.hide()
+                    focusManager.clearFocus(force = true)
+                    sidebarOpen = false
+                    scope.launch { pagerState.scrollToPage(HomeTab.Folders.ordinal) }
+                },
+                onClose = { sidebarOpen = false }
+            )
+        }
     ) {
-        Scaffold(
+        Box(
             modifier = Modifier.fillMaxSize(),
-            topBar = {
-                JuneTopAppBar(
-                    type = if (isSearchActive) JuneAppBarType.Small else JuneAppBarType.CenterAligned,
-                    title = {
-                        if (isSearchActive) {
-                            TextField(
-                                value = searchQuery,
-                                onValueChange = journalsVM::onQueryChange,
-                                placeholder = { Text(stringResource(R.string.search_your_journal)) },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .focusRequester(focusRequester),
-                                colors = UiUtils.getTransparentTextFieldColors(),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                                trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { journalsVM.clearSearch() }) {
-                                            Icon(
-                                                painterResource(R.drawable.close_24px),
-                                                contentDescription = stringResource(R.string.clear)
-                                            )
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                topBar = {
+                    JuneTopAppBar(
+                        type = if (isSearchActive) JuneAppBarType.Small else JuneAppBarType.CenterAligned,
+                        title = {
+                            if (isSearchActive) {
+                                TextField(
+                                    value = searchQuery,
+                                    onValueChange = journalsVM::onQueryChange,
+                                    placeholder = { Text(stringResource(R.string.search_your_journal)) },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(focusRequester),
+                                    colors = UiUtils.getTransparentTextFieldColors(),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { journalsVM.clearSearch() }) {
+                                                Icon(
+                                                    painterResource(R.drawable.close_24px),
+                                                    contentDescription = stringResource(R.string.clear)
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                            )
-                        } else {
-                            Text(
-                                text = stringResource(R.string.app_name),
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        FilledIconButton(
-                            onClick = {
-                                if (isSearchActive) {
-                                    isSearchActive = false
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus(force = true)
-                                    journalsVM.resetAllFilters()
-                                } else {
-                                    scope.launch {
-                                        if (pagerState.currentPage != 0) {
-                                            pagerState.animateScrollToPage(0)
-                                        }
-                                        isSearchActive = true
-                                    }
-                                }
-                            },
-                            colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                            ),
-                        ) {
-                            Icon(
-                                painter = painterResource(
-                                    if (isSearchActive) R.drawable.arrow_back_24px else R.drawable.search_24px
-                                ),
-                                contentDescription = stringResource(
-                                    if (isSearchActive) R.string.back else R.string.search
                                 )
-                            )
-                        }
-                    },
-                    actions = {
-                        if (!isSearchActive) {
-                            if (appState.isSyncEnabled && appState.isInternetAllowed) {
-                                SyncIndicator(
-                                    status = appState.syncStatus,
-                                    onClick = { navigator.navigateTo(Route.SyncSettings) }
+                            } else {
+                                Text(
+                                    text = stringResource(R.string.app_name),
+                                    fontWeight = FontWeight.Bold,
                                 )
                             }
-                            Spacer(Modifier.width(4.dp))
+                        },
+                        navigationIcon = {
                             FilledIconButton(
-                                onClick = { navigator.navigateTo(Route.Settings) },
+                                onClick = {
+                                    if (isSearchActive) {
+                                        isSearchActive = false
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus(force = true)
+                                        journalsVM.resetAllFilters()
+                                    } else {
+                                        sidebarOpen = true
+                                    }
+                                },
                                 colors = IconButtonDefaults.filledIconButtonColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                                 ),
                             ) {
                                 Icon(
-                                    painter = painterResource(R.drawable.settings_24px),
-                                    contentDescription = stringResource(R.string.settings)
+                                    painter = painterResource(
+                                        if (isSearchActive) R.drawable.arrow_back_24px else R.drawable.menu_24px
+                                    ),
+                                    contentDescription = stringResource(
+                                        if (isSearchActive) R.string.back else R.string.folder_open_sidebar
+                                    )
                                 )
                             }
+                        },
+                        actions = {
+                            if (!isSearchActive) {
+                                FilledIconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            pagerState.scrollToPage(HomeTab.Journals.ordinal)
+                                            isSearchActive = true
+                                        }
+                                    },
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                    )
+                                ) { Icon(painterResource(R.drawable.search_24px), stringResource(R.string.search)) }
+                                if (appState.isSyncEnabled && appState.isInternetAllowed) {
+                                    SyncIndicator(
+                                        status = appState.syncStatus,
+                                        onClick = { navigator.navigateTo(Route.SyncSettings) }
+                                    )
+                                }
+                                Spacer(Modifier.width(4.dp))
+                                FilledIconButton(
+                                    onClick = { navigator.navigateTo(Route.Settings) },
+                                    colors = IconButtonDefaults.filledIconButtonColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                                    ),
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.settings_24px),
+                                        contentDescription = stringResource(R.string.settings)
+                                    )
+                                }
+                            }
                         }
+                    )
+                }
+            ) { innerPadding ->
+                HorizontalPager(
+                    userScrollEnabled = false,
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = innerPadding.calculateTopPadding())
+                ) { page ->
+                    when (HomeTab.entries[page]) {
+                        HomeTab.Journals -> JournalsPage(
+                            isSelected = pagerState.currentPage == 0,
+                            isSearchActive = isSearchActive,
+                            viewModel = journalsVM
+                        )
+                        HomeTab.Tags -> TagsPage()
+                        HomeTab.Timeline -> TimelinePage()
+                        HomeTab.Folders -> com.denser.june.presentation.screens.home.folders.FoldersPage(foldersVM, !sidebarOpen && pagerState.currentPage == HomeTab.Folders.ordinal, showFolderRows = false, onOpenSidebar = { sidebarOpen = true })
+                    }
+                }
+            }
+            AnimatedVisibility(
+                visible = !isSearchActive,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
+                HomeBottomBar(
+                    pagerState = pagerState,
+                    selectedCategory = selectedCategory,
+                    activeTag = activeTag,
+                    onFoldersClick = { sidebarOpen = true },
+                    onFabClick = {
+                        if (HomeTab.entries[pagerState.currentPage] == HomeTab.Folders) {
+                            navigator.navigateTo(Route.Editor(
+                                initialDate = if (isAutoTimeEnabled) System.currentTimeMillis() else null,
+                                initialFolderId = folderState.currentId
+                            ), isSingleTop = true)
+                        } else handleFabClick(
+                            currentTab = HomeTab.entries[pagerState.currentPage],
+                            activeTag = activeTag,
+                            isAutoTimeEnabled = isAutoTimeEnabled,
+                            navigator = navigator
+                        )
                     }
                 )
             }
-        ) { innerPadding ->
-            HorizontalPager(
-                userScrollEnabled = false,
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = innerPadding.calculateTopPadding())
-            ) { page ->
-                when (HomeTab.entries[page]) {
-                    HomeTab.Journals -> JournalsPage(
-                        isSelected = pagerState.currentPage == 0,
-                        isSearchActive = isSearchActive,
-                        viewModel = journalsVM
-                    )
-                    HomeTab.Tags -> TagsPage()
-                    HomeTab.Timeline -> TimelinePage()
-                    HomeTab.Folders -> com.denser.june.presentation.screens.home.folders.FoldersPage(foldersVM, pagerState.currentPage == HomeTab.Folders.ordinal)
-                }
-            }
-        }
-        AnimatedVisibility(
-            visible = !isSearchActive,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-        ) {
-            HomeBottomBar(
-                pagerState = pagerState,
-                selectedCategory = selectedCategory,
-                activeTag = activeTag,
-                onFabClick = {
-                    if (HomeTab.entries[pagerState.currentPage] == HomeTab.Folders) {
-                        navigator.navigateTo(Route.Editor(
-                            initialDate = if (isAutoTimeEnabled) System.currentTimeMillis() else null,
-                            initialFolderId = folderState.currentId
-                        ), isSingleTop = true)
-                    } else handleFabClick(
-                        currentTab = HomeTab.entries[pagerState.currentPage],
-                        activeTag = activeTag,
-                        isAutoTimeEnabled = isAutoTimeEnabled,
-                        navigator = navigator
-                    )
-                }
-            )
         }
     }
 }

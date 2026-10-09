@@ -32,6 +32,9 @@ class FakeJournalRepository : JournalRepository {
 
     override suspend fun getJournalById(id: String): Journal? = db[id]
 
+    override suspend fun findMatchingDraftId(title: String, content: String): String? =
+        db.values.firstOrNull { it.isDraft && it.deletedAt == null && it.title == title && it.content == content }?.id
+
     override suspend fun getLatestJournal(): Journal? =
         db.values.filter { it.deletedAt == null }.maxByOrNull { it.dateTime }
 

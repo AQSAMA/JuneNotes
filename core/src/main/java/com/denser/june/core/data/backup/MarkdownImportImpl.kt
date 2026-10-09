@@ -5,6 +5,7 @@ import android.net.Uri
 import com.denser.june.core.domain.backup.MarkdownImportRepo
 import com.denser.june.core.domain.logging.AppLogger
 import com.denser.june.core.domain.markdown.MarkdownEngine
+import com.denser.june.core.domain.markdown.MarkdownInput
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.utils.FileUtils
@@ -34,7 +35,7 @@ class MarkdownImportImpl(
                 try {
                     val displayName = FileUtils.getDisplayName(context, uri)
                     val contentString = context.contentResolver.openInputStream(uri)?.use { stream ->
-                        stream.bufferedReader(Charsets.UTF_8).readText()
+                        MarkdownInput.read(stream)
                     } ?: continue
 
                     val journal = MarkdownEngine.fromMarkdown(contentString, displayName)
@@ -99,7 +100,7 @@ class MarkdownImportImpl(
                                 extractedMediaMap["../$entryName"] = absPath
                                 extractedMediaMap[originalFileName] = absPath
                             } else if (entryName.endsWith(".md", ignoreCase = true) || entryName.endsWith(".markdown", ignoreCase = true)) {
-                                val mdText = String(zis.readBytes(), Charsets.UTF_8)
+                                val mdText = MarkdownInput.read(zis)
                                 val fileName = File(entryName).name
                                 val journal = MarkdownEngine.fromMarkdown(mdText, fileName)
                                 parsedJournals.add(journal)

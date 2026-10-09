@@ -31,6 +31,9 @@ interface JournalDao {
     @Query("SELECT * FROM journals ORDER BY dateTime DESC, createdAt DESC")
     suspend fun getAllJournalsIncludeDeletedSync(): List<JournalEntity>
 
+    @Query("SELECT id FROM journals WHERE isDraft = 1 AND deletedAt IS NULL AND title = :title AND content = :content ORDER BY createdAt DESC LIMIT 1")
+    suspend fun findMatchingDraftId(title: String, content: String): String?
+
     @Query("SELECT * FROM journals WHERE id = :id")
     suspend fun getJournalById(id: String): JournalEntity?
 

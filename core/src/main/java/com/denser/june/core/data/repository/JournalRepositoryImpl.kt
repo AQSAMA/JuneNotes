@@ -48,6 +48,9 @@ class JournalRepositoryImpl(
         return journalDao.getJournalById(id)?.asDomain()
     }
 
+    override suspend fun findMatchingDraftId(title: String, content: String): String? =
+        journalDao.findMatchingDraftId(title, content)
+
     override suspend fun getLatestJournal(): Journal? {
         return journalDao.getLatestJournal()?.asDomain()
     }

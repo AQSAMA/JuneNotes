@@ -90,7 +90,16 @@ class MainActivity : AppCompatActivity() {
     private fun handleIncomingIntent(intent: Intent?) {
         if (intent == null) return
         lifecycleScope.launch {
-            val route = externalIntentProcessor.processIntent(intent) ?: return@launch
+            val result = externalIntentProcessor.processIntent(intent)
+            val route = result.getOrElse { error ->
+                val message = if (error is com.denser.june.core.domain.markdown.MarkdownTooLargeException) {
+                    getString(R.string.markdown_file_too_large)
+                } else {
+                    getString(R.string.markdown_file_open_failed)
+                }
+                android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_LONG).show()
+                return@launch
+            } ?: return@launch
             if (lockState == LockState.UNLOCKED) {
                 pendingRoute = route
             } else {

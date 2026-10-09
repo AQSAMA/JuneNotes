@@ -41,6 +41,17 @@ import com.denser.june.core.R
 
 private val LocalFolderDragController = staticCompositionLocalOf<FolderDragController> { error("FolderDragHost is required") }
 
+/** Long-press the label to lift a folder; ordinary taps and vertical scroll stay native. */
+@Composable
+internal fun FolderDragSource(item: FolderDrag, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val controller = LocalFolderDragController.current
+    val key = remember { Any() }
+    DisposableEffect(controller, key) { onDispose { controller.unregisterSource(key) } }
+    Box(modifier.onGloballyPositioned {
+        controller.registerSource(key, item, it.boundsInRoot(), {}, immediate = false)
+    }) { content() }
+}
+
 @Composable
 fun FolderDragHandle(item: FolderDrag, onMove: () -> Unit) {
     val controller = LocalFolderDragController.current
@@ -87,7 +98,7 @@ fun FolderDragHost(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 val source = controller.sourceAt(origin + down.position) ?: return@awaitEachGesture
-                down.consume()
+                if (source.immediate) down.consume()
                 var start = down.position
                 var tapped = false
                 var cancelled = false
@@ -97,8 +108,11 @@ fun FolderDragHost(
                         val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
                         if (change == null || change.isConsumed) { cancelled = true; break }
                         start = change.position
-                        if (!change.pressed) { change.consume(); tapped = true; break }
-                        if ((start - down.position).getDistance() >= viewConfiguration.touchSlop) { change.consume(); break }
+                        if (!change.pressed) { if (source.immediate) change.consume(); tapped = true; break }
+                        if ((start - down.position).getDistance() >= viewConfiguration.touchSlop) {
+                            if (source.immediate) change.consume() else cancelled = true
+                            break
+                        }
                     }
                 }
                 if (cancelled) return@awaitEachGesture

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -171,12 +172,16 @@ fun JournalContentEditor(
                 TextField(
                     value = rawContent,
                     onValueChange = onMarkdownChange,
+                    enabled = !isLoading,
+                    // A large paragraph must scroll inside the field instead of measuring an unbounded canvas.
+                    maxLines = 20,
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
                             onFocusChanged(focusState.isFocused)
-                        },
+                        }
+                        .testTag(if (isMarkdownEnabled) "rich-markdown-editor" else "plain-markdown-editor"),
                     placeholder = {
                         Text(
                             stringResource(R.string.whats_on_your_mind),
@@ -193,6 +198,7 @@ fun JournalContentEditor(
             } else {
                 HyphenTextField(
                     state = state,
+                    enabled = !isLoading,
                     layoutDirection = layoutDirectionOverride,
                     linkConfig = linkConfig,
                     showDefaultSuggestionsPopup = false,
@@ -203,7 +209,8 @@ fun JournalContentEditor(
                         .focusRequester(focusRequester)
                         .onFocusChanged { focusState ->
                             onFocusChanged(focusState.isFocused)
-                        },
+                        }
+                        .testTag(if (isMarkdownEnabled) "rich-markdown-editor" else "plain-markdown-editor"),
                     placeholder = {
                         Text(
                             stringResource(R.string.whats_on_your_mind),

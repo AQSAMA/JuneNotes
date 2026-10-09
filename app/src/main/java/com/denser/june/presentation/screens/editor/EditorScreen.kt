@@ -494,7 +494,7 @@ fun EditorScreen() {
                         onFocusChanged = { isEditorFocused = it },
                         focusRequester = contentFocusRequester,
                         isLoading = state.isLoading,
-                        isMarkdownEnabled = isMarkdownEnabled,
+                        isMarkdownEnabled = isMarkdownEnabled && !state.usePlainTextEditor,
                         isKeyboardAutocorrectEnabled = isKeyboardAutocorrectEnabled,
                         isKeyboardCapitalizationEnabled = isKeyboardCapitalizationEnabled,
                         editorLayoutDirection = editorLayoutDirection,
@@ -508,7 +508,7 @@ fun EditorScreen() {
                             .padding(bottom = 16.dp)
                     )
                 }
-                if (isEditorFocused && isMarkdownEnabled) {
+                if (isEditorFocused && isMarkdownEnabled && !state.usePlainTextEditor) {
                     EditorToolbar(
                         state = hyphenState,
                         activeTrigger = activeTrigger,
