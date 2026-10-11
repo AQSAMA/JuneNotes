@@ -1,5 +1,15 @@
 [
   {
+    "version": "v1.3.0",
+    "changes": [
+      "Revamped media viewer with smooth pinch-to-zoom and pan.",
+      "Media info sheet showing camera details and file metadata.",
+      "Photo and video compression with live size previews.",
+      "Automatic compression for newly attached media.",
+      "Misc UI improvements and refinements."
+    ]
+  },
+  {
     "version": "v1.2.1",
     "changes": [
       "Fixed whitespace and saving issues in default editor.",
