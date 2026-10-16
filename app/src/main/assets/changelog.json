@@ -1,5 +1,14 @@
 [
   {
+    "version": "v1.3.1",
+    "changes": [
+      "Fixed map unrendering and blank flicker on app resume.",
+      "Refined location picker search bar and controls.",
+      "Fixed cloud sync analysis and progress tracking.",
+      "Misc UI refinements and translations."
+    ]
+  },
+  {
     "version": "v1.3.0",
     "changes": [
       "Revamped media viewer with smooth pinch-to-zoom and pan.",
