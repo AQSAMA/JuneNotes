@@ -22,7 +22,7 @@ internal fun folderAncestorPath(folders: List<Folder>, folderId: String?): List<
 internal fun folderTreeRows(folders: List<Folder>, expanded: Set<String>, query: String = ""): List<FolderTreeRow> {
     val live = folders.filterNot { it.deleted }
     val terms = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    val visible = if (terms.isEmpty()) null else buildSet {
+    val visible = if (terms.isEmpty()) null else buildSet<String> {
         val byId = live.associateBy { it.id }
         live.filter { folder -> terms.all { folder.name.contains(it, ignoreCase = true) } }.forEach { match ->
             var id: String? = match.id

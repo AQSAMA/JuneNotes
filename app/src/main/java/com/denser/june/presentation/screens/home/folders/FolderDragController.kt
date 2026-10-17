@@ -23,6 +23,7 @@ internal class FolderDragController(
     private val regions = linkedMapOf<Any, Region>()
     private val sources = linkedMapOf<Any, Source>()
     private var hoverJob: Job? = null
+    private var hoverGeneration = 0L
     private var scrolling = false
     private var navigationArmed = true
     private var navigationAnchor: Offset? = null
@@ -31,6 +32,8 @@ internal class FolderDragController(
     var pointer by mutableStateOf<Offset?>(null)
         private set
     var hovered by mutableStateOf<Any?>(null)
+        private set
+    var opening by mutableStateOf<Any?>(null)
         private set
     var viewport: Rect? = null
         set(value) { field = value; refresh() }
@@ -45,6 +48,7 @@ internal class FolderDragController(
     fun register(key: Any, bounds: Rect, accepts: (FolderDrag) -> Boolean, drop: (FolderDrag) -> Unit,
                  open: (() -> Unit)?, priority: Int) {
         val previous = regions.put(key, Region(bounds, accepts, drop, open, priority))
+        if (hovered == key && previous?.open != null && open == null) cancelHover()
         refresh(restartHover = hovered == key && previous?.open == null && open != null)
     }
     fun unregister(key: Any) { regions.remove(key); refresh() }
@@ -60,13 +64,13 @@ internal class FolderDragController(
     fun setScrolling(active: Boolean) {
         if (scrolling == active) return
         scrolling = active
-        if (active) hoverJob?.cancel() else select(hovered, restartHover = true)
+        if (active) cancelHover() else select(hovered, restartHover = true)
     }
     fun leave() { pointer = null; select(null) }
-    fun end() { item = null; pointer = null; navigationAnchor = null; scrolling = false; select(null); hoverJob?.cancel() }
+    fun end() { item = null; pointer = null; navigationAnchor = null; scrolling = false; select(null); cancelHover() }
     fun drop(fallback: (FolderDrag) -> Boolean): Boolean {
         refresh()
-        hoverJob?.cancel()
+        cancelHover()
         val value = item ?: return false
         val position = pointer ?: return false
         if (viewport?.contains(position) == false) return false
@@ -89,27 +93,34 @@ internal class FolderDragController(
         select(region?.takeIf { it.value.accepts(value!!) }?.key, restartHover)
     }
     private fun trace(message: () -> String) { debugTrace?.invoke(message) }
+    private fun cancelHover() { hoverGeneration++; hoverJob?.cancel(); hoverJob = null; opening = null }
     private fun select(key: Any?, restartHover: Boolean = false) {
         if (key == hovered && !restartHover) return
         val changed = key != hovered
         hovered = key
-        hoverJob?.cancel()
+        cancelHover()
         val region = regions[key] ?: return
         if (changed) onHover()
         trace { "select=${region.bounds} open=${region.open != null} armed=$navigationArmed scrolling=$scrolling" }
-        if (region.open != null && navigationArmed && !scrolling) hoverJob = scope.launch {
-            delay(650)
-            // Acceptance and callbacks can change without a pointer event or new layout.
-            // Resolve the live target again rather than opening the captured Region.
-            refresh()
-            val currentRegion = regions[key]
-            val value = item
-            if (hovered == key && value != null && navigationArmed && !scrolling &&
-                currentRegion?.open != null && currentRegion.accepts(value)) {
-                navigationArmed = false
-                navigationAnchor = pointer
-                trace { "open=${currentRegion.bounds}" }
-                currentRegion.open.invoke()
+        if (region.open != null && navigationArmed && !scrolling) {
+            val generation = hoverGeneration
+            opening = key
+            hoverJob = scope.launch {
+                try {
+                    delay(650)
+                    // Acceptance and callbacks can change without a pointer event or new layout.
+                    // Resolve the live target again rather than opening the captured Region.
+                    refresh()
+                    val currentRegion = regions[key]
+                    val value = item
+                    if (hovered == key && value != null && navigationArmed && !scrolling &&
+                        currentRegion?.open != null && currentRegion.accepts(value)) {
+                        navigationArmed = false
+                        navigationAnchor = pointer
+                        trace { "open=${currentRegion.bounds}" }
+                        currentRegion.open.invoke()
+                    }
+                } finally { if (hoverGeneration == generation) opening = null }
             }
         }
     }

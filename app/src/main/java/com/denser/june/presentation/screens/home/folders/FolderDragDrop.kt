@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
@@ -30,6 +29,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -39,8 +39,12 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.toSize
 import com.denser.june.core.R
+
+// Geometry is updated synchronously in layout; it does not need to trigger recomposition.
+private class FolderDragBounds { var rect: Rect? = null }
 
 private val LocalFolderDragController = staticCompositionLocalOf<FolderDragController> { error("FolderDragHost is required") }
 
@@ -49,28 +53,32 @@ private val LocalFolderDragController = staticCompositionLocalOf<FolderDragContr
 internal fun FolderDragSource(item: FolderDrag, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val controller = LocalFolderDragController.current
     val key = remember { Any() }
-    var bounds by remember { mutableStateOf<Rect?>(null) }
-    val sourceBounds = bounds
+    val bounds = remember { FolderDragBounds() }
     DisposableEffect(controller, key) { onDispose { controller.unregisterSource(key) } }
-    SideEffect { sourceBounds?.let { controller.registerSource(key, item, it, {}, immediate = false) } }
-    Box(modifier.onGloballyPositioned { bounds = it.boundsInRoot() }) { content() }
+    SideEffect { bounds.rect?.let { controller.registerSource(key, item, it, {}, immediate = false) } }
+    Box(modifier.onGloballyPositioned {
+        bounds.rect = it.boundsInRoot()
+        controller.registerSource(key, item, it.boundsInRoot(), {}, immediate = false)
+    }) { content() }
 }
 
 @Composable
 fun FolderDragHandle(item: FolderDrag, onMove: () -> Unit) {
     val controller = LocalFolderDragController.current
     val key = remember { Any() }
-    var bounds by remember { mutableStateOf<Rect?>(null) }
-    val sourceBounds = bounds
+    val bounds = remember { FolderDragBounds() }
     val currentMove by rememberUpdatedState(onMove)
     val description = stringResource(R.string.folder_drag_or_move)
     DisposableEffect(controller, key) { onDispose { controller.unregisterSource(key) } }
-    SideEffect { sourceBounds?.let { controller.registerSource(key, item, it, { currentMove() }) } }
+    SideEffect { bounds.rect?.let { controller.registerSource(key, item, it, { currentMove() }) } }
     Box(
         Modifier.size(48.dp).semantics {
             contentDescription = description
             onClick { currentMove(); true }
-        }.onGloballyPositioned { bounds = it.boundsInRoot() }, contentAlignment = Alignment.Center
+        }.onGloballyPositioned {
+            bounds.rect = it.boundsInRoot()
+            controller.registerSource(key, item, it.boundsInRoot(), { currentMove() })
+        }, contentAlignment = Alignment.Center
     ) { Icon(painterResource(R.drawable.drag_indicator_24px), null) }
 }
 
@@ -190,8 +198,7 @@ fun FolderDropSurface(
 ) {
     val controller = LocalFolderDragController.current
     val key = remember { Any() }
-    var bounds by remember { mutableStateOf<Rect?>(null) }
-    val regionBounds = bounds
+    val bounds = remember { FolderDragBounds() }
     val currentAccepts by rememberUpdatedState(accepts)
     val currentDrop by rememberUpdatedState(onDrop)
     val currentOpen by rememberUpdatedState(onHoverOpen)
@@ -200,14 +207,20 @@ fun FolderDropSurface(
     // Layout need not change when acceptance, hover navigation, or enabled changes.
     SideEffect {
         if (!enabled) controller.unregister(key)
-        else regionBounds?.let { controller.register(key, it, { currentAccepts(it) },
+        else bounds.rect?.let { controller.register(key, it, { currentAccepts(it) },
             { currentDrop(it) }, if (onHoverOpen == null) null else { { currentOpen?.invoke() } }, priority) }
     }
     val highlight by animateFloatAsState(if (hovered) 1f else 0f, label = "folder_drop_highlight")
-    val hold by animateFloatAsState(if (hovered && onHoverOpen != null) 1f else 0f,
-        animationSpec = tween(if (hovered) 650 else 0), label = "folder_hover_hold")
+    val opening = controller.opening == key
+    val hold by animateFloatAsState(if (opening) 1f else 0f,
+        animationSpec = tween(if (opening) 650 else 0), label = "folder_hover_hold")
     val tint = MaterialTheme.colorScheme.primary
-    Box(modifier.onGloballyPositioned { bounds = it.boundsInRoot() }.drawWithContent {
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    Box(modifier.onGloballyPositioned {
+        bounds.rect = it.boundsInRoot()
+        if (enabled) controller.register(key, it.boundsInRoot(), { currentAccepts(it) },
+            { currentDrop(it) }, if (onHoverOpen == null) null else { { currentOpen?.invoke() } }, priority)
+    }.drawWithContent {
         drawContent()
         // Draw above opaque row surfaces and keep the row's measurement unchanged.
         if (!insertion && highlight > 0f) {
@@ -217,8 +230,12 @@ fun FolderDropSurface(
             drawRoundRect(tint.copy(alpha = highlight), topLeft = Offset(inset, inset),
                 size = androidx.compose.ui.geometry.Size((size.width - inset * 2).coerceAtLeast(0f), (size.height - inset * 2).coerceAtLeast(0f)),
                 cornerRadius = radius, style = Stroke(2.dp.toPx()))
-            if (hold > 0f) drawLine(tint.copy(alpha = highlight), Offset(16.dp.toPx(), size.height - 4.dp.toPx()),
-                Offset(16.dp.toPx() + (size.width - 32.dp.toPx()).coerceAtLeast(0f) * hold, size.height - 4.dp.toPx()), 3.dp.toPx())
+            if (hold > 0f) {
+                val start = if (rtl) size.width - 16.dp.toPx() else 16.dp.toPx()
+                val distance = (size.width - 32.dp.toPx()).coerceAtLeast(0f) * hold * if (rtl) -1f else 1f
+                drawLine(tint.copy(alpha = highlight), Offset(start, size.height - 4.dp.toPx()),
+                    Offset(start + distance, size.height - 4.dp.toPx()), 3.dp.toPx())
+            }
         }
     }) {
         if (insertion) {

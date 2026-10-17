@@ -2,6 +2,7 @@ package com.denser.june.folders
 
 import com.denser.june.core.domain.folder.Folder
 import com.denser.june.presentation.screens.home.folders.folderTreeRows
+import com.denser.june.presentation.screens.home.folders.folderAncestorPath
 import com.denser.june.presentation.screens.home.folders.sidebarShouldOpen
 import org.junit.Assert.*
 import org.junit.Test

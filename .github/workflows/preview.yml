@@ -27,6 +27,8 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
+      - name: Validate independently of Preview signing
+        run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest --stacktrace
       - name: Restore stable preview signing key
         id: preview-key
         uses: actions/cache@v4
@@ -46,9 +48,12 @@ jobs:
             exit 1
           fi
           preview_cert="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
-          test "$preview_cert" = '8550b3514bf050d00665eea91f3a8cc939ec398576359fe73bc8725f05861448'
-      - name: Validate and build Preview APK
-        run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((102010 + GITHUB_RUN_NUMBER)) -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
+          if [ "$preview_cert" != '8550b3514bf050d00665eea91f3a8cc939ec398576359fe73bc8725f05861448' ]; then
+            echo '::error::Preview signing identity does not match. Restore the existing keystore via JUNE_PREVIEW_KEYSTORE_BASE64.'
+            exit 1
+          fi
+      - name: Build Preview APK
+        run: bash gradlew :app:assembleFossPreview -PpreviewVersionCode=$((102010 + GITHUB_RUN_NUMBER)) -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
       - name: Name Preview APK
         run: |
           cp app/build/outputs/apk/foss/preview/*.apk June-Preview.apk
@@ -126,6 +131,13 @@ jobs:
           target: google_apis
           disable-animations: true
           script: bash .github/scripts/check-folder-ui.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Debug APK (arm64)
+          path: app/build/outputs/apk/foss/debug/*arm64-v8a*.apk
+          if-no-files-found: warn
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:

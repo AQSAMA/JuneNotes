@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
 import com.denser.june.core.domain.folder.Folder
 import com.denser.june.presentation.components.JuneConfirmationDialog
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,10 +65,11 @@ internal fun FolderSidebar(
     LaunchedEffect(state.liveFolders) {
         if (!state.loading) expandedIds = expandedIds.filter { id -> state.liveFolders.any { it.id == id } }
     }
-    LaunchedEffect(state.currentId, folderSelected, query.isBlank(), dragging) {
-        if (folderSelected && query.isBlank() && !dragging) {
-            snapshotFlow { selectedRow }
-                .collect { index -> if (index >= 0) list.animateScrollToItem(index + 3) }
+    LaunchedEffect(state.currentId, folderSelected, query.isBlank()) {
+        if (folderSelected && query.isBlank() && state.currentId != null) {
+            // Reveal once per selection/entry, without jumping back after manual reordering.
+            val index = snapshotFlow { selectedRow }.first { it >= 0 }
+            list.animateScrollToItem(index + 3)
         }
     }
     val siblings = remember(state.liveFolders) {
