@@ -69,12 +69,10 @@ internal fun FolderSidebarLayout(
         }
         val requestedOpen by rememberUpdatedState(open)
         val visible by remember { derivedStateOf { requestedOpen || dragging || offset > 0f } }
-        BackHandler((open || dragging) && !interactions.folderDragActive) { dragging = false; releaseVelocity = 0f; onOpenChange(false) }
         val dragState = rememberDraggableState { delta -> offset = (offset + delta * direction).coerceIn(0f, width) }
         val gesture = Modifier.draggable(
             state = dragState, orientation = Orientation.Horizontal,
             enabled = !interactions.folderDragActive,
-            startDragImmediately = !interactions.folderDragActive && offset > 0f && offset < width,
             onDragStarted = { dragging = true; releaseVelocity = 0f },
             onDragStopped = { velocity ->
                 releaseVelocity = velocity * direction
@@ -114,5 +112,11 @@ internal fun FolderSidebarLayout(
                     dragging = false
                 })
             .testTag("folder-sidebar-edge"))
+        // Register after the main pane so its navigation handlers cannot consume drawer Back.
+        BackHandler((open || dragging) && !interactions.folderDragActive) {
+            dragging = false
+            releaseVelocity = 0f
+            onOpenChange(false)
+        }
     }
 }

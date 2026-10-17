@@ -3,6 +3,7 @@ package com.denser.june.folders
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,12 +31,17 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 @RunWith(AndroidJUnit4::class)
 class FolderSidebarTest {
     @get:Rule val ui = createComposeRule()
+    @get:Rule(order = 1) val captureFailures = object : TestWatcher() {
+        override fun failed(error: Throwable, description: Description) { screenshot("failed-${description.methodName}") }
+    }
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val repository get() = GlobalContext.get().get<FolderRepository>()
     private fun model() = FoldersVM(repository, GlobalContext.get().get<JournalRepository>(), GlobalContext.get().get(), SavedStateHandle())
@@ -178,6 +184,9 @@ class FolderSidebarTest {
             inject(MotionEvent.ACTION_DOWN, from, down)
             try {
                 SystemClock.sleep(750)
+                ui.mainClock.advanceTimeBy(800)
+                ui.waitForIdle()
+                ui.onNodeWithTag("folder-drag-preview").assertExists()
                 val to = from - Offset(90f, 0f)
                 move(from, to, down)
                 ui.onNodeWithTag("folder-drag-preview").assertExists()
@@ -212,6 +221,24 @@ class FolderSidebarTest {
         ui.onNodeWithTag("folder-sidebar-scrim").performClick()
         ui.onNodeWithTag("folder-sidebar").assertDoesNotExist()
         assertFalse(open)
+    }
+
+    @Test fun sidebarBackTakesPriorityOverMainPaneNavigation() {
+        var open by mutableStateOf(true)
+        var mainBacks = 0
+        ui.setContent { Theme {
+            FolderSidebarLayout(open, { open = it }, { Text("Drawer") }) {
+                BackHandler { mainBacks++ }
+                Text("Main")
+            }
+        } }
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        ui.waitForIdle()
+        assertFalse(open)
+        assertEquals(0, mainBacks)
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        ui.waitForIdle()
+        assertEquals(1, mainBacks)
     }
 
     private fun verifyReveal(direction: LayoutDirection) {
