@@ -16,6 +16,15 @@ interface JournalDao {
     @Update
     suspend fun updateJournal(journal: JournalEntity)
 
+    @Transaction
+    suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long, syncThreshold: Long): Boolean {
+        val current = getJournalById(id) ?: return false
+        if (current.images != expected) return false
+        val updatedAt = maxOf(modifiedAt, current.updatedAt ?: 0L, (current.syncedAt ?: 0L) + syncThreshold + 1L)
+        updateJournal(current.copy(images = repaired, updatedAt = updatedAt))
+        return true
+    }
+
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun deleteJournal(id: String)
 

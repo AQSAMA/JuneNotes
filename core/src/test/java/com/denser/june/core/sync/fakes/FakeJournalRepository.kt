@@ -50,6 +50,14 @@ class FakeJournalRepository : JournalRepository {
         return journal.id
     }
 
+    override suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean {
+        val current = db[id] ?: return false
+        if (current.images != expected) return false
+        seed(current.copy(images = repaired, updatedAt = maxOf(modifiedAt, current.updatedAt ?: 0L,
+            (current.syncedAt ?: 0L) + com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS + 1L)))
+        return true
+    }
+
     override suspend fun updateJournal(journal: Journal) { insertJournal(journal) }
 
     override suspend fun softDeleteJournal(id: String) {

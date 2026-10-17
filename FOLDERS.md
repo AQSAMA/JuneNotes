@@ -24,6 +24,8 @@ The drawer preserves its reveal fraction on window resizing and clears fling mom
 
 Upstream sync: June v1.3.1 (`f7501172211624bdfdc2690a8c6794d2483bfafb`) is merged, including media compression, lightbox, map, and sync fixes. The folder action uses the new upstream connected action bar. Database and folder backup schemas remain unchanged.
 
+Startup data repair version 4 replaces upstream's unsafe media filename rename. It preserves source files, verifies destination content, retains original paths on collisions or failed copies, and updates attachments transactionally without overwriting concurrent note edits. Failed database writes remain retryable, and repaired references are marked for sync.
+
 ## Backups and sync
 
 Room migration 5→6 adds `folders`, `folder_journals`, and a local sync acknowledgment table without altering `journals` or tags. UUID folder IDs and nullable parent IDs allow arbitrary depth; moves and ordering are transactional. Parent validation prevents cycles. Imported or concurrent cycles are repaired deterministically. Deleted folders and detached note memberships retain versioned records so older sync snapshots cannot resurrect them.

@@ -20,6 +20,7 @@ import com.denser.june.core.data.database.journal.JournalDatabase
 import com.denser.june.core.utils.computeSHA256
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import com.denser.june.core.data.database.song.SongLibraryDao
@@ -88,7 +89,7 @@ class SyncManager(
     private val songMediaArtDir = File(songMediaDir, "art").apply { if (!exists()) mkdirs() }
     companion object {
         const val SYNC_THRESHOLD_MS = 2000L
-        const val CURRENT_DATA_REPAIR_VERSION = 3
+        const val CURRENT_DATA_REPAIR_VERSION = 4
     }
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
@@ -115,15 +116,15 @@ class SyncManager(
 
         applicationScope.launch(Dispatchers.IO) {
             val lastVersion = syncPrefs.getLastCompletedDataRepairVersion().first()
+            if (lastVersion >= CURRENT_DATA_REPAIR_VERSION) return@launch
             if (lastVersion < 1) {
                 repairDoubleConcatenatedImages()
             }
             if (lastVersion < 2) {
                 repairSongDetailsAndPaths()
             }
-            if (lastVersion < 3) {
-                repairRepeatedMediaFileNames()
-            }
+            // Version 4 also revisits names skipped by the unsafe version 3 repair.
+            if (!repairRepeatedMediaFileNames()) return@launch
             syncPrefs.setLastCompletedDataRepairVersion(CURRENT_DATA_REPAIR_VERSION)
         }
 
@@ -295,40 +296,21 @@ class SyncManager(
         }
     }
 
-    private suspend fun repairRepeatedMediaFileNames() {
-        try {
+    private suspend fun repairRepeatedMediaFileNames(): Boolean {
+        return try {
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Starting programmatic repeated media file name repair...")
-            val journals = journalRepo.getAllJournalsIncludeDeletedSync()
-            var repairedCount = 0
-            journals.forEach { journal ->
-                var modified = false
-                val cleanedImages = journal.images.map { path ->
-                    val file = File(path)
-                    val name = file.name
-                    if (name.startsWith("media_") && name.contains("_media_")) {
-                        modified = true
-                        val cleanedName = "media_" + name.substringAfterLast("_media_")
-                        val cleanedFile = File(file.parentFile ?: mediaDir, cleanedName)
-                        if (file.exists() && !cleanedFile.exists()) {
-                            file.renameTo(cleanedFile)
-                        }
-                        cleanedFile.absolutePath
-                    } else {
-                        path
-                    }
-                }
-                if (modified) {
-                    repairedCount++
-                    journalRepo.insertJournal(journal.copy(images = cleanedImages))
-                }
-            }
+            val repairedCount = repairRepeatedMediaPaths(journalRepo, mediaDir)
             AppLogger.d(
                 AppLogger.Category.SYNC,
                 "SyncManager",
                 "Repeated media file name repair completed. Repaired $repairedCount journals."
             )
+            true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "Error repairing repeated media file names", e)
+            false
         }
     }
 

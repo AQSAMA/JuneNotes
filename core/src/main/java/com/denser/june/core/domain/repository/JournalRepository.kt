@@ -21,6 +21,8 @@ interface JournalRepository {
     fun getJournalsByMultipleTags(tags: List<String>): Flow<List<Journal>>
     
     suspend fun insertJournal(journal: Journal): String
+    /** Atomically replace only the expected attachment list, retaining concurrent note edits. */
+    suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean
     suspend fun softDeleteJournal(id: String)
     suspend fun restoreJournal(id: String)
     suspend fun hardDeleteJournal(id: String)
