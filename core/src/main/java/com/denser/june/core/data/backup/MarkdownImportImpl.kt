@@ -88,8 +88,11 @@ class MarkdownImportImpl(
                                 folders = com.denser.june.core.domain.folder.FolderBackupCodec.read(zis)
                             } else if (entryName.startsWith("media/")) {
                                 val originalFileName = File(entryName).name
-                                val extension = originalFileName.substringAfterLast('.', "jpg")
-                                val safeFileName = "media_${System.currentTimeMillis()}_${(0..9999).random()}_$originalFileName"
+                                val safeFileName = if (originalFileName.startsWith("media_")) {
+                                    originalFileName
+                                } else {
+                                    "media_${System.currentTimeMillis()}_${(0..9999).random()}_$originalFileName"
+                                }
                                 val targetFile = File(mediaDir, safeFileName)
                                 FileOutputStream(targetFile).use { fos ->
                                     zis.copyTo(fos)

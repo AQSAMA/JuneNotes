@@ -17,7 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import com.denser.june.core.domain.model.SongDetails
-import com.denser.june.core.utils.FileUtils
+import com.denser.june.core.media.storage.SongMediaStorage
 import com.denser.june.core.utils.toAudioTimestamp
 import com.denser.june.presentation.components.RestrictedAsyncImage
 import com.denser.june.presentation.utils.rememberSongPlayerState
@@ -32,12 +32,16 @@ fun TrimmerStepView(
     onSaveClip: (song: SongDetails, startMs: Long, endMs: Long?) -> Unit
 ) {
     val localPath = songDetails.localPreviewPath
-    var totalDurationMs by remember(songDetails) { mutableLongStateOf(30_000L) }
+    val fileDuration = remember(localPath) {
+        SongMediaStorage.getAudioDurationMs(localPath)
+    }
+    val initialTotal = fileDuration ?: maxOf(30_000L, songDetails.clipEndMs ?: 30_000L)
+    var totalDurationMs by remember(songDetails) { mutableLongStateOf(initialTotal) }
 
     LaunchedEffect(localPath) {
-        if (localPath != null) {
+        if (localPath != null && fileDuration == null) {
             withContext(Dispatchers.IO) {
-                val dur = FileUtils.getAudioDurationMs(localPath)
+                val dur = SongMediaStorage.getAudioDurationMs(localPath)
                 if (dur != null && dur > 0L) {
                     totalDurationMs = dur
                 }
@@ -45,29 +49,45 @@ fun TrimmerStepView(
         }
     }
 
-    var clipDurationMs by remember(songDetails) {
+    val initialClipDuration = remember(songDetails, initialTotal) {
         val start = songDetails.clipStartMs
         val end = songDetails.clipEndMs
-        val initialDuration = if (end != null && end > start) {
-            end - start
+        if (end != null && end > start) {
+            (end - start).coerceIn(5_000L, initialTotal.coerceAtLeast(5_000L))
         } else {
-            totalDurationMs
+            initialTotal
         }
-        mutableLongStateOf(initialDuration.coerceIn(5_000L, totalDurationMs.coerceAtLeast(5_000L)))
     }
+    var clipDurationMs by remember(songDetails) { mutableLongStateOf(initialClipDuration) }
 
     var startMs by remember(songDetails) {
-        val maxStart = (totalDurationMs - clipDurationMs).coerceAtLeast(0L)
+        val maxStart = (initialTotal - initialClipDuration).coerceAtLeast(0L)
         mutableLongStateOf(songDetails.clipStartMs.coerceIn(0L, maxStart))
     }
 
+    var hasAdjustedToLoadedDuration by remember(songDetails) { mutableStateOf(fileDuration != null) }
+
     LaunchedEffect(totalDurationMs) {
-        if (clipDurationMs > totalDurationMs) {
-            clipDurationMs = totalDurationMs.coerceAtLeast(5_000L)
-        }
-        val maxStart = (totalDurationMs - clipDurationMs).coerceAtLeast(0L)
-        if (startMs > maxStart) {
-            startMs = maxStart
+        if (!hasAdjustedToLoadedDuration && totalDurationMs > 0L) {
+            val start = songDetails.clipStartMs
+            val end = songDetails.clipEndMs
+            val dur = if (end != null && end > start) {
+                (end - start).coerceIn(5_000L, totalDurationMs.coerceAtLeast(5_000L))
+            } else {
+                totalDurationMs
+            }
+            clipDurationMs = dur
+            val maxStart = (totalDurationMs - dur).coerceAtLeast(0L)
+            startMs = start.coerceIn(0L, maxStart)
+            hasAdjustedToLoadedDuration = true
+        } else {
+            if (clipDurationMs > totalDurationMs) {
+                clipDurationMs = totalDurationMs.coerceAtLeast(5_000L)
+            }
+            val maxStart = (totalDurationMs - clipDurationMs).coerceAtLeast(0L)
+            if (startMs > maxStart) {
+                startMs = maxStart
+            }
         }
     }
 

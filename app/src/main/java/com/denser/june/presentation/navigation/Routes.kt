@@ -28,13 +28,15 @@ sealed interface Route {
     @Serializable
     data class JournalMediaDetail(
         val journalId: String,
-        val initialIndex: Int
+        val initialIndex: Int,
+        val dateTime: Long? = null
     ) : Route
 
     @Serializable
     data class MediaViewerRoute(
         val mediaPaths: List<String>,
-        val initialIndex: Int
+        val initialIndex: Int,
+        val dateTime: Long? = null
     ) : Route
 
     @Serializable

@@ -35,9 +35,14 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
+import com.denser.june.presentation.components.ConnectedBarAction
+import com.denser.june.presentation.components.JuneConnectedActionBar
 import com.denser.june.core.domain.model.Journal
+import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.core.domain.model.enums.EditorLayoutDirection
 import com.denser.june.core.domain.model.enums.TimeFormat
 import com.denser.june.core.domain.preferences.JournalPreferences
@@ -126,18 +131,26 @@ fun EditorScreen() {
         }
     }
 
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.onAction(EditorAction.Refresh)
+    }
+
     BackHandler { onBack() }
 
     val mediaOperations = remember(state.images) {
         MediaOperations(
             onItemSheetToggle = { dialogState.showAddItemSheet = it },
-            onRemoveMedia = { viewModel.onAction(EditorAction.RemoveImage(it)) },
+            onRemoveMedia = {
+                CompressUtils.cleanUncompressedOriginalFile(context, it)
+                viewModel.onAction(EditorAction.RemoveImage(it))
+            },
             onMoveToFront = { viewModel.onAction(EditorAction.MoveImageToFront(it)) },
             onMediaClick = { path ->
                 navigator.navigateTo(
                     Route.JournalMediaDetail(
                         journalId = state.journalId ?: "",
-                        initialIndex = state.images.reversed().indexOf(path)
+                        initialIndex = state.images.reversed().indexOf(path),
+                        dateTime = state.dateTime
                     ),
                     isSingleTop = true
                 )
@@ -233,7 +246,10 @@ fun EditorScreen() {
                             onClick = {
                                 keyboardController?.hide()
                                 focusManager.clearFocus(force = true)
-                                if (!state.isLoading) viewModel.onAction(EditorAction.SaveJournal)
+                                if (!state.isLoading) {
+                                    state.images.forEach { CompressUtils.cleanUncompressedOriginalFile(context, it) }
+                                    viewModel.onAction(EditorAction.SaveJournal)
+                                }
                             },
                         ) {
                             Text(stringResource(R.string.save))
@@ -297,6 +313,7 @@ fun EditorScreen() {
                                 mediaOperations = mediaOperations,
                                 songDetails = state.songDetails,
                                 location = state.location,
+                                processingMediaPaths = state.processingMediaPaths,
                                 onShowAllClick = {
                                     navigator.navigateTo(
                                         Route.JournalMedia(journalId = state.journalId ?: ""),
@@ -344,97 +361,46 @@ fun EditorScreen() {
                                 .padding(horizontal = 12.dp, vertical = 0.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Button(
-                                onClick = {
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    dialogState.datePickerInitialTab = 0
-                                    dialogState.showDatePicker = true
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = 0.4f
-                                    ),
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        JuneConnectedActionBar(
+                            actions = listOf(
+                                ConnectedBarAction(
+                                    iconRes = R.drawable.today_24px,
+                                    contentDescriptionRes = R.string.date_time_picker,
+                                    onClick = {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        dialogState.datePickerInitialTab = 0
+                                        dialogState.showDatePicker = true
+                                    }
                                 ),
-                                shape = ButtonGroupDefaults.connectedLeadingButtonShapes().shape,
-                                contentPadding = PaddingValues(0.dp),
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .width(38.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.today_24px),
-                                    contentDescription = stringResource(R.string.date_time_picker),
-                                    modifier = Modifier.size(16.dp)
+                                ConnectedBarAction(
+                                    label = formattedDate,
+                                    onClick = {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        dialogState.datePickerInitialTab = 0
+                                        dialogState.showDatePicker = true
+                                    }
+                                ),
+                                ConnectedBarAction(
+                                    iconRes = if (formattedTime == null) R.drawable.schedule_24px else null,
+                                    label = formattedTime,
+                                    contentDescriptionRes = R.string.time_format,
+                                    onClick = {
+                                        keyboardController?.hide()
+                                        focusManager.clearFocus()
+                                        dialogState.datePickerInitialTab = 1
+                                        dialogState.showDatePicker = true
+                                    }
                                 )
-                            }
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Button(
-                                onClick = {
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    dialogState.datePickerInitialTab = 0
-                                    dialogState.showDatePicker = true
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = 0.4f
-                                    ),
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                shape = ButtonGroupDefaults.connectedMiddleButtonShapes().shape,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                                modifier = Modifier.height(32.dp)
-                            ) {
-                                Text(
-                                    text = formattedDate,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                    softWrap = false
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Button(
-                                onClick = {
-                                    keyboardController?.hide()
-                                    focusManager.clearFocus()
-                                    dialogState.datePickerInitialTab = 1
-                                    dialogState.showDatePicker = true
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = 0.4f
-                                    ),
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                shape = ButtonGroupDefaults.connectedTrailingButtonShapes().shape,
-                                contentPadding = PaddingValues(
-                                    horizontal = if (formattedTime != null) 12.dp else 0.dp,
-                                    vertical = 0.dp
-                                ),
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .then(if (formattedTime == null) Modifier.width(38.dp) else Modifier)
-                            ) {
-                                if (formattedTime == null) {
-                                    Icon(
-                                        painterResource(R.drawable.schedule_24px),
-                                        null,
-                                        Modifier.size(16.dp)
-                                    )
-                                } else {
-                                    Text(
-                                        text = formattedTime,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.weight(1f))
+                            ),
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            checkedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            buttonHeight = 32.dp,
+                            iconOnlyWidth = 38.dp
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
                             Button(
                                 onClick = {
                                     keyboardController?.hide()
