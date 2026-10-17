@@ -9,6 +9,7 @@ import kotlinx.coroutines.*
 internal class FolderDragController(
     private val scope: CoroutineScope,
     private val debugTrace: ((() -> String) -> Unit)? = null,
+    private val navigationSlop: Float = 8f,
     private val onHover: () -> Unit
 ) {
     private data class Region(
@@ -43,15 +44,15 @@ internal class FolderDragController(
 
     fun register(key: Any, bounds: Rect, accepts: (FolderDrag) -> Boolean, drop: (FolderDrag) -> Unit,
                  open: (() -> Unit)?, priority: Int) {
-        regions[key] = Region(bounds, accepts, drop, open, priority)
-        refresh()
+        val previous = regions.put(key, Region(bounds, accepts, drop, open, priority))
+        refresh(restartHover = hovered == key && previous?.open == null && open != null)
     }
     fun unregister(key: Any) { regions.remove(key); refresh() }
     fun begin(value: FolderDrag) { end(); item = value; navigationArmed = true }
     fun move(position: Offset) {
         trace { "move=$position viewport=$viewport" }
         // Navigation is deliberately re-armed by finger movement, never by new rows appearing.
-        val rearmed = !navigationArmed && navigationAnchor?.let { (it - position).getDistance() > 8f } == true
+        val rearmed = !navigationArmed && navigationAnchor?.let { (it - position).getDistance() > navigationSlop } == true
         if (rearmed) navigationArmed = true
         pointer = position
         refresh(rearmed)

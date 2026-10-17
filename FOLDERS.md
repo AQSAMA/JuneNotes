@@ -14,6 +14,16 @@ Open the folder icon in the existing bottom bar. Folders are independent of spac
 
 Folder and note order is stored separately; folders appear first, then notes. Unfiled notes appear at the folder root. The original journal feed is unchanged. Folder rows show separate folder and note counts. Insertion feedback overlays existing rows during a drag without changing their measurements. Scrolling and drop detection work independently, including newly visible lazy rows. Hover opening pauses while the list scrolls to avoid entering folders moving under a stationary finger. Hover navigation retains the same touch session and does not automatically descend again until the finger moves.
 
+## Sidebar and navigation
+
+The sidebar includes a folder search field. Search reveals matching folders and their ancestors even when a branch is collapsed; clearing it restores your manual expansion choices. The arrow beside the Folders heading expands or collapses all branches. The selected folder is revealed on entry. Filtered search results support moving into folders; sibling insertion targets are available after clearing search so hidden siblings cannot make reordering ambiguous.
+
+Hold a folder label, or use the grip in Organize folders, to drag. Drawer swiping pauses during a folder drag. Android Back first cancels the drag, then closes the sidebar on the next press. Drop highlights draw above row backgrounds, with a hold indicator for expandable destinations. Edge scrolling owns one continuous scroll session and interrupts prior flings. Navigation requires a deliberate finger movement after each hover expansion, scaled for screen density.
+
+The drawer preserves its reveal fraction on window resizing and clears fling momentum after settling. Folder navigation uses directional transitions respecting RTL and restores the scroll position for each visited folder. The move sheet starts in the current location, offers tappable ancestor breadcrumbs, shows complete parent paths in search results, and waits for repository data before allowing a move.
+
+Upstream sync: June v1.3.1 (`f7501172211624bdfdc2690a8c6794d2483bfafb`) is merged, including media compression, lightbox, map, and sync fixes. The folder action uses the new upstream connected action bar. Database and folder backup schemas remain unchanged.
+
 ## Backups and sync
 
 Room migration 5→6 adds `folders`, `folder_journals`, and a local sync acknowledgment table without altering `journals` or tags. UUID folder IDs and nullable parent IDs allow arbitrary depth; moves and ordering are transactional. Parent validation prevents cycles. Imported or concurrent cycles are repaired deterministically. Deleted folders and detached note memberships retain versioned records so older sync snapshots cannot resurrect them.

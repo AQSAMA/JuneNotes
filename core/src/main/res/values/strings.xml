@@ -621,4 +621,6 @@
     <string name="folder_organize">Organize folders</string>
     <string name="folder_drop_root">Move to top level</string>
     <string name="folder_sidebar_empty">Create a folder to organize your notes</string>
+    <string name="folder_expand_all">Expand all folders</string>
+    <string name="folder_collapse_all">Collapse all folders</string>
 </resources>

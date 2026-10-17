@@ -31,4 +31,29 @@ class FolderTreeTest {
         assertTrue(sidebarShouldOpen(20f, 300f, 600f, 400f))
         assertFalse(sidebarShouldOpen(280f, 300f, -600f, 400f))
     }
+    @Test fun searchRevealsMatchesThroughCollapsedBranchesWithoutChangingManualExpansion() {
+        val expanded = setOf("b")
+        val matches = folderTreeRows(folders, expanded, "  nested  ")
+        assertEquals(listOf("a", "a1", "deep"), matches.map { it.folder.id })
+        assertEquals(listOf(0, 1, 2), matches.map { it.depth })
+        assertEquals(listOf("a", "b"), folderTreeRows(folders, expanded).map { it.folder.id })
+        assertTrue(folderTreeRows(folders, expanded, "missing").isEmpty())
+    }
+    @Test fun searchRequiresEveryTermAndSupportsArabicNames() {
+        val extra = folders + Folder("ar", "ملاحظات الأدوية", "deep")
+        assertEquals(listOf("a", "a1"), folderTreeRows(extra, emptySet(), "FIRST child").map { it.folder.id })
+        assertEquals("ar", folderTreeRows(extra, emptySet(), "الأدوية").last().folder.id)
+        assertTrue(folderTreeRows(extra, emptySet(), "first nested").isEmpty())
+    }
+    @Test fun ancestorPathsHandleMissingDeletedAndCyclicParents() {
+        assertEquals(listOf("a", "a1", "deep"), folderAncestorPath(folders, "deep").map { it.id })
+        assertTrue(folderAncestorPath(folders, "deleted").isEmpty())
+        val cycle = listOf(Folder("a", "A", "b"), Folder("b", "B", "a"))
+        assertEquals(setOf("a", "b"), folderAncestorPath(cycle, "a").map { it.id }.toSet())
+        assertEquals(listOf("orphan"), folderAncestorPath(listOf(Folder("orphan", "Orphan", "missing")), "orphan").map { it.id })
+    }
+    @Test fun zeroWidthDrawerCannotOpenFromAVelocityAlone() {
+        assertFalse(sidebarShouldOpen(0f, 0f, 900f, 400f))
+        assertFalse(sidebarShouldOpen(0f, Float.NaN, 900f, 400f))
+    }
 }

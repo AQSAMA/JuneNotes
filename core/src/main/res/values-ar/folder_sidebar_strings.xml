@@ -9,4 +9,6 @@
     <string name="folder_organize">ترتيب المجلدات</string>
     <string name="folder_drop_root">نقل إلى المستوى الرئيسي</string>
     <string name="folder_sidebar_empty">أنشئ مجلدًا لتنظيم ملاحظاتك</string>
+    <string name="folder_expand_all">توسيع كل المجلدات</string>
+    <string name="folder_collapse_all">طي كل المجلدات</string>
 </resources>

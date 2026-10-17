@@ -16,9 +16,12 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +57,8 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
     var moveItem by remember { mutableStateOf<FolderDrag?>(null) }
     var addExisting by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
+    val paneState = rememberSaveableStateHolder()
+    val direction = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
     val pathScroll = rememberScrollState()
     LaunchedEffect(state.currentId, pathScroll.maxValue) { pathScroll.animateScrollTo(pathScroll.maxValue) }
     var addingNote by remember { mutableStateOf(false) }
@@ -98,11 +103,15 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
             AnimatedContent(
                 targetState = state.currentId,
                 transitionSpec = {
+                    val navigationDirection = direction * if (folderAncestorPath(state.liveFolders, targetState).size >=
+                        folderAncestorPath(state.liveFolders, initialState).size) 1 else -1
                     if (dragging) fadeIn(tween(0)) togetherWith fadeOut(tween(0))
-                    else (fadeIn(tween(180)) + slideInVertically { it / 12 }) togetherWith (fadeOut(tween(100)) + slideOutVertically { -it / 12 })
+                    else (fadeIn(tween(180)) + slideInHorizontally(tween(220)) { it / 10 * navigationDirection }) togetherWith
+                        (fadeOut(tween(120)) + slideOutHorizontally(tween(220)) { -it / 10 * navigationDirection })
                 },
                 label = "folder_navigation"
             ) { displayedId ->
+                paneState.SaveableStateProvider(displayedId ?: "root") {
                 // Use the target ID for each animated pane, avoiding duplicate note IDs during transitions.
                 val pane = remember(state, displayedId) { state.copy(currentId = displayedId) }
                 val listState = rememberLazyListState()
@@ -208,6 +217,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
                     FolderDragAutoScroll(listState, Modifier.fillMaxSize().padding(bottom = UiUtils.BOTTOM_BAR_PADDING)) { }
                 }
                 }
+            }
             }
         }
         SnackbarHost(snack, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = UiUtils.BOTTOM_BAR_PADDING))

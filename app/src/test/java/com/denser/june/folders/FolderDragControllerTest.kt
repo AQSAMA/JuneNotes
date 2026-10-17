@@ -10,6 +10,62 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FolderDragControllerTest {
+    @Test fun addingHoverNavigationToAnExistingRegionStartsAFullHold() = runTest {
+        var opens = 0
+        val controller = FolderDragController(backgroundScope) { }
+        val bounds = Rect(0f, 0f, 100f, 100f)
+        controller.register("target", bounds, { true }, {}, null, 0)
+        controller.begin(FolderDrag("source", true))
+        controller.move(Offset(50f, 50f))
+        advanceTimeBy(1000)
+        controller.register("target", bounds, { true }, {}, { opens++ }, 0)
+        runCurrent()
+        advanceTimeBy(649)
+        runCurrent()
+        assertEquals(0, opens)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(1, opens)
+        controller.end()
+    }
+
+    @Test fun navigationRequiresDeliberateMovementInTheConfiguredDensity() = runTest {
+        var opens = 0
+        val controller = FolderDragController(backgroundScope, navigationSlop = 36f) { }
+        val bounds = Rect(0f, 0f, 200f, 200f)
+        controller.register("parent", bounds, { true }, {}, {
+            opens++
+            controller.unregister("parent")
+            controller.register("child", bounds, { true }, {}, { opens++ }, 0)
+        }, 0)
+        controller.begin(FolderDrag("source", true))
+        controller.move(Offset(50f, 50f))
+        runCurrent()
+        advanceTimeBy(651)
+        runCurrent()
+        assertEquals(1, opens)
+        controller.move(Offset(60f, 50f))
+        advanceTimeBy(1000)
+        runCurrent()
+        assertEquals(1, opens)
+        controller.move(Offset(90f, 50f))
+        runCurrent()
+        advanceTimeBy(651)
+        runCurrent()
+        assertEquals(2, opens)
+        controller.end()
+    }
+
+    @Test fun sourceMetadataRefreshesWithoutChangingItsBounds() = runTest {
+        val controller = FolderDragController(backgroundScope) { }
+        val bounds = Rect(0f, 0f, 100f, 100f)
+        controller.registerSource("source", FolderDrag("a", true, "Old"), bounds, {})
+        controller.registerSource("source", FolderDrag("a", true, "Renamed"), bounds, {})
+        assertEquals("Renamed", controller.sourceAt(Offset(50f, 50f))?.item?.label)
+        controller.unregisterSource("source")
+        assertNull(controller.sourceAt(Offset(50f, 50f)))
+    }
+
     @Test fun targetRejectedDuringTheHoldDoesNotOpenWithoutFurtherPointerEvents() = runTest {
         var accepted = true
         var opened = false
