@@ -57,7 +57,9 @@ jobs:
           echo 'available=true' >> "$GITHUB_OUTPUT"
       - name: Build Preview APK
         if: steps.signing.outputs.available == 'true'
-        run: bash gradlew :app:assembleFossPreview -PpreviewVersionCode=$((102010 + GITHUB_RUN_NUMBER)) -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
+        run: |
+          preview_code="$(bash .github/scripts/preview-version-code.sh)"
+          bash gradlew :app:assembleFossPreview -PpreviewVersionCode="$preview_code" -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
       - name: Name Preview APK
         if: steps.signing.outputs.available == 'true'
         run: |

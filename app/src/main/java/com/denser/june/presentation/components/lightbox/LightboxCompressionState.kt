@@ -18,8 +18,8 @@ import kotlinx.coroutines.withContext
 class LightboxCompressionState(
     val currentPath: String?,
     private val context: Context,
-    private val photoQualityPref: Int,
-    private val videoQualityPref: Int,
+    private var photoQualityPref: Int,
+    private var videoQualityPref: Int,
     private val isSaveInProgress: () -> Boolean
 ) {
     var isCompressMode by mutableStateOf(false)
@@ -32,6 +32,12 @@ class LightboxCompressionState(
 
     val currentPreview: CompressionPreviewResult?
         get() = selectedPreset?.let { sessionPreviewCache[it] }
+
+    fun updateQualityPreferences(photoQuality: Int, videoQuality: Int) {
+        photoQualityPref = photoQuality
+        videoQualityPref = videoQuality
+        if (!isCompressMode && !isCompressing) selectedPreset = pickDefaultPreset()
+    }
 
     fun pickDefaultPreset(): CompressionPreset {
         return appliedPreset ?: run {
@@ -96,6 +102,10 @@ fun rememberLightboxCompressionState(
             videoQualityPref = videoQualityPref,
             isSaveInProgress = isSaveInProgress
         )
+    }
+
+    LaunchedEffect(state, photoQualityPref, videoQualityPref) {
+        state.updateQualityPreferences(photoQualityPref, videoQualityPref)
     }
 
     DisposableEffect(currentPath) {

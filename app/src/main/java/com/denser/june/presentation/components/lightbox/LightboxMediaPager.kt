@@ -41,7 +41,7 @@ fun LightboxMediaPager(
         state = pagerState,
         modifier = modifier.fillMaxSize(),
         pageSpacing = 16.dp,
-        userScrollEnabled = !compressionState.isCompressMode && !isInfoVisible && !isVideoZoomed
+        userScrollEnabled = !compressionState.isCompressing && !compressionState.isCompressMode && !isInfoVisible && !isVideoZoomed
     ) { page ->
         if (page < mediaPaths.size) {
             val path = mediaPaths[page]

@@ -12,7 +12,6 @@ import com.denser.june.core.utils.FileUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
 
 class MarkdownImportImpl(
@@ -93,10 +92,7 @@ class MarkdownImportImpl(
                                 } else {
                                     "media_${System.currentTimeMillis()}_${(0..9999).random()}_$originalFileName"
                                 }
-                                val targetFile = File(mediaDir, safeFileName)
-                                FileOutputStream(targetFile).use { fos ->
-                                    zis.copyTo(fos)
-                                }
+                                val targetFile = extractBackupMedia(zis, mediaDir, safeFileName)
                                 val absPath = targetFile.absolutePath
                                 extractedMediaMap[entryName] = absPath
                                 extractedMediaMap[entryName.removePrefix("media/").trimStart('/')] = absPath

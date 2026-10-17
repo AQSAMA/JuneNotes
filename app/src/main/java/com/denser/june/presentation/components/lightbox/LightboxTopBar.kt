@@ -188,6 +188,7 @@ fun LightboxTopBar(
                 Box {
                     FilledIconButton(
                         onClick = { showMenu = true },
+                        enabled = !isCompressing,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = if (showMenu) MaterialTheme.colorScheme.primaryContainer else if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh,
                             contentColor = if (showMenu) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
@@ -202,7 +203,7 @@ fun LightboxTopBar(
                     val canCompressFurther = availablePresets.any { it != CompressionPreset.ORIGINAL } || hasUncompressedOriginal
 
                     JuneDropdownMenu(
-                        expanded = showMenu,
+                        expanded = showMenu && !isCompressing,
                         onDismissRequest = { showMenu = false },
                     ) {
                         JuneDropdownMenuItem(
@@ -229,8 +230,9 @@ fun LightboxTopBar(
                                 text = { Text(stringResource(R.string.delete)) },
                                 onClick = {
                                     showMenu = false
-                                    onDeleteMedia()
+                                    if (!isCompressing) onDeleteMedia()
                                 },
+                                enabled = !isCompressing,
                                 leadingIcon = { Icon(painterResource(R.drawable.delete_24px), null) }
                             )
                         }

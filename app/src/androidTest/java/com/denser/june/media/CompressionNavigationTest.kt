@@ -4,6 +4,7 @@ import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.runtime.*
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.denser.june.presentation.components.lightbox.CompressionBackHandler
@@ -41,4 +42,50 @@ class CompressionNavigationTest {
         ui.runOnIdle { dispatcher.onBackPressed() }
         ui.runOnIdle { assertEquals(1, exits) }
     }
+    @Test fun loadedQualityPreferencesUpdateDefaultsWithoutResettingAnActiveChoice() {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        val low = com.denser.june.core.media.compress.model.CompressionPreset.LOW
+        val medium = com.denser.june.core.media.compress.model.CompressionPreset.MEDIUM
+        val high = com.denser.june.core.media.compress.model.CompressionPreset.HIGH
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val photo = com.denser.june.presentation.components.lightbox.LightboxCompressionState("photo.jpg", context, 80, 1080) { false }
+            photo.availablePresets = setOf(low, medium, high)
+            photo.updateQualityPreferences(70, 1080)
+            assertEquals(low, photo.selectedPreset)
+            photo.isCompressMode = true
+            photo.selectedPreset = high
+            photo.updateQualityPreferences(80, 1080)
+            assertEquals(high, photo.selectedPreset)
+            val video = com.denser.june.presentation.components.lightbox.LightboxCompressionState("video.mp4", context, 80, 1080) { false }
+            video.availablePresets = setOf(low, medium, high)
+            video.updateQualityPreferences(80, 480)
+            assertEquals(low, video.selectedPreset)
+            video.updateQualityPreferences(80, 720)
+            assertEquals(medium, video.selectedPreset)
+        }
+    }
+
+    @Test fun retainedSaveDisablesTheOrdinaryOverflowMenuUntilCompletion() {
+        var saving by mutableStateOf(true)
+        var deletes = 0
+        ui.setContent {
+            androidx.compose.material3.MaterialTheme {
+                com.denser.june.presentation.components.lightbox.LightboxTopBar(
+                    isCompressMode = false, isInfoVisible = false, isDarkTheme = false,
+                    isGeneratingPreview = false, isCompressing = saving,
+                    selectedPreset = null, appliedPreset = null, availablePresets = emptySet(),
+                    currentPath = "photo.jpg", exifInfo = null, dateTime = 1, parentJournal = null,
+                    currentPreview = null, hasUncompressedOriginal = false, uncompressedOriginalBytes = null,
+                    onBackOrCancel = {}, onSaveCompression = {}, onOpenInfo = {}, onStartCompression = {},
+                    onDeleteMedia = { deletes++ }
+                )
+            }
+        }
+        ui.onNodeWithContentDescription("More options").assertIsNotEnabled()
+        ui.runOnIdle { saving = false }
+        ui.onNodeWithContentDescription("More options").performClick()
+        ui.onNodeWithText(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.getString(com.denser.june.core.R.string.delete)).performClick()
+        ui.runOnIdle { assertEquals(1, deletes) }
+    }
+
 }

@@ -13,7 +13,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
 
 import com.denser.june.core.data.database.song.SongLibraryDao
@@ -80,10 +79,7 @@ class RestoreImpl(
                                         journalsList.addAll(schema.journals)
                                     } else if (entryName.startsWith("media/") && !entry.isDirectory) {
                                         val fileName = File(entryName).name
-                                        val targetFile = File(mediaDir, fileName)
-                                        FileOutputStream(targetFile).use { fos ->
-                                            zis.copyTo(fos)
-                                        }
+                                        val targetFile = extractBackupMedia(zis, mediaDir, fileName)
                                         extractedMediaMap[entryName] = targetFile.absolutePath
                                         extractedMediaMap[fileName] = targetFile.absolutePath
                                     }
@@ -103,10 +99,7 @@ class RestoreImpl(
                                         } else {
                                             "media_${System.currentTimeMillis()}_${(0..9999).random()}_$originalFileName"
                                         }
-                                        val targetFile = File(mediaDir, safeFileName)
-                                        FileOutputStream(targetFile).use { fos ->
-                                            zis.copyTo(fos)
-                                        }
+                                        val targetFile = extractBackupMedia(zis, mediaDir, safeFileName)
                                         val absPath = targetFile.absolutePath
                                         extractedMediaMap[entryName] = absPath
                                         extractedMediaMap[entryName.removePrefix("media/").trimStart('/')] = absPath
@@ -122,22 +115,15 @@ class RestoreImpl(
                                         journalsList.add(journal)
                                     } else if (entryName.startsWith("media/") && !entry.isDirectory) {
                                         val fileName = File(entryName).name
-                                        val targetFile = File(mediaDir, fileName)
-                                        FileOutputStream(targetFile).use { fos ->
-                                            zis.copyTo(fos)
-                                        }
+                                        val targetFile = extractBackupMedia(zis, mediaDir, fileName)
                                         extractedMediaMap[entryName] = targetFile.absolutePath
                                         extractedMediaMap[fileName] = targetFile.absolutePath
                                     } else if (entryName.startsWith("song_media/") && !entry.isDirectory) {
                                         val fileName = File(entryName).name
-                                        val targetFile = if (entryName.startsWith("song_media/art/")) {
-                                            File(songArtDir, fileName)
-                                        } else {
-                                            File(songLibraryDir, fileName)
-                                        }
-                                        FileOutputStream(targetFile).use { fos ->
-                                            zis.copyTo(fos)
-                                        }
+                                        val isArt = entryName.startsWith("song_media/art/")
+                                        val targetFile = extractBackupMedia(zis, if (isArt) songArtDir else songLibraryDir, fileName)
+                                        extractedMediaMap[entryName] = targetFile.absolutePath
+                                        extractedMediaMap["song-${if (isArt) "art" else "audio"}:$fileName"] = targetFile.absolutePath
                                     }
                                 }
                             }
@@ -239,11 +225,13 @@ class RestoreImpl(
 
         val localizedSong = journal.songDetails?.let { song ->
             val localAudio = song.localPreviewPath?.let {
-                val file = File(songLibraryDir, File(it).name)
+                val name = File(it).name
+                val file = File(extractedMediaMap["song-audio:$name"] ?: File(songLibraryDir, name).path)
                 if (file.exists()) file.absolutePath else null
             }
             val localArt = song.localThumbnailPath?.let {
-                val file = File(songArtDir, File(it).name)
+                val name = File(it).name
+                val file = File(extractedMediaMap["song-art:$name"] ?: File(songArtDir, name).path)
                 if (file.exists()) file.absolutePath else null
             }
             song.copy(localPreviewPath = localAudio, localThumbnailPath = localArt)
