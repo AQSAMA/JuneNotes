@@ -10,10 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.enums.TimeFormat
-import com.denser.june.core.domain.preferences.JournalPreferences
 import com.denser.june.core.media.compress.CompressUtils
-import com.denser.june.core.media.compress.model.CompressionPreset
-import com.denser.june.core.media.exif.ExifUtils
 import com.denser.june.core.media.storage.MediaStorageManager
 import com.denser.june.presentation.components.JuneDialog
 import com.denser.june.presentation.components.JuneDateTimePicker
@@ -26,11 +23,7 @@ import com.denser.june.presentation.screens.editor.components.emoji.JournalEmoji
 import com.denser.june.presentation.screens.editor.components.emoji.loadEmojiAssets
 import com.denser.june.presentation.screens.editor.components.JournalTagsDialog
 import com.denser.june.presentation.screens.home.components.DeleteConfirmationSheet
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
 class EditorDialogState {
@@ -57,12 +50,6 @@ fun EditorModals(
 ) {
     val context = LocalContext.current
     val navigator = koinInject<AppNavigator>()
-    val journalPrefs = koinInject<JournalPreferences>()
-    val isCompressPhotosEnabled by journalPrefs.isCompressPhotosEnabled().collectAsStateWithLifecycle(initialValue = false)
-    val photoQuality by journalPrefs.getPhotoCompressionQuality().collectAsStateWithLifecycle(initialValue = 80)
-    val isCompressVideosEnabled by journalPrefs.isCompressVideosEnabled().collectAsStateWithLifecycle(initialValue = false)
-    val videoQuality by journalPrefs.getVideoCompressionQuality().collectAsStateWithLifecycle(initialValue = 1080)
-    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         loadEmojiAssets(context.resources)
@@ -72,49 +59,7 @@ fun EditorModals(
     var tempVideoUri by remember { mutableStateOf<Uri?>(null) }
 
     fun processImportedMedia(uri: Uri, isVideoHint: Boolean? = null) {
-        val uriString = uri.toString()
-        onAction(EditorAction.AddImage(uriString))
-        onAction(EditorAction.SetMediaProcessing(uriString, true))
-        coroutineScope.launch {
-            val persistedPath = withContext(Dispatchers.IO) {
-                MediaStorageManager.persistMedia(context, uri)
-            }
-            if (persistedPath != null) {
-                onAction(EditorAction.ReplaceImage(uriString, persistedPath))
-                val isVideo = isVideoHint ?: ExifUtils.isVideoPath(persistedPath)
-                val needsCompression = ((isVideo && isCompressVideosEnabled) || (!isVideo && isCompressPhotosEnabled)) &&
-                    CompressUtils.shouldCompressMedia(context, persistedPath, targetVideoHeight = videoQuality, maxPhotoDimension = 2048)
-                if (needsCompression) {
-                    withContext(Dispatchers.IO) {
-                        try {
-                            CompressUtils.saveUncompressedOriginalFile(context, persistedPath)
-                            if (isVideo) {
-                                val preset = when {
-                                    videoQuality <= 480 -> CompressionPreset.LOW
-                                    videoQuality <= 720 -> CompressionPreset.MEDIUM
-                                    else -> CompressionPreset.HIGH
-                                }
-                                CompressUtils.compressVideo(context, persistedPath, preset)
-                            } else {
-                                val preset = when {
-                                    photoQuality <= 70 -> CompressionPreset.LOW
-                                    photoQuality <= 80 -> CompressionPreset.MEDIUM
-                                    else -> CompressionPreset.HIGH
-                                }
-                                CompressUtils.compressPhoto(context, persistedPath, preset)
-                            }
-                        } finally {
-                            onAction(EditorAction.SetMediaProcessing(persistedPath, false))
-                        }
-                    }
-                } else {
-                    onAction(EditorAction.SetMediaProcessing(persistedPath, false))
-                }
-            } else {
-                onAction(EditorAction.RemoveImage(uriString))
-                onAction(EditorAction.SetMediaProcessing(uriString, false))
-            }
-        }
+        onAction(EditorAction.ImportMedia(uri, isVideoHint))
     }
 
     val galleryLauncher = rememberLauncherForActivityResult(

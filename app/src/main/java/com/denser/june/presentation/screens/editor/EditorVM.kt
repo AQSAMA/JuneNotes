@@ -24,6 +24,10 @@ import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.denser.june.core.media.exif.ExifUtils
+import com.denser.june.core.media.compress.model.CompressionPreset
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -171,6 +175,7 @@ class EditorVM(
             is EditorAction.ChangeDateTime -> updateState { it.copy(dateTime = action.dateTime) }
             is EditorAction.ChangeEmoji -> updateState { it.copy(emoji = action.emoji) }
 
+            is EditorAction.ImportMedia -> importMedia(action)
             is EditorAction.AddImage -> updateState { it.copy(images = it.images + action.uri) }
             is EditorAction.AddImages -> updateState { it.copy(images = it.images + action.uris) }
             is EditorAction.ReplaceImage -> {
@@ -330,6 +335,36 @@ class EditorVM(
             is EditorAction.DeleteJournal -> deleteJournal()
             is EditorAction.RestoreJournal -> restoreJournal()
         }
+    }
+
+    private fun importMedia(action: EditorAction.ImportMedia) {
+        val appContext = context.applicationContext
+        viewModelScope.importEditorMedia(
+            uri = action.uri.toString(),
+            persist = { withContext(Dispatchers.IO) { MediaStorageManager.persistMedia(appContext, action.uri) } },
+            compress = { path ->
+                val photosEnabled = journalPrefs.isCompressPhotosEnabled().first()
+                val videosEnabled = journalPrefs.isCompressVideosEnabled().first()
+                val photoQuality = journalPrefs.getPhotoCompressionQuality().first()
+                val videoQuality = journalPrefs.getVideoCompressionQuality().first()
+                withContext(Dispatchers.IO) {
+                    val isVideo = action.isVideoHint ?: ExifUtils.isVideoPath(path)
+                    val enabled = if (isVideo) videosEnabled else photosEnabled
+                    if (enabled && CompressUtils.shouldCompressMedia(appContext, path, targetVideoHeight = videoQuality, maxPhotoDimension = 2048)) {
+                        CompressUtils.saveUncompressedOriginalFile(appContext, path)
+                        val preset = if (isVideo) {
+                            when { videoQuality <= 480 -> CompressionPreset.LOW; videoQuality <= 720 -> CompressionPreset.MEDIUM; else -> CompressionPreset.HIGH }
+                        } else {
+                            when { photoQuality <= 70 -> CompressionPreset.LOW; photoQuality <= 80 -> CompressionPreset.MEDIUM; else -> CompressionPreset.HIGH }
+                        }
+                        if (isVideo) CompressUtils.compressVideo(appContext, path, preset)
+                        else CompressUtils.compressPhoto(appContext, path, preset)
+                    }
+                }
+            },
+            onAction = ::onAction,
+            onFailure = { _uiEvent.trySend(context.getString(com.denser.june.core.R.string.media_import_failed)) }
+        )
     }
 
     private fun updateState(update: (EditorState) -> EditorState) {

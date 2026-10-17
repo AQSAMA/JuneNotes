@@ -12,6 +12,7 @@ sealed interface EditorAction {
     data class ChangeEmoji(val emoji: String?) : EditorAction
     data class ChangeDateTime(val dateTime: Long) : EditorAction
 
+    data class ImportMedia(val uri: Uri, val isVideoHint: Boolean? = null) : EditorAction
     data class AddImage(val uri: String) : EditorAction
     data class AddImages(val uris: List<String>) : EditorAction
     data class ReplaceImage(val oldUri: String, val newPath: String) : EditorAction

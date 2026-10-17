@@ -19,10 +19,11 @@ class LightboxCompressionState(
     val currentPath: String?,
     private val context: Context,
     private val photoQualityPref: Int,
-    private val videoQualityPref: Int
+    private val videoQualityPref: Int,
+    private val isSaveInProgress: () -> Boolean
 ) {
     var isCompressMode by mutableStateOf(false)
-    var isCompressing by mutableStateOf(false)
+    val isCompressing: Boolean get() = isSaveInProgress()
     var selectedPreset by mutableStateOf<CompressionPreset?>(null)
     var appliedPreset by mutableStateOf<CompressionPreset?>(null)
     var availablePresets by mutableStateOf(setOf(CompressionPreset.ORIGINAL))
@@ -84,20 +85,23 @@ fun rememberLightboxCompressionState(
     context: Context,
     refreshTrigger: Int,
     photoQualityPref: Int,
-    videoQualityPref: Int
+    videoQualityPref: Int,
+    isSaveInProgress: () -> Boolean
 ): LightboxCompressionState {
     val state = remember(currentPath) {
         LightboxCompressionState(
             currentPath = currentPath,
             context = context,
             photoQualityPref = photoQualityPref,
-            videoQualityPref = videoQualityPref
+            videoQualityPref = videoQualityPref,
+            isSaveInProgress = isSaveInProgress
         )
     }
 
     DisposableEffect(currentPath) {
         onDispose {
-            state.cleanup()
+            // An active save still owns its preview file until file/metadata commit.
+            if (!state.isCompressing) state.cleanup()
         }
     }
 

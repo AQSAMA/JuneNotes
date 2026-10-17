@@ -491,4 +491,6 @@
     <string name="folder_search_folders">البحث عن مجلد</string>
     <string name="folder_note_added">أضيفت الملاحظة إلى المجلد</string>
     <string name="folder_move_failed">تعذر نقل الملاحظة. حاول مرة أخرى.</string>
+    <string name="media_import_failed">تعذّر استيراد المرفق</string>
+    <string name="compression_save_failed">تعذّر حفظ المرفق المضغوط</string>
 </resources>

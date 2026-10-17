@@ -160,7 +160,7 @@ fun LightboxTopBar(
 
                 FilledIconButton(
                     onClick = onSaveCompression,
-                    enabled = canSave,
+                    enabled = canSave && !isCompressing,
                     colors = IconButtonDefaults.filledIconButtonColors(
                         containerColor = if (canSave) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
                         contentColor = if (canSave) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)

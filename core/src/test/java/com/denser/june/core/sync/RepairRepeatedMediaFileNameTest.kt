@@ -65,17 +65,26 @@ class RepairRepeatedMediaFileNameTest {
 
     @Test fun aFailedOrIncompleteCopyLeavesTheOriginalPathAndBytesIntact() {
         val source = file("media_111_media_333.jpg")
-        val result = repairRepeatedMediaPath(source.path, temp.root) { _, target ->
-            target.writeText("partial")
-            throw IOException("Disk full")
-        }
-        assertEquals(source.path, result)
+        try {
+            repairRepeatedMediaPath(source.path, temp.root) { _, target ->
+                target.writeText("partial")
+                throw IOException("Disk full")
+            }
+            fail("Transient copy failure must remain retryable")
+        } catch (_: IOException) { }
+        assertFalse(File(temp.root, "media_333.jpg").exists())
+        assertTrue(temp.root.listFiles()!!.none { it.name.startsWith(".june-repair-") })
+        assertEquals(File(temp.root, "media_333.jpg").path, repairRepeatedMediaPath(source.path, temp.root))
         assertEquals("image bytes", source.readText())
     }
 
     @Test fun aSuccessfulCopyCallStillRequiresVerifiedDestinationBytes() {
         val source = file("media_111_media_333.jpg", "AAAA")
-        assertEquals(source.path, repairRepeatedMediaPath(source.path, temp.root) { _, target -> target.writeText("BBBB") })
+        try {
+            repairRepeatedMediaPath(source.path, temp.root) { _, target -> target.writeText("BBBB") }
+            fail("An unverified copy must not complete the repair")
+        } catch (_: IOException) { }
+        assertFalse(File(temp.root, "media_333.jpg").exists())
         assertEquals("AAAA", source.readText())
     }
 
@@ -155,4 +164,37 @@ class RepairRepeatedMediaFileNameTest {
         assertTrue(repo.getJournalById(note.id)!!.images.isEmpty())
         assertTrue(source.isFile)
     }
+    @Test fun transientFileFailureLeavesTheRepairPendingForTheNextAttempt() = runTest {
+        val source = file("media_111_media_333.jpg")
+        val repo = FakeJournalRepository()
+        val note = SyncFixtures.newJournal("retry-file", images = listOf(source.path))
+        repo.seed(note)
+        var acknowledged = false
+        try {
+            repairRepeatedMediaPaths(repo, temp.root) { _, _ -> throw SecurityException("Temporarily unreadable") }
+            acknowledged = true
+        } catch (_: SecurityException) { }
+        assertFalse(acknowledged)
+        assertEquals(note, repo.getJournalById(note.id))
+        assertEquals(1, repairRepeatedMediaPaths(repo, temp.root))
+        assertTrue(File(repo.getJournalById(note.id)!!.images.single()).isFile)
+    }
+
+    @Test fun concurrentAttachmentAdditionRetriesAgainstTheCurrentList() = runTest {
+        val source = file("media_111_media_333.jpg")
+        val repo = FakeJournalRepository()
+        val note = SyncFixtures.newJournal("added", images = listOf(source.path))
+        repo.seed(note)
+        val editing = object : JournalRepository by repo {
+            override suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean {
+                repo.seed(repo.getJournalById(id)!!.copy(images = expected + "new.jpg"))
+                return repo.repairMediaPaths(id, expected, repaired, modifiedAt)
+            }
+        }
+        try { repairRepeatedMediaPaths(editing, temp.root); fail("Changed attachment list must retry") }
+        catch (_: IOException) { }
+        assertEquals(1, repairRepeatedMediaPaths(repo, temp.root))
+        assertEquals(listOf(File(temp.root, "media_333.jpg").path, "new.jpg"), repo.getJournalById(note.id)!!.images)
+    }
+
 }

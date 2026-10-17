@@ -10,33 +10,54 @@ import java.nio.file.Files
 internal fun repairRepeatedMediaPath(
     path: String,
     mediaDir: File,
-    copy: (File, File) -> Unit = { source, target -> Files.copy(source.toPath(), target.toPath()); Unit }
+    copy: (File, File) -> Unit = { source, target -> Files.copy(source.toPath(), target.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); Unit }
 ): String {
     val source = File(path)
     if (!source.name.startsWith("media_") || !source.name.contains("_media_")) return path
-    val target = File(source.parentFile ?: mediaDir, "media_" + source.name.substringAfterLast("_media_"))
-    return try {
-        // A missing source cannot prove that an existing destination is this attachment.
-        if (!source.isFile || source.length() == 0L) return path
-        if (!target.exists()) copy(source, target) // CREATE_NEW semantics: never overwrite a collision.
-        val sourceHash = source.computeSHA256()
-        if (sourceHash.isNotEmpty() && target.isFile && target.length() == source.length() && sourceHash == target.computeSHA256())
-            target.absolutePath else path
-    } catch (_: IOException) {
-        path
-    } catch (_: SecurityException) {
-        path
+    val parent = source.parentFile ?: mediaDir
+    val target = File(parent, "media_" + source.name.substringAfterLast("_media_"))
+    // Missing files and permanent different-content collisions cannot be safely repaired.
+    if (!source.isFile || source.length() == 0L) return path
+    val sourceHash = source.computeSHA256()
+    if (sourceHash.isEmpty()) throw IOException("Cannot verify media source")
+    fun matches(file: File): Boolean = file.isFile && file.length() == source.length() && file.computeSHA256() == sourceHash
+    if (target.exists()) return if (matches(target)) target.absolutePath else path
+
+    // Never leave a partial cleaned-name file that would look like a permanent collision.
+    val staging = Files.createTempFile(parent.toPath(), ".june-repair-", ".tmp").toFile()
+    try {
+        copy(source, staging)
+        if (!matches(staging)) throw IOException("Media copy verification failed")
+        try {
+            Files.move(staging.toPath(), target.toPath())
+        } catch (_: java.nio.file.FileAlreadyExistsException) {
+            return if (matches(target)) target.absolutePath else path
+        }
+        return target.absolutePath
+    } finally {
+        Files.deleteIfExists(staging.toPath())
     }
 }
 
 /** Shared attachments resolve consistently; failed database writes leave their sources intact. */
-internal suspend fun repairRepeatedMediaPaths(repository: JournalRepository, mediaDir: File): Int {
+internal suspend fun repairRepeatedMediaPaths(
+    repository: JournalRepository,
+    mediaDir: File,
+    repairPath: (String, File) -> String = { path, directory -> repairRepeatedMediaPath(path, directory) }
+): Int {
     val repairedPaths = mutableMapOf<String, String>()
     var repairedCount = 0
     repository.getAllJournalsIncludeDeletedSync().forEach { journal ->
-        val images = journal.images.map { path -> repairedPaths.getOrPut(path) { repairRepeatedMediaPath(path, mediaDir) } }
+        val images = journal.images.map { path -> repairedPaths.getOrPut(path) { repairPath(path, mediaDir) } }
         if (images != journal.images) {
-            if (repository.repairMediaPaths(journal.id, journal.images, images, System.currentTimeMillis())) repairedCount++
+            if (repository.repairMediaPaths(journal.id, journal.images, images, System.currentTimeMillis())) {
+                repairedCount++
+            } else {
+                val stillPending = journal.images.zip(images).filter { (before, after) -> before != after }.map { it.first }.toSet()
+                if (repository.getJournalById(journal.id)?.images?.any { it in stillPending } == true) {
+                    throw IOException("Attachment list changed during repair; retry against current data")
+                }
+            }
         }
     }
     return repairedCount

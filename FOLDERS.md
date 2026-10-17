@@ -24,7 +24,7 @@ The drawer preserves its reveal fraction on window resizing and clears fling mom
 
 Upstream sync: June v1.3.1 (`f7501172211624bdfdc2690a8c6794d2483bfafb`) is merged, including media compression, lightbox, map, and sync fixes. The folder action uses the new upstream connected action bar. Database and folder backup schemas remain unchanged.
 
-Startup data repair version 4 replaces upstream's unsafe media filename rename. It preserves source files, verifies destination content, retains original paths on collisions or failed copies, and updates attachments transactionally without overwriting concurrent note edits. Failed database writes remain retryable, and repaired references are marked for sync.
+Startup data repair version 5 replaces upstream's unsafe media filename rename. It preserves source files, verifies destination content, retains original paths on collisions or failed copies, and updates attachments transactionally without overwriting concurrent note edits. Failed file operations and database writes remain retryable, and repaired references are marked for sync.
 
 ## Backups and sync
 
@@ -63,3 +63,5 @@ Explicit saves wait for all imported-media processing, including local-file comp
 Signed Preview output is optional while the original keystore is unavailable; unit, database and gesture checks continue independently, and CI supplies the separate Debug APK (arm64) artifact. A supplied keystore must still match the existing Preview certificate.
 
 Media hash mismatches use journal ownership: dirty local attachments upload, clean cached attachments download, and remote-winning journal references cannot overwrite cloud bytes. Downloaded hashes are invalidated before rebuilding the manifest. Lightbox save commits file changes and sync metadata together despite composition cancellation, and both Back controls remain blocked while saving. Photo compression accepts decoded JPEG sources only; PNG, WebP, GIF and other encodings remain untouched to preserve transparency and animation.
+
+Media import jobs run in the retained editor ViewModel, with marker cleanup on every success, failure and cancellation path. Lightbox compression saves and their active guards are held by the navigation ViewModel across activity recreation. Repair version 5 uses a verified staging copy and propagates transient file failures, leaving the repair version pending for the next launch.

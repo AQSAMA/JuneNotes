@@ -31,7 +31,6 @@ import com.denser.june.presentation.components.lightbox.*
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import java.io.File
@@ -53,7 +52,7 @@ fun JuneMediaLightbox(
     val journalPrefs = koinInject<JournalPreferences>()
     val photoQualityPref by journalPrefs.getPhotoCompressionQuality().collectAsStateWithLifecycle(initialValue = 80)
     val videoQualityPref by journalPrefs.getVideoCompressionQuality().collectAsStateWithLifecycle(initialValue = 1080)
-    val scope = rememberCoroutineScope()
+    val saveVM: MediaCompressionSaveVM = androidx.lifecycle.viewmodel.compose.viewModel()
 
     val imageLoader = remember {
         ImageLoader.Builder(context)
@@ -106,8 +105,27 @@ fun JuneMediaLightbox(
         context = context,
         refreshTrigger = refreshTrigger,
         photoQualityPref = photoQualityPref,
-        videoQualityPref = videoQualityPref
+        videoQualityPref = videoQualityPref,
+        isSaveInProgress = { saveVM.status(currentPath).busy }
     )
+
+    val saveStatus = saveVM.status(currentPath)
+    LaunchedEffect(currentPath, saveStatus.generation, saveStatus.busy) {
+        if (!saveStatus.busy && saveStatus.generation > 0 && currentPath != null) {
+            compressionState.isCompressMode = false
+            compressionState.cleanup()
+            if (!saveStatus.succeeded) {
+                android.widget.Toast.makeText(context, context.getString(com.denser.june.core.R.string.compression_save_failed), android.widget.Toast.LENGTH_SHORT).show()
+                return@LaunchedEffect
+            }
+            newlyCompressedPaths = newlyCompressedPaths + currentPath
+            val fileName = File(currentPath).name
+            imageLoader.memoryCache?.keys?.filter { it.key.contains(fileName) }?.forEach { imageLoader.memoryCache?.remove(it) }
+            val globalCache = coil.Coil.imageLoader(context).memoryCache
+            globalCache?.keys?.filter { it.key.contains(fileName) }?.forEach { globalCache.remove(it) }
+            refreshTrigger++
+        }
+    }
 
     CompressionBackHandler(
         isCompressing = compressionState.isCompressing,
@@ -250,38 +268,25 @@ fun JuneMediaLightbox(
                 },
                 onSaveCompression = {
                     if (currentPath != null && !compressionState.isCompressing) {
-                        compressionState.isCompressing = true
-                        scope.launch {
-                            try {
-                                val isVideo = ExifUtils.isVideoPath(currentPath)
-                                val preset = compressionState.selectedPreset ?: CompressionPreset.MEDIUM
-                                val success = persistMediaCompression(
-                                    compress = {
-                                        withContext(Dispatchers.IO) {
-                                            if (isVideo) CompressUtils.compressVideo(context, currentPath, preset)
-                                            else CompressUtils.compressPhoto(context, currentPath, preset)
-                                        }
-                                    },
-                                    markModified = {
-                                        withContext(Dispatchers.IO) {
-                                            journalRepo.markMediaModified(currentPath, System.currentTimeMillis())
-                                        }
-                                    }
-                                )
-                                if (success) {
-                                    newlyCompressedPaths = newlyCompressedPaths + currentPath
-                                    val fileName = File(currentPath).name
-                                    imageLoader.memoryCache?.keys?.filter { it.key.contains(fileName) }?.forEach { imageLoader.memoryCache?.remove(it) }
-                                    val globalCache = coil.Coil.imageLoader(context).memoryCache
-                                    globalCache?.keys?.filter { it.key.contains(fileName) }?.forEach { globalCache.remove(it) }
-                                    refreshTrigger++
+                        val appContext = context.applicationContext
+                        val isVideo = ExifUtils.isVideoPath(currentPath)
+                        val preset = compressionState.selectedPreset ?: CompressionPreset.MEDIUM
+                        val previews = compressionState.sessionPreviewCache.toMap()
+                        saveVM.startSave(
+                            path = currentPath,
+                            compress = {
+                                withContext(Dispatchers.IO) {
+                                    if (isVideo) CompressUtils.compressVideo(appContext, currentPath, preset)
+                                    else CompressUtils.compressPhoto(appContext, currentPath, preset)
                                 }
-                                compressionState.isCompressMode = false
-                            } finally {
-                                compressionState.cleanup()
-                                compressionState.isCompressing = false
-                            }
-                        }
+                            },
+                            markModified = {
+                                withContext(Dispatchers.IO) {
+                                    journalRepo.markMediaModified(currentPath, System.currentTimeMillis())
+                                }
+                            },
+                            cleanup = { CompressUtils.cleanupPreviewCache(previews) }
+                        )
                     }
                 },
                 onOpenInfo = {
@@ -321,7 +326,7 @@ fun JuneMediaLightbox(
                     selectedPreset = currentPreset,
                     isDarkTheme = isDarkTheme,
                     onPresetChanged = { preset ->
-                        if (preset != compressionState.selectedPreset) {
+                        if (!compressionState.isCompressing && preset != compressionState.selectedPreset) {
                             compressionState.selectedPreset = preset
                         }
                     }

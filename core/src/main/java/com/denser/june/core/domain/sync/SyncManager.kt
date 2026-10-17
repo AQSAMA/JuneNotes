@@ -89,7 +89,7 @@ class SyncManager(
     private val songMediaArtDir = File(songMediaDir, "art").apply { if (!exists()) mkdirs() }
     companion object {
         const val SYNC_THRESHOLD_MS = 2000L
-        const val CURRENT_DATA_REPAIR_VERSION = 4
+        const val CURRENT_DATA_REPAIR_VERSION = 5
     }
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
@@ -123,7 +123,7 @@ class SyncManager(
             if (lastVersion < 2) {
                 repairSongDetailsAndPaths()
             }
-            // Version 4 also revisits names skipped by the unsafe version 3 repair.
+            // Version 5 retries per-file failures acknowledged by earlier repair versions.
             if (!repairRepeatedMediaFileNames()) return@launch
             syncPrefs.setLastCompletedDataRepairVersion(CURRENT_DATA_REPAIR_VERSION)
         }
