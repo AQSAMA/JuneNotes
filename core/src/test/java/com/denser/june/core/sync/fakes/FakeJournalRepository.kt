@@ -58,6 +58,14 @@ class FakeJournalRepository : JournalRepository {
         return true
     }
 
+    override suspend fun markMediaModified(path: String, modifiedAt: Long) {
+        val fileName = java.io.File(path).name
+        if (fileName.isEmpty()) return
+        db.values.toList().filter { j -> j.images.any { java.io.File(it).name == fileName } }.forEach {
+            seed(it.copy(updatedAt = maxOf(it.updatedAt ?: 0L, modifiedAt), syncedAt = null))
+        }
+    }
+
     override suspend fun updateJournal(journal: Journal) { insertJournal(journal) }
 
     override suspend fun softDeleteJournal(id: String) {

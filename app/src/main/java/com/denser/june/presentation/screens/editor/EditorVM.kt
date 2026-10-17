@@ -141,8 +141,8 @@ class EditorVM(
         viewModelScope.launch {
             _saveTrigger
                 .debounce(5000L)
-                .collect { stateToSave ->
-                    saveDraft(stateToSave)
+                .collect {
+                    saveDraft()
                 }
         }
 
@@ -319,9 +319,11 @@ class EditorVM(
             is EditorAction.ToggleBookmark -> toggleBookmark()
             is EditorAction.ToggleArchive -> toggleArchive()
             is EditorAction.SaveJournal -> saveJournal()
+            is EditorAction.SaveJournalAndNavigateBack -> saveJournal(navigateBack = true)
             is EditorAction.NavigateBack -> {
+                if (_state.value.isSaving) return
                 if (_state.value.isDraft && _state.value.isDirty) {
-                    saveDraft(_state.value)
+                    saveDraft()
                 }
                 navigator.navigateBack()
             }
@@ -474,8 +476,10 @@ class EditorVM(
         }
     }
 
-    private fun saveDraft(currentState: EditorState) {
+    private fun saveDraft() {
         viewModelScope.launch {
+            val currentState = _state.value
+            if (currentState.isSaving || currentState.processingMediaPaths.isNotEmpty()) return@launch
             if (existingJournal != null && !existingJournal!!.isDraft) return@launch
 
             val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
@@ -539,46 +543,51 @@ class EditorVM(
         }
     }
 
-    private fun saveJournal() {
+    private fun saveJournal(navigateBack: Boolean = false) {
+        if (_state.value.isSaving) return
+        _state.update { it.copy(isSaving = true) }
         viewModelScope.launch {
-            if (_state.value.processingMediaPaths.any { it.startsWith("content://") }) {
-                _state.first { current -> current.processingMediaPaths.none { it.startsWith("content://") } }
+            try {
+                val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
+                val currentState = _state.awaitFinishedMedia()
+                val currentTime = System.currentTimeMillis()
+                val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
+
+                val journalToSave = Journal(
+                    id = existingJournal?.id ?: "",
+                    title = currentState.title,
+                    content = currentMarkdown,
+                    emoji = currentState.emoji,
+                    images = currentState.images,
+                    location = currentState.location,
+                    songDetails = currentState.songDetails,
+                    tags = currentState.tags,
+                    createdAt = existingJournal?.createdAt ?: currentTime,
+                    updatedAt = currentTime,
+                    dateTime = currentState.dateTime,
+                    isBookmarked = currentState.isBookmarked,
+                    isArchived = currentState.isArchived,
+                    isDraft = false,
+                    syncedAt = existingJournal?.syncedAt,
+                    cloudId = existingJournal?.cloudId
+                )
+
+                if (existingJournal != null) {
+                    journalRepo.updateJournal(journalToSave)
+                    existingJournal = journalToSave
+                } else {
+                    val newId = journalRepo.insertJournal(journalToSave)
+                    assignInitialFolder(newId)
+                    existingJournal = journalToSave.copy(id = newId)
+                    _state.update { it.copy(journalId = newId) }
+                }
+
+                currentState.images.forEach { CompressUtils.cleanUncompressedOriginalFile(context, it) }
+                _state.update { it.copy(isDirty = false, isDraft = false) }
+                if (navigateBack) navigator.navigateBack()
+            } finally {
+                _state.update { it.copy(isSaving = false) }
             }
-            val currentState = _state.value
-            val currentTime = System.currentTimeMillis()
-            val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
-            val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
-
-            val journalToSave = Journal(
-                id = existingJournal?.id ?: "",
-                title = currentState.title,
-                content = currentMarkdown,
-                emoji = currentState.emoji,
-                images = currentState.images,
-                location = currentState.location,
-                songDetails = currentState.songDetails,
-                tags = currentState.tags,
-                createdAt = existingJournal?.createdAt ?: currentTime,
-                updatedAt = currentTime,
-                dateTime = currentState.dateTime,
-                isBookmarked = currentState.isBookmarked,
-                isArchived = currentState.isArchived,
-                isDraft = false,
-                syncedAt = existingJournal?.syncedAt,
-                cloudId = existingJournal?.cloudId
-            )
-
-            if (existingJournal != null) {
-                journalRepo.updateJournal(journalToSave)
-                existingJournal = journalToSave
-            } else {
-                val newId = journalRepo.insertJournal(journalToSave)
-                assignInitialFolder(newId)
-                existingJournal = journalToSave.copy(id = newId)
-                _state.update { it.copy(journalId = newId) }
-            }
-
-            _state.update { it.copy(isDirty = false, isDraft = false) }
         }
     }
 

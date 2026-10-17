@@ -28,4 +28,30 @@ class MediaRepairDatabaseTest {
             assertFalse(dao.repairMediaPaths("missing", emptyList(), listOf("new.jpg"), 4000, 2000))
         } finally { db.close() }
     }
+    @Test fun compressionUpdatesOnlySyncFieldsForEveryCurrentReference() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(InstrumentationRegistry.getInstrumentation().targetContext, JournalDatabase::class.java).build()
+        try {
+            val dao = db.journalDao()
+            val edited = Journal("edited", "Concurrent title", "Concurrent content", images = listOf("/current/media_shared.jpg", "other.jpg"),
+                tags = listOf("#Current"), createdAt = 1, updatedAt = 5000, dateTime = 2, syncedAt = 6000,
+                cloudId = "cloud", isBookmarked = true, isArchived = true).asEntity()
+            val sharedDeleted = edited.copy(id = "shared", images = listOf("media_shared.jpg"), deletedAt = 3)
+            val removed = edited.copy(id = "removed", images = listOf("other.jpg"))
+            dao.insertJournal(edited)
+            dao.insertJournal(sharedDeleted)
+            dao.insertJournal(removed)
+            dao.insertTag(com.denser.june.core.data.database.journal.TagEntity("#Current"))
+            dao.insertJournalTagCrossRef(com.denser.june.core.data.database.journal.JournalTagCrossRef(edited.id, "#Current"))
+
+            assertEquals(2, dao.markMediaModified("/old/device/media_shared.jpg", 1000))
+            assertEquals(edited.copy(syncedAt = null), dao.getJournalById(edited.id))
+            assertEquals(sharedDeleted.copy(syncedAt = null), dao.getJournalById(sharedDeleted.id))
+            assertEquals(removed, dao.getJournalById(removed.id))
+            assertEquals(listOf(edited.id), dao.getJournalsByTagNameSync("#Current").map { it.id })
+            assertEquals(0, dao.markMediaModified("missing.jpg", 9000))
+            assertEquals(2, dao.markMediaModified("media_shared.jpg", 9000))
+            assertEquals(9000L, dao.getJournalById(edited.id)!!.updatedAt)
+        } finally { db.close() }
+    }
+
 }

@@ -76,6 +76,10 @@ class JournalRepositoryImpl(
     override suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean =
         journalDao.repairMediaPaths(id, expected, repaired, modifiedAt, com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS)
 
+    override suspend fun markMediaModified(path: String, modifiedAt: Long) {
+        journalDao.markMediaModified(path, modifiedAt)
+    }
+
     override suspend fun softDeleteJournal(id: String) {
         journalDao.softDeleteJournal(id, System.currentTimeMillis())
     }

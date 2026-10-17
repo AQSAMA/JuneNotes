@@ -55,3 +55,9 @@ The preview workflow runs core release and app preview unit tests and builds the
 A UI emulator job injects real Android MotionEvents to verify long-press and immediate dragging, cancellation, stationary-edge scrolling in both directions, lazy rows appearing during a drag, actual folder and note ordering (including adjacent no-op drops), two-level hover navigation, subtree retention, and dropping on the root breadcrumb. It also tests tap-to-move, searching/selecting the original note cards, and filing a note from its long-press menu while retaining tags. Reports and screenshots are published as **Folder UI tests and screenshots**.
 
 Manual device checks: import an original June backup; create three nested folders; save and reopen a note; drag it and its folder to root and back; reorder siblings; delete a container; restore a deleted note from Bin; export JSON and Markdown ZIPs and import them into the preview and original June; sync between two fork installations; verify portrait/landscape, large text, Arabic RTL, and TalkBack.
+
+### Media safety after upstream sync
+
+Explicit saves wait for all imported-media processing, including local-file compression after the content URI is replaced. The save-and-exit action navigates only after persistence completes, and original-file cleanup runs after the save. Draft autosave skips active processing and reads the latest editor state. Lightbox compression atomically marks every current reference to the changed media file pending sync, retaining current journal content, attachments, tags, deletion state and monotonic modification timestamps.
+
+Signed Preview output is optional while the original keystore is unavailable; unit, database and gesture checks continue independently, and CI supplies the separate Debug APK (arm64) artifact. A supplied keystore must still match the existing Preview certificate.

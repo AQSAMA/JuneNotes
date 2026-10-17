@@ -30,6 +30,8 @@ interface JournalRepository {
     suspend fun emptyBin()
     suspend fun restoreAllJournals()
     suspend fun updateJournal(journal: Journal)
+    /** Mark every current reference to an in-place media change dirty without replacing note content. */
+    suspend fun markMediaModified(path: String, modifiedAt: Long)
 
     fun getDeletedJournals(): Flow<List<Journal>>
     suspend fun getJournalsToSync(threshold: Long): List<Journal>

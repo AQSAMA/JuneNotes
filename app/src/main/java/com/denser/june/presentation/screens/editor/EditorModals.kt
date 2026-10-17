@@ -172,9 +172,7 @@ fun EditorModals(
             confirmButton = {
                 Button(onClick = {
                     dialogState.showExitDialog = false
-                    editorState.images.forEach { CompressUtils.cleanUncompressedOriginalFile(context, it) }
-                    onAction(EditorAction.SaveJournal)
-                    onAction(EditorAction.NavigateBack)
+                    onAction(EditorAction.SaveJournalAndNavigateBack)
                 }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {

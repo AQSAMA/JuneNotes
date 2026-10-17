@@ -268,19 +268,8 @@ fun JuneMediaLightbox(
                                 globalCache?.keys?.filter { it.key.contains(fileName) }?.forEach { globalCache.remove(it) }
                                 refreshTrigger++
 
-                                val journalToUpdate = metadataState.parentJournal ?: withContext(Dispatchers.IO) {
-                                    journalRepo.getAllJournalsIncludeDeletedSync().firstOrNull { j ->
-                                        j.images.any { File(it).name == fileName }
-                                    }
-                                }
-                                journalToUpdate?.let { j ->
-                                    val updated = j.copy(
-                                        updatedAt = System.currentTimeMillis(),
-                                        syncedAt = null
-                                    )
-                                    withContext(Dispatchers.IO) {
-                                        journalRepo.updateJournal(updated)
-                                    }
+                                withContext(Dispatchers.IO) {
+                                    journalRepo.markMediaModified(currentPath, System.currentTimeMillis())
                                 }
                             }
                             compressionState.cleanup()

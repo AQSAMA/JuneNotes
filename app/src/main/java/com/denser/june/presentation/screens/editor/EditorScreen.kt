@@ -118,7 +118,9 @@ fun EditorScreen() {
     val onBack = {
         keyboardController?.hide()
         focusManager.clearFocus(force = true)
-        if (!state.isDraft && state.isDirty) {
+        if (state.isSaving) {
+            // Keep the media-processing composition alive until the save completes.
+        } else if (!state.isDraft && state.isDirty) {
             dialogState.showExitDialog = true
         } else {
             viewModel.onAction(EditorAction.NavigateBack)
@@ -242,12 +244,11 @@ fun EditorScreen() {
                 actions = {
                     if (showSaveButton) {
                         Button(
-                            enabled = !state.isLoading,
+                            enabled = !state.isLoading && !state.isSaving,
                             onClick = {
                                 keyboardController?.hide()
                                 focusManager.clearFocus(force = true)
                                 if (!state.isLoading) {
-                                    state.images.forEach { CompressUtils.cleanUncompressedOriginalFile(context, it) }
                                     viewModel.onAction(EditorAction.SaveJournal)
                                 }
                             },

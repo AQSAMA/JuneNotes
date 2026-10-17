@@ -200,6 +200,20 @@ interface JournalDao {
     @Query("UPDATE journals SET deletedAt = :timestamp, updatedAt = :timestamp WHERE id = :id")
     suspend fun softDeleteJournal(id: String, timestamp: Long)
 
+    @Transaction
+    suspend fun markMediaModified(path: String, modifiedAt: Long): Int {
+        val fileName = java.io.File(path).name
+        if (fileName.isEmpty()) return 0
+        val referencing = getAllJournalsIncludeDeletedSync().filter { journal ->
+            journal.images.any { java.io.File(it).name == fileName }
+        }
+        referencing.forEach { markJournalMediaModified(it.id, modifiedAt) }
+        return referencing.size
+    }
+
+    @Query("UPDATE journals SET updatedAt = MAX(COALESCE(updatedAt, 0), :modifiedAt), syncedAt = NULL WHERE id = :id")
+    suspend fun markJournalMediaModified(id: String, modifiedAt: Long)
+
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun hardDeleteJournal(id: String)
 
