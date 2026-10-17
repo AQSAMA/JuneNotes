@@ -111,11 +111,12 @@ fun JuneMediaLightbox(
 
     val saveStatus = saveVM.status(currentPath)
     LaunchedEffect(currentPath, saveStatus.generation, saveStatus.busy) {
-        if (!saveStatus.busy && saveStatus.generation > 0 && currentPath != null) {
+        if (!saveStatus.busy && saveStatus.generation > saveStatus.handledGeneration && currentPath != null) {
             compressionState.isCompressMode = false
             compressionState.cleanup()
             if (!saveStatus.succeeded) {
                 android.widget.Toast.makeText(context, context.getString(com.denser.june.core.R.string.compression_save_failed), android.widget.Toast.LENGTH_SHORT).show()
+                saveVM.acknowledge(currentPath, saveStatus.generation)
                 return@LaunchedEffect
             }
             newlyCompressedPaths = newlyCompressedPaths + currentPath
@@ -124,6 +125,7 @@ fun JuneMediaLightbox(
             val globalCache = coil.Coil.imageLoader(context).memoryCache
             globalCache?.keys?.filter { it.key.contains(fileName) }?.forEach { globalCache.remove(it) }
             refreshTrigger++
+            saveVM.acknowledge(currentPath, saveStatus.generation)
         }
     }
 

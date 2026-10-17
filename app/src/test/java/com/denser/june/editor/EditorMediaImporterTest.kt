@@ -52,4 +52,15 @@ class EditorMediaImporterTest {
         assertEquals(EditorAction.SetMediaProcessing("/media/photo.jpg", false), actions.last())
         assertTrue(actions.contains(EditorAction.SetMediaProcessing("content://photo", false)))
     }
+    @Test fun nullPersistenceReportsFailureAndRemovesItsUnresolvedPlaceholder() = runTest {
+        val actions = mutableListOf<EditorAction>()
+        var failures = 0
+        val import = backgroundScope.importEditorMedia("content://unreadable", { null },
+            { fail("No persisted file to compress") }, actions::add, { failures++ })
+        import.join()
+        assertEquals(1, failures)
+        assertTrue(actions.contains(EditorAction.RemoveImage("content://unreadable")))
+        assertEquals(EditorAction.SetMediaProcessing("content://unreadable", false), actions.last())
+    }
+
 }

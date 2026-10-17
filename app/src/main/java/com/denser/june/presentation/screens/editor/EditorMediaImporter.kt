@@ -18,7 +18,7 @@ internal fun CoroutineScope.importEditorMedia(
     return launch {
         var persistedPath: String? = null
         try {
-            persistedPath = persist()
+            persistedPath = persist() ?: throw java.io.IOException("Media persistence returned no file")
             persistedPath?.let { path ->
                 onAction(EditorAction.ReplaceImage(uri, path))
                 compress(path)

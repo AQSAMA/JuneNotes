@@ -34,4 +34,26 @@ class MediaCompressionSaveVMTest {
             assertEquals(1, cleanups)
         } finally { store.clear(); Dispatchers.resetMain() }
     }
+    @Test fun handledFailureDoesNotReplayAfterRecreationAndNewFailureStillReports() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val vm = ViewModelProvider(store, ViewModelProvider.NewInstanceFactory())[MediaCompressionSaveVM::class.java]
+            assertTrue(vm.startSave("photo.jpg", { false }, { fail("No modified bytes") }))
+            runCurrent()
+            val failed = vm.status("photo.jpg")
+            assertFalse(failed.succeeded)
+            assertTrue(failed.generation > failed.handledGeneration)
+            vm.acknowledge("photo.jpg", failed.generation)
+            val recreated = ViewModelProvider(store, ViewModelProvider.NewInstanceFactory())[MediaCompressionSaveVM::class.java]
+            assertEquals(recreated.status("photo.jpg").generation, recreated.status("photo.jpg").handledGeneration)
+            assertTrue(recreated.startSave("photo.jpg", { false }, {}))
+            runCurrent()
+            val next = recreated.status("photo.jpg")
+            assertTrue(next.generation > next.handledGeneration)
+            recreated.acknowledge("photo.jpg", failed.generation)
+            assertEquals(failed.generation, recreated.status("photo.jpg").handledGeneration)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
 }
