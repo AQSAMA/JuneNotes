@@ -1,6 +1,5 @@
 package com.denser.june.presentation.components
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -110,13 +109,13 @@ fun JuneMediaLightbox(
         videoQualityPref = videoQualityPref
     )
 
-    BackHandler(enabled = compressionState.isCompressMode || isInfoVisible) {
-        if (compressionState.isCompressMode) {
-            compressionState.cancelCompression()
-        } else if (isInfoVisible) {
-            isInfoVisible = false
-        }
-    }
+    CompressionBackHandler(
+        isCompressing = compressionState.isCompressing,
+        isCompressMode = compressionState.isCompressMode,
+        isInfoVisible = isInfoVisible,
+        onCancel = compressionState::cancelCompression,
+        onHideInfo = { isInfoVisible = false }
+    )
 
     val density = LocalDensity.current
     val windowInfo = LocalWindowInfo.current
@@ -239,7 +238,9 @@ fun JuneMediaLightbox(
                 uncompressedOriginalBytes = uncompressedOrig?.length(),
                 allowCompression = allowCompression,
                 onBackOrCancel = {
-                    if (compressionState.isCompressMode) {
+                    if (compressionState.isCompressing) {
+                        // Toolbar Back follows the same save barrier as system Back.
+                    } else if (compressionState.isCompressMode) {
                         compressionState.cancelCompression()
                     } else if (isInfoVisible) {
                         isInfoVisible = false
@@ -248,33 +249,38 @@ fun JuneMediaLightbox(
                     }
                 },
                 onSaveCompression = {
-                    if (currentPath != null) {
+                    if (currentPath != null && !compressionState.isCompressing) {
+                        compressionState.isCompressing = true
                         scope.launch {
-                            compressionState.isCompressing = true
-                            val isVideo = ExifUtils.isVideoPath(currentPath)
-                            val preset = compressionState.selectedPreset ?: CompressionPreset.MEDIUM
-                            val success = withContext(Dispatchers.IO) {
-                                if (isVideo) {
-                                    CompressUtils.compressVideo(context, currentPath, preset)
-                                } else {
-                                    CompressUtils.compressPhoto(context, currentPath, preset)
+                            try {
+                                val isVideo = ExifUtils.isVideoPath(currentPath)
+                                val preset = compressionState.selectedPreset ?: CompressionPreset.MEDIUM
+                                val success = persistMediaCompression(
+                                    compress = {
+                                        withContext(Dispatchers.IO) {
+                                            if (isVideo) CompressUtils.compressVideo(context, currentPath, preset)
+                                            else CompressUtils.compressPhoto(context, currentPath, preset)
+                                        }
+                                    },
+                                    markModified = {
+                                        withContext(Dispatchers.IO) {
+                                            journalRepo.markMediaModified(currentPath, System.currentTimeMillis())
+                                        }
+                                    }
+                                )
+                                if (success) {
+                                    newlyCompressedPaths = newlyCompressedPaths + currentPath
+                                    val fileName = File(currentPath).name
+                                    imageLoader.memoryCache?.keys?.filter { it.key.contains(fileName) }?.forEach { imageLoader.memoryCache?.remove(it) }
+                                    val globalCache = coil.Coil.imageLoader(context).memoryCache
+                                    globalCache?.keys?.filter { it.key.contains(fileName) }?.forEach { globalCache.remove(it) }
+                                    refreshTrigger++
                                 }
+                                compressionState.isCompressMode = false
+                            } finally {
+                                compressionState.cleanup()
+                                compressionState.isCompressing = false
                             }
-                            if (success) {
-                                newlyCompressedPaths = newlyCompressedPaths + currentPath
-                                val fileName = File(currentPath).name
-                                imageLoader.memoryCache?.keys?.filter { it.key.contains(fileName) }?.forEach { imageLoader.memoryCache?.remove(it) }
-                                val globalCache = coil.Coil.imageLoader(context).memoryCache
-                                globalCache?.keys?.filter { it.key.contains(fileName) }?.forEach { globalCache.remove(it) }
-                                refreshTrigger++
-
-                                withContext(Dispatchers.IO) {
-                                    journalRepo.markMediaModified(currentPath, System.currentTimeMillis())
-                                }
-                            }
-                            compressionState.cleanup()
-                            compressionState.isCompressing = false
-                            compressionState.isCompressMode = false
                         }
                     }
                 },

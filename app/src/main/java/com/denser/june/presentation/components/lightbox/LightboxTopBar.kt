@@ -65,6 +65,7 @@ fun LightboxTopBar(
         ) {
             FilledIconButton(
                 onClick = onBackOrCancel,
+                enabled = !isCompressing,
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)

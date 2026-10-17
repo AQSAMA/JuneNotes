@@ -184,6 +184,7 @@ object CompressUtils {
                 retriever.release()
             }
         } else {
+            if (!PhotoCompressor.supportsPhotoCompression(file)) return result
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(file.absolutePath, bounds)
             val maxEdge = maxOf(bounds.outWidth, bounds.outHeight)

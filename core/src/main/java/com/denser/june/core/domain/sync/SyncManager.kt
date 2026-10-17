@@ -360,6 +360,22 @@ class SyncManager(
                 .map { File(it).name }.distinct()
                 .count { name -> File(mediaDir, name).let { it.exists() && it.length() > 0L } }
 
+            val remoteStates = remoteJournals.associate { meta ->
+                val id = meta.name.removeSuffix(".json")
+                id to (meta.name to meta.lastModified)
+            }
+
+            val plan = buildSyncPlan(
+                allLocalJournals = allLocalJournals,
+                remoteStates = remoteStates,
+                remoteJournalMeta = remoteJournalMeta,
+                tombstoneIds = tombstoneIds,
+                localsToSync = emptyList(),
+                isFullRevalidation = true
+            )
+
+            val locallyModifiedMedia = mediaWithLocalChanges(allLocalJournals, plan.toDownload.map { it.first }.toSet())
+
             val remoteMediaMeta = remoteManifest?.mediaMetadata ?: emptyMap()
             val mediaToUpload = localMediaFiles.filter { name ->
                 val file = File(mediaDir, name)
@@ -372,6 +388,8 @@ class SyncManager(
 
                 if (!isPhysicallyOnCloud) {
                     true
+                } else if (name.lowercase() !in locallyModifiedMedia) {
+                    false
                 } else if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
                     val localHash = file.computeSHA256()
                     localHash != remoteMeta.hash
@@ -408,20 +426,6 @@ class SyncManager(
                         false
                     }
                 }
-
-            val remoteStates = remoteJournals.associate { meta ->
-                val id = meta.name.removeSuffix(".json")
-                id to (meta.name to meta.lastModified)
-            }
-
-            val plan = buildSyncPlan(
-                allLocalJournals = allLocalJournals,
-                remoteStates = remoteStates,
-                remoteJournalMeta = remoteJournalMeta,
-                tombstoneIds = tombstoneIds,
-                localsToSync = emptyList(),
-                isFullRevalidation = true
-            )
 
             val localDeletions = remoteStates.keys
                 .filter { id -> id in tombstoneIds }
@@ -705,6 +709,9 @@ class SyncManager(
 
             val toDownload = plan.toDownload.toMutableList()
             val toUpload = plan.toUpload.toMutableList()
+            // Capture ownership before upload/download updates syncedAt. Clean local bytes
+            // are a cache of cloud media; a mismatch alone is not evidence of a local edit.
+            val locallyModifiedMedia = mediaWithLocalChanges(allLocalJournals, toDownload.map { it.first }.toSet()).toMutableSet()
 
             AppLogger.d(
                 AppLogger.Category.SYNC,
@@ -726,8 +733,10 @@ class SyncManager(
                         remoteMediaMeta.containsKey(name.lowercase())
                     val needsUp = f.exists() && f.length() > 0L && (
                         !isOnCloud ||
-                        (remoteMeta != null && remoteMeta.hash.isNotBlank() && sha256Cache.getOrPut(name) { f.computeSHA256() } != remoteMeta.hash) ||
-                        (remoteMeta != null && remoteMeta.size > 0L && f.length() != remoteMeta.size)
+                        (name.lowercase() in locallyModifiedMedia && (
+                            (remoteMeta != null && remoteMeta.hash.isNotBlank() && sha256Cache.getOrPut(name) { f.computeSHA256() } != remoteMeta.hash) ||
+                            (remoteMeta != null && remoteMeta.size > 0L && f.length() != remoteMeta.size)
+                        ))
                     )
                     if (needsUp) estimatedMediaUploadsList.add(name.lowercase())
                     needsUp
@@ -875,6 +884,9 @@ class SyncManager(
                 allLocalJournals = journalRepo.getAllJournalsIncludeDeletedSync()
             }
             val currentLocalsForUpload = allLocalJournals
+            val remoteOwnedIds = toDownload.map { it.first }.toSet()
+            locallyModifiedMedia.removeAll(allLocalJournals.filter { it.id in remoteOwnedIds }
+                .flatMap { it.images }.map { File(it).name.lowercase() }.toSet())
 
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Verifying local media attachments are uploaded...")
             val remoteMediaResult = provider.listMedia()
@@ -893,9 +905,9 @@ class SyncManager(
                         val isPhysicallyOnCloud = remoteMediaList.contains(name.lowercase())
                         if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
                             val localHash = sha256Cache.getOrPut(name) { file.computeSHA256() }
-                            (localHash != remoteMeta.hash) || !isPhysicallyOnCloud
+                            (name.lowercase() in locallyModifiedMedia && localHash != remoteMeta.hash) || !isPhysicallyOnCloud
                         } else if (remoteMeta != null && remoteMeta.size > 0L) {
-                            (file.length() != remoteMeta.size) || !isPhysicallyOnCloud
+                            (name.lowercase() in locallyModifiedMedia && file.length() != remoteMeta.size) || !isPhysicallyOnCloud
                         } else {
                             !isPhysicallyOnCloud
                         }
@@ -1020,6 +1032,7 @@ class SyncManager(
                     launch {
                         syncSemaphore.withPermit {
                             provider.downloadMedia(journalId, filename, file).onSuccess {
+                                sha256Cache.remove(filename)
                                 updateProgress("Downloading media...", isDownload = true)
                             }.onFailure { err ->
                                 updateProgress("Downloading media...", isFailure = true)
@@ -1410,6 +1423,15 @@ class SyncManager(
             }
         }
         syncPrefs.setLastPurgeTime(now)
+    }
+
+    private fun mediaWithLocalChanges(journals: List<Journal>, remoteOwnedIds: Set<String>): Set<String> {
+        val remoteNames = journals.filter { it.id in remoteOwnedIds }
+            .flatMap { it.images }.map { File(it).name.lowercase() }.toSet()
+        return journals.filter { journal ->
+            journal.id !in remoteOwnedIds && (journal.syncedAt == null ||
+                (journal.updatedAt ?: 0L) > journal.syncedAt + SYNC_THRESHOLD_MS)
+        }.flatMap { it.images }.map { File(it).name.lowercase() }.toSet() - remoteNames
     }
 
     private data class SyncPlan(

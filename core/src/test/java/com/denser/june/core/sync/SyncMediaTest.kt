@@ -58,7 +58,7 @@ class SyncMediaTest : BaseSyncTest() {
     fun `media hash mismatch triggers re-upload`() = runTest {
         // Local file has different bytes (modified on disk) than cloud
         val localMedia = harness.givenMediaFileOnDisk("photo.jpg", byteArrayOf(9, 9, 9))
-        val journal = SyncFixtures.syncedJournal("j1", updatedAt = T1, images = listOf(localMedia.absolutePath))
+        val journal = SyncFixtures.syncedJournal("j1", updatedAt = T2, images = listOf(localMedia.absolutePath)).copy(syncedAt = null)
         harness.repo.seed(journal)
         harness.cloud.putJournal(journal, modifiedAt = T1)
         harness.cloud.putMedia("j1", "photo.jpg", byteArrayOf(1, 2, 3))
@@ -76,7 +76,7 @@ class SyncMediaTest : BaseSyncTest() {
     @Test
     fun `analysis pendingMediaUploads detects compressed or modified media`() = runTest {
         val compressedFile = harness.givenMediaFileOnDisk("photo.jpg", byteArrayOf(1, 2))
-        val journal = SyncFixtures.syncedJournal("j1", updatedAt = T1, images = listOf(compressedFile.absolutePath))
+        val journal = SyncFixtures.syncedJournal("j1", updatedAt = T2, images = listOf(compressedFile.absolutePath)).copy(syncedAt = null)
         harness.repo.seed(journal)
         harness.cloud.putJournal(journal, modifiedAt = T1)
         harness.cloud.putMedia("j1", "photo.jpg", byteArrayOf(1, 2, 3, 4, 5))
@@ -182,4 +182,53 @@ class SyncMediaTest : BaseSyncTest() {
         assertEquals(15, harness.cloud.uploadMediaCallCount)
         assertEquals(15, harness.cloud.manifest?.totalMedia)
     }
+    @Test fun `remote journal winner downloads changed bytes without uploading stale media`() = runTest {
+        val oldFile = harness.givenMediaFileOnDisk("photo.jpg", byteArrayOf(1, 2, 3))
+        val local = harness.givenSyncedJournal("j1", images = listOf(oldFile.absolutePath))
+        val remote = local.copy(content = "New remote text", updatedAt = T2)
+        val remoteBytes = byteArrayOf(7, 8, 9)
+        harness.cloud.putJournal(remote, modifiedAt = T2)
+        harness.cloud.putMedia("j1", "photo.jpg", remoteBytes)
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(remoteBytes).joinToString("") { "%02x".format(it) }
+        harness.cloud.manifest = harness.cloud.manifest!!.copy(
+            journalMetadata = mapOf("j1" to com.denser.june.core.domain.sync.JournalSyncMeta(2, remote.computeContentHash())),
+            mediaMetadata = mapOf("photo.jpg" to MediaSyncMeta(3, hash)))
+        val analysis = harness.performAnalysis().getOrThrow()
+        assertEquals(0, analysis.pendingMediaUploadsCount)
+        assertEquals(1, analysis.pendingMediaDownloadsCount)
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(0, harness.cloud.uploadMediaCallCount)
+        org.junit.Assert.assertArrayEquals(remoteBytes, oldFile.readBytes())
+        assertEquals("New remote text", harness.repo.getJournalById("j1")!!.content)
+        assertEquals(hash, harness.cloud.manifest!!.mediaMetadata["photo.jpg"]!!.hash)
+    }
+
+    @Test fun `clean journal downloads remote-only media changes even with matching journal content`() = runTest {
+        val localFile = harness.givenMediaFileOnDisk("photo.jpg", byteArrayOf(1, 2, 3))
+        harness.givenSyncedJournal("j1", images = listOf(localFile.absolutePath))
+        val remoteBytes = byteArrayOf(4, 5)
+        harness.cloud.putMedia("j1", "photo.jpg", remoteBytes)
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(remoteBytes).joinToString("") { "%02x".format(it) }
+        harness.cloud.manifest = harness.cloud.manifest!!.copy(mediaMetadata = mapOf("photo.jpg" to MediaSyncMeta(2, hash)))
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(0, harness.cloud.uploadMediaCallCount)
+        org.junit.Assert.assertArrayEquals(remoteBytes, localFile.readBytes())
+        assertEquals(hash, harness.cloud.manifest!!.mediaMetadata["photo.jpg"]!!.hash)
+    }
+
+    @Test fun `failed remote journal pull never uploads its stale local attachment`() = runTest {
+        val localFile = harness.givenMediaFileOnDisk("photo.jpg", byteArrayOf(1, 2, 3))
+        val local = harness.givenSyncedJournal("j1", images = listOf(localFile.absolutePath))
+        val remote = local.copy(content = "Remote edit", updatedAt = T2)
+        harness.cloud.putJournal(remote, modifiedAt = T2)
+        harness.cloud.putMedia("j1", "photo.jpg", byteArrayOf(4, 5, 6))
+        harness.cloud.manifest = harness.cloud.manifest!!.copy(
+            journalMetadata = mapOf("j1" to com.denser.june.core.domain.sync.JournalSyncMeta(2, remote.computeContentHash())),
+            mediaMetadata = mapOf("photo.jpg" to MediaSyncMeta(3, "new_remote_hash")))
+        harness.cloud.failNextDownload = true
+        assertTrue(harness.sync().isFailure)
+        assertEquals(0, harness.cloud.uploadMediaCallCount)
+        assertEquals("Remote edit", harness.cloud.getJournal("j1")!!.content)
+    }
+
 }

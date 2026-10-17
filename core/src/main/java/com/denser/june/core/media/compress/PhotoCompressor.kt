@@ -14,13 +14,20 @@ import java.io.File
 
 object PhotoCompressor {
 
+    internal fun supportsPhotoCompression(file: File): Boolean {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.absolutePath, bounds)
+        return bounds.outMimeType == "image/jpeg"
+    }
+
+
     fun shouldCompressPhoto(file: File, maxDimension: Int = 2048): Boolean {
         if (!file.exists() || file.length() == 0L) return false
         val fileSize = file.length()
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
         val maxSide = maxOf(bounds.outWidth, bounds.outHeight)
-        if (maxSide <= 0) return false
+        if (bounds.outMimeType != "image/jpeg" || maxSide <= 0) return false
         if (maxSide <= 1080 && fileSize <= 350 * 1024L) return false
         val totalPixels = (bounds.outWidth.toLong() * bounds.outHeight.toLong()).coerceAtLeast(1L)
         val bpp = fileSize.toFloat() / totalPixels.toFloat()
@@ -37,6 +44,13 @@ object PhotoCompressor {
         val origFile = CompressUtils.getUncompressedOriginalFile(context, sourcePath)
         val sourceFile = origFile ?: targetOriginalFile
         val origLength = (origFile ?: targetOriginalFile).length()
+        if (!supportsPhotoCompression(sourceFile)) {
+            return@withContext CompressionPreviewResult(
+                preset = CompressionPreset.ORIGINAL, previewPath = sourceFile.absolutePath,
+                originalSizeBytes = origLength, compressedSizeBytes = origLength,
+                savingsPercent = 0, isAlreadyOptimal = true
+            )
+        }
         if (preset == CompressionPreset.ORIGINAL || !sourceFile.exists() || origLength == 0L) {
             return@withContext CompressionPreviewResult(
                 preset = CompressionPreset.ORIGINAL,
@@ -193,6 +207,7 @@ object PhotoCompressor {
             return@withContext false
         }
 
+        if (!supportsPhotoCompression(origFile ?: file)) return@withContext false
         if (origFile == null) {
             CompressUtils.saveUncompressedOriginalFile(context, path)
         }

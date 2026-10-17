@@ -66,6 +66,7 @@ class LightboxCompressionState(
     }
 
     fun cancelCompression() {
+        if (isCompressing) return
         CompressUtils.cleanupPreviewCache(sessionPreviewCache)
         sessionPreviewCache.clear()
         isCompressMode = false
