@@ -49,15 +49,22 @@ class CompressionNavigationTest {
         val high = com.denser.june.core.media.compress.model.CompressionPreset.HIGH
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val photo = com.denser.june.presentation.components.lightbox.LightboxCompressionState("photo.jpg", context, 80, 1080) { false }
-            photo.availablePresets = setOf(low, medium, high)
+            photo.updateMediaPresets(null, setOf(low, medium, high))
+            photo.startCompression()
+            assertEquals(medium, photo.selectedPreset)
             photo.updateQualityPreferences(70, 1080)
             assertEquals(low, photo.selectedPreset)
-            photo.isCompressMode = true
-            photo.selectedPreset = high
+            photo.selectPreset(high)
             photo.updateQualityPreferences(80, 1080)
             assertEquals(high, photo.selectedPreset)
+            val explicit = com.denser.june.presentation.components.lightbox.LightboxCompressionState("explicit.jpg", context, 80, 1080) { false }
+            explicit.updateMediaPresets(null, setOf(low, medium, high))
+            explicit.startCompression()
+            explicit.selectPreset(medium) // Choosing the displayed default is still an explicit choice.
+            explicit.updateQualityPreferences(70, 1080)
+            assertEquals(medium, explicit.selectedPreset)
             val video = com.denser.june.presentation.components.lightbox.LightboxCompressionState("video.mp4", context, 80, 1080) { false }
-            video.availablePresets = setOf(low, medium, high)
+            video.updateMediaPresets(null, setOf(low, medium, high))
             video.updateQualityPreferences(80, 480)
             assertEquals(low, video.selectedPreset)
             video.updateQualityPreferences(80, 720)

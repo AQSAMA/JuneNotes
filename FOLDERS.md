@@ -69,3 +69,5 @@ Media import jobs run in the retained editor ViewModel, with marker cleanup on e
 Draft exits wait for active imports and persistence, draft and explicit writes are serialized, and completion of a long import rearms autosave. Null persistence reports an import error. Compression completion generations are acknowledged after display so a handled failure is not replayed after recreation.
 
 Backup extraction stages entries, verifies identical existing bytes, and allocates new names for collisions across Markdown, JSON and legacy imports (including audio/artwork remapping). Preview version codes derive from the current release constant. Persisted quality changes update compression defaults without discarding an active user choice, and retained saves disable paging, deletion and the ordinary overflow menu.
+
+Compression state tracks an explicit preset choice separately from an open compression screen. Late preference/preset loads update the default until the user selects a preset, including when compression mode was opened before loading finished.

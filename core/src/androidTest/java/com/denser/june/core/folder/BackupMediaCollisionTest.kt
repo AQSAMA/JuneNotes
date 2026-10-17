@@ -44,11 +44,11 @@ class BackupMediaCollisionTest {
                 val folders = FolderRepositoryImpl(db)
                 val keep = Journal("keep-$token", "Keep", "Unrelated content", images = listOf(oldMedia.path),
                     songDetails = SongDetails("Keep song", "Artist", localPreviewPath = oldAudio.path, localThumbnailPath = oldArt.path),
-                    createdAt = 1, dateTime = 1)
+                    createdAt = 1, updatedAt = 1, dateTime = 1)
                 notes.insertJournal(keep)
                 val incoming = Journal("new-$token", "Imported", "Backup text", images = listOf(oldMedia.name),
                     songDetails = if (mode == "json-restore") SongDetails("New song", "Artist", localPreviewPath = oldAudio.name, localThumbnailPath = oldArt.name) else null,
-                    createdAt = 1, dateTime = 1)
+                    createdAt = 1, updatedAt = 1, dateTime = 1)
                 ZipOutputStream(zip.outputStream()).use { out ->
                     fun entry(name: String, text: String) { out.putNextEntry(ZipEntry(name)); out.write(text.toByteArray()); out.closeEntry() }
                     when (mode) {

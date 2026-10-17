@@ -328,8 +328,8 @@ fun JuneMediaLightbox(
                     selectedPreset = currentPreset,
                     isDarkTheme = isDarkTheme,
                     onPresetChanged = { preset ->
-                        if (!compressionState.isCompressing && preset != compressionState.selectedPreset) {
-                            compressionState.selectedPreset = preset
+                        if (!compressionState.isCompressing) {
+                            compressionState.selectPreset(preset)
                         }
                     }
                 )

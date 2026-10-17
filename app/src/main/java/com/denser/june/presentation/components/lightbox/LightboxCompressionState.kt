@@ -25,6 +25,8 @@ class LightboxCompressionState(
     var isCompressMode by mutableStateOf(false)
     val isCompressing: Boolean get() = isSaveInProgress()
     var selectedPreset by mutableStateOf<CompressionPreset?>(null)
+        private set
+    private var hasUserSelectedPreset = false
     var appliedPreset by mutableStateOf<CompressionPreset?>(null)
     var availablePresets by mutableStateOf(setOf(CompressionPreset.ORIGINAL))
     var isGeneratingPreview by mutableStateOf(false)
@@ -36,7 +38,25 @@ class LightboxCompressionState(
     fun updateQualityPreferences(photoQuality: Int, videoQuality: Int) {
         photoQualityPref = photoQuality
         videoQualityPref = videoQuality
-        if (!isCompressMode && !isCompressing) selectedPreset = pickDefaultPreset()
+        refreshDefaultPreset()
+    }
+
+    fun selectPreset(preset: CompressionPreset) {
+        if (isCompressing) return
+        hasUserSelectedPreset = true
+        selectedPreset = preset
+    }
+
+    fun updateMediaPresets(applied: CompressionPreset?, available: Set<CompressionPreset>) {
+        appliedPreset = applied
+        availablePresets = available
+        refreshDefaultPreset()
+    }
+
+    private fun refreshDefaultPreset() {
+        if (!isCompressing && !hasUserSelectedPreset) {
+            selectedPreset = if (currentPath == null) null else pickDefaultPreset()
+        }
     }
 
     fun pickDefaultPreset(): CompressionPreset {
@@ -67,6 +87,7 @@ class LightboxCompressionState(
 
     fun startCompression() {
         if (currentPath != null && !isCompressing) {
+            hasUserSelectedPreset = false
             selectedPreset = pickDefaultPreset()
             isCompressMode = true
         }
@@ -76,12 +97,14 @@ class LightboxCompressionState(
         if (isCompressing) return
         CompressUtils.cleanupPreviewCache(sessionPreviewCache)
         sessionPreviewCache.clear()
+        hasUserSelectedPreset = false
         isCompressMode = false
     }
 
     fun cleanup() {
         CompressUtils.cleanupPreviewCache(sessionPreviewCache)
         sessionPreviewCache.clear()
+        hasUserSelectedPreset = false
     }
 }
 
@@ -123,15 +146,9 @@ fun rememberLightboxCompressionState(
             val available = withContext(Dispatchers.IO) {
                 CompressUtils.getAvailablePresets(context, currentPath)
             }
-            state.appliedPreset = applied
-            state.availablePresets = available
-            if (!state.isCompressMode) {
-                state.selectedPreset = state.pickDefaultPreset()
-            }
+            state.updateMediaPresets(applied, available)
         } else {
-            state.appliedPreset = null
-            state.availablePresets = setOf(CompressionPreset.ORIGINAL)
-            state.selectedPreset = null
+            state.updateMediaPresets(null, setOf(CompressionPreset.ORIGINAL))
         }
     }
 
