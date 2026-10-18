@@ -13,3 +13,4 @@ else
 fi
 echo "JUNE_BUILD_VERSION_CODE=$code" >> "$GITHUB_ENV"
 echo "APK versionCode: $code"
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then echo "version_code=$code" >> "$GITHUB_OUTPUT"; fi

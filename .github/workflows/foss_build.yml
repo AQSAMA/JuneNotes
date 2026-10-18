@@ -106,6 +106,12 @@ jobs:
       run: |
         printf '\n<!-- junenotes-version-code: %s -->\n' "$JUNE_BUILD_VERSION_CODE" >> release_notes.md
 
+    - name: Prevent release version rollback
+      if: startsWith(github.ref, 'refs/tags/') && vars.JUNE_APPLICATION_ID != ''
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 .github/scripts/check-release-version.py production "$JUNE_BUILD_VERSION_CODE"
+
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2

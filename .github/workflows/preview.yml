@@ -26,6 +26,8 @@ concurrency:
 
 jobs:
   preview:
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
     runs-on: ubuntu-latest
     # PR merge refs cannot enter the branch-restricted signing environment.
     environment: ${{ github.event_name != 'pull_request' && !inputs.test_only && vars.JUNE_APPLICATION_ID != '' && 'signing' || 'ci' }}
@@ -57,6 +59,7 @@ jobs:
                   print('Verified upstream default:', app_id)
           PYTHON
       - name: Configure fork version code
+        id: version
         run: bash .github/scripts/fork-version.sh
       - name: Restore permanent Preview signing key
         if: github.event_name != 'pull_request' && !inputs.test_only && vars.JUNE_APPLICATION_ID != ''
@@ -173,6 +176,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: Preview APK
@@ -180,10 +186,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          JUNE_VERSION_CODE_BASE: ${{ vars.JUNE_VERSION_CODE_BASE }}
+          APK_VERSION_CODE: ${{ needs.preview.outputs.version_code }}
         run: |
           set -euo pipefail
-          code=$((JUNE_VERSION_CODE_BASE + GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT))
+          code="$APK_VERSION_CODE"
+          [[ "$code" =~ ^[0-9]+$ ]]
+          python3 .github/scripts/check-release-version.py preview "$code"
           printf 'Trusted Preview from %s.\n\n<!-- junenotes-version-code: %s -->\n' "$GITHUB_SHA" "$code" > notes.md
           if gh release view preview >/dev/null 2>&1; then
             gh release edit preview --notes-file notes.md --prerelease --latest=false

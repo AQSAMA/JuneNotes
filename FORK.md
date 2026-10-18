@@ -69,7 +69,9 @@ FOSS Release and Preview have independent workflow counters and independent IDs.
 Never delete/recreate these workflows or lower the base after publication. If
 moving CI, choose a new base above every published APK's versionCode. Local builds
 intended to update CI installs must pass a higher `-PjuneVersionCode=...` and the
-same signing key. Ordinary local builds remain development builds.
+same signing key. Publishing refuses a code at or below an already published
+channel update, including reruns of older builds. Ordinary local builds remain
+development builds.
 
 - Production: dispatch **FOSS Release Build** on main for a signed artifact, or
   push a new `v*` tag from reviewed main history to create a stable GitHub Release.
