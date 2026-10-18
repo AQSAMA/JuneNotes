@@ -5,6 +5,7 @@ import androidx.lifecycle.*
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.denser.june.core.domain.repository.JournalRepository
+import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.presentation.navigation.*
 import com.denser.june.presentation.screens.editor.*
 import kotlinx.coroutines.runBlocking
@@ -89,5 +90,47 @@ class EditorMediaPersistenceTest {
             assertEquals(title, saved.title)
             assertEquals(listOf(file.path), saved.images)
         } finally { file.delete() }
+    }
+
+    @Test fun deletingThenDiscardingRestoresThePersistedAttachmentOriginal() = withEditor { vm, exits, _ ->
+        val file = File(context.cacheDir, "${UUID.randomUUID()}.jpg")
+        val original = byteArrayOf(1, 2, 3)
+        try {
+            file.writeBytes(original)
+            instrumentation.runOnMainSync {
+                vm.onAction(EditorAction.AddImage(file.path))
+                vm.onAction(EditorAction.SaveJournal)
+            }
+            waitUntil { !vm.state.value.isSaving && !vm.state.value.isDraft }
+            assertNotNull(CompressUtils.saveUncompressedOriginalFile(context, file.path))
+            file.writeBytes(byteArrayOf(9))
+            instrumentation.runOnMainSync { vm.onAction(EditorAction.RemoveImage(file.path)) }
+            assertNotNull(CompressUtils.getUncompressedOriginalFile(context, file.path))
+            instrumentation.runOnMainSync { vm.onAction(EditorAction.DiscardChanges) }
+            waitUntil { exits.get() == 1 }
+            assertArrayEquals(original, file.readBytes())
+            val saved = runBlocking { repository.getJournalById(vm.state.value.journalId!!) }!!
+            assertEquals(listOf(file.path), saved.images)
+            assertNull(CompressUtils.getUncompressedOriginalFile(context, file.path))
+        } finally { CompressUtils.cleanUncompressedOriginalFile(context, file.path); file.delete() }
+    }
+
+    @Test fun savingAttachmentDeletionReleasesTheBackupAfterPersistence() = withEditor { vm, _, _ ->
+        val file = File(context.cacheDir, "${UUID.randomUUID()}.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        try {
+            instrumentation.runOnMainSync {
+                vm.onAction(EditorAction.AddImage(file.path))
+                vm.onAction(EditorAction.SaveJournal)
+            }
+            waitUntil { !vm.state.value.isSaving && !vm.state.value.isDraft }
+            assertNotNull(CompressUtils.saveUncompressedOriginalFile(context, file.path))
+            file.writeBytes(byteArrayOf(9))
+            instrumentation.runOnMainSync { vm.onAction(EditorAction.RemoveImage(file.path)) }
+            assertNotNull(CompressUtils.getUncompressedOriginalFile(context, file.path))
+            instrumentation.runOnMainSync { vm.onAction(EditorAction.SaveJournal) }
+            waitUntil { !vm.state.value.isSaving }
+            assertTrue(runBlocking { repository.getJournalById(vm.state.value.journalId!!) }!!.images.isEmpty())
+            assertNull(CompressUtils.getUncompressedOriginalFile(context, file.path))
+        } finally { CompressUtils.cleanUncompressedOriginalFile(context, file.path); file.delete() }
     }
 }

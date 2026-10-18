@@ -42,7 +42,6 @@ import com.denser.june.core.R
 import com.denser.june.presentation.components.ConnectedBarAction
 import com.denser.june.presentation.components.JuneConnectedActionBar
 import com.denser.june.core.domain.model.Journal
-import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.core.domain.model.enums.EditorLayoutDirection
 import com.denser.june.core.domain.model.enums.TimeFormat
 import com.denser.june.core.domain.preferences.JournalPreferences
@@ -143,7 +142,6 @@ fun EditorScreen() {
         MediaOperations(
             onItemSheetToggle = { dialogState.showAddItemSheet = it },
             onRemoveMedia = {
-                CompressUtils.cleanUncompressedOriginalFile(context, it)
                 viewModel.onAction(EditorAction.RemoveImage(it))
             },
             onMoveToFront = { viewModel.onAction(EditorAction.MoveImageToFront(it)) },

@@ -10,7 +10,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.enums.TimeFormat
-import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.core.media.storage.MediaStorageManager
 import com.denser.june.presentation.components.JuneDialog
 import com.denser.june.presentation.components.JuneDateTimePicker
@@ -123,8 +122,7 @@ fun EditorModals(
             dismissButton = {
                 OutlinedButton(onClick = {
                     dialogState.showExitDialog = false
-                    editorState.images.forEach { CompressUtils.restoreUncompressedOriginalFile(context, it) }
-                    onAction(EditorAction.NavigateBack)
+                    onAction(EditorAction.DiscardChanges)
                 }) { Text(stringResource(R.string.discard)) }
             },
             text = { Text(stringResource(R.string.save_progress_message)) }

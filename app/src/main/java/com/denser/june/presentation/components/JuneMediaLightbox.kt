@@ -303,7 +303,6 @@ fun JuneMediaLightbox(
                 onDeleteMedia = onDeleteMedia?.let { callback ->
                     {
                         if (currentPath != null && !compressionState.isCompressing) {
-                            CompressUtils.cleanUncompressedOriginalFile(context, currentPath)
                             if (mediaPaths.size <= 1) {
                                 navigator.navigateBack()
                             }

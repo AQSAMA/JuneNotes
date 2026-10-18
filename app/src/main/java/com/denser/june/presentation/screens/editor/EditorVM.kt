@@ -332,6 +332,7 @@ class EditorVM(
             is EditorAction.ToggleArchive -> toggleArchive()
             is EditorAction.SaveJournal -> saveJournal()
             is EditorAction.SaveJournalAndNavigateBack -> saveJournal(navigateBack = true)
+            is EditorAction.DiscardChanges -> discardChanges()
             is EditorAction.NavigateBack -> {
                 if (_state.value.isSaving) return
                 if (_state.value.isDraft && _state.value.isDirty) {
@@ -519,6 +520,40 @@ class EditorVM(
         }
     }
 
+    private fun discardChanges() {
+        if (_state.value.isSaving) return
+        _state.update { it.copy(isSaving = true) }
+        viewModelScope.launch {
+            try {
+                saveMutex.withLock {
+                    val current = _state.awaitFinishedMedia()
+                    // Deleted attachments still belong to the persisted note until Save.
+                    val paths = (existingJournal?.images.orEmpty() + current.images).toSet()
+                    val restored = withContext(Dispatchers.IO) {
+                        var complete = true
+                        for (path in paths) {
+                            if (CompressUtils.getUncompressedOriginalFile(context, path) != null) {
+                                if (CompressUtils.restoreUncompressedOriginalFile(context, path, keepBackup = true)) {
+                                    journalRepo.markMediaModified(path, System.currentTimeMillis())
+                                    CompressUtils.cleanUncompressedOriginalFile(context, path)
+                                } else complete = false
+                            }
+                        }
+                        complete
+                    }
+                    if (restored) navigator.navigateBack()
+                    else _uiEvent.trySend(context.getString(com.denser.june.core.R.string.media_restore_failed))
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiEvent.trySend(context.getString(com.denser.june.core.R.string.media_restore_failed))
+            } finally {
+                _state.update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
     private fun saveDraftAndNavigateBack() {
         _state.update { it.copy(isSaving = true) }
         viewModelScope.launch {
@@ -580,9 +615,12 @@ class EditorVM(
                 _state.update { it.copy(journalId = newId, content = currentMarkdown, isDirty = false, isDraft = true) }
             } else {
                 val imagesToDelete = existingJournal?.images.orEmpty().toSet() - currentState.images.toSet()
-                imagesToDelete.forEach { MediaStorageManager.deleteMedia(it) }
                 journalRepo.updateJournal(journalToSave)
                 existingJournal = journalToSave
+                imagesToDelete.forEach {
+                    MediaStorageManager.deleteMedia(it)
+                    CompressUtils.cleanUncompressedOriginalFile(context, it)
+                }
                 _state.update { it.copy(content = currentMarkdown, isDirty = false) }
             }
         }
@@ -629,6 +667,7 @@ class EditorVM(
                         cloudId = existingJournal?.cloudId
                     )
 
+                    val previousImages = existingJournal?.images.orEmpty()
                     if (existingJournal != null) {
                         journalRepo.updateJournal(journalToSave)
                         existingJournal = journalToSave
@@ -639,7 +678,9 @@ class EditorVM(
                         _state.update { it.copy(journalId = newId) }
                     }
 
-                    currentState.images.forEach { CompressUtils.cleanUncompressedOriginalFile(context, it) }
+                    (previousImages + currentState.images).toSet().forEach {
+                        CompressUtils.cleanUncompressedOriginalFile(context, it)
+                    }
                     _state.update { it.copy(isDirty = false, isDraft = false) }
                     if (navigateBack) navigator.navigateBack()
                 }
