@@ -31,7 +31,7 @@ fun LightboxMediaPager(
     isVideoZoomed: Boolean,
     isDarkTheme: Boolean,
     refreshTrigger: Int,
-    onToggleUI: () -> Unit,
+    onUIVisibilityChange: (Boolean) -> Unit,
     onShowInfo: () -> Unit,
     onHideInfo: () -> Unit,
     onVideoZoomChanged: (Boolean) -> Unit,
@@ -67,7 +67,7 @@ fun LightboxMediaPager(
                             uri = Uri.fromFile(MediaStorageManager.resolveMediaFile(context, activePath)),
                             playWhenReady = false,
                             isVisible = showUI && !isInfoVisible && !compressionState.isCompressMode,
-                            onVisibilityChange = { onToggleUI() },
+                            onVisibilityChange = onUIVisibilityChange,
                             onSwipeUp = {
                                 if (!isInfoVisible && !compressionState.isCompressMode) onShowInfo()
                             },
@@ -86,7 +86,7 @@ fun LightboxMediaPager(
                             if (isInfoVisible) {
                                 onHideInfo()
                             } else if (!compressionState.isCompressMode) {
-                                onToggleUI()
+                                onUIVisibilityChange(!showUI)
                             }
                         },
                         onSwipeUp = {

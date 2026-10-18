@@ -202,7 +202,7 @@ fun JuneMediaLightbox(
                 isVideoZoomed = isVideoZoomed,
                 isDarkTheme = isDarkTheme,
                 refreshTrigger = refreshTrigger,
-                onToggleUI = { showUI = !showUI },
+                onUIVisibilityChange = { showUI = it },
                 onShowInfo = { isInfoVisible = true },
                 onHideInfo = { isInfoVisible = false },
                 onVideoZoomChanged = { isVideoZoomed = it }
