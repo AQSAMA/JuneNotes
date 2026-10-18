@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -22,6 +24,7 @@ fun LightboxCompressionSliderCard(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val interactionPreset = remember { mutableStateOf<CompressionPreset?>(null) }
 
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -59,13 +62,18 @@ fun LightboxCompressionSliderCard(
                 onValueChange = { pos ->
                     val step = pos.roundToInt().coerceIn(0, 3)
                     val newPreset = CompressionPreset.fromStepIndex(step)
+                    interactionPreset.value = newPreset
                     if (newPreset != selectedPreset) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     }
                     onPresetChanged(newPreset)
                 },
                 // A tap on the current step is still an explicit preference choice.
-                onValueChangeFinished = { onPresetChanged(selectedPreset) },
+                onValueChangeFinished = {
+                    val confirmed = interactionPreset.value ?: selectedPreset
+                    interactionPreset.value = null
+                    onPresetChanged(confirmed)
+                },
                 valueRange = 0f..3f,
                 steps = 2,
                 modifier = Modifier.fillMaxWidth()

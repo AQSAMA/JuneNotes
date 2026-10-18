@@ -122,4 +122,17 @@ class CompressionNavigationTest {
         }
     }
 
+    @Test fun finishingASliderGestureKeepsTheNewlyChosenStep() {
+        var selected by mutableStateOf(CompressionPreset.MEDIUM)
+        ui.setContent {
+            androidx.compose.material3.MaterialTheme {
+                LightboxCompressionSliderCard(selected, false, { selected = it })
+            }
+        }
+        ui.onNode(hasSetProgressAction()).performTouchInput {
+            click(Offset(width * 0.95f, center.y))
+        }
+        ui.runOnIdle { assertEquals(CompressionPreset.HIGH, selected) }
+    }
+
 }
