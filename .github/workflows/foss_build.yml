@@ -6,9 +6,24 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  ORG_GRADLE_PROJECT_juneApplicationId: ${{ vars.JUNE_APPLICATION_ID || 'com.denser.june' }}
+  ORG_GRADLE_PROJECT_juneAppName: ${{ vars.JUNE_APP_NAME || 'June' }}
+  ORG_GRADLE_PROJECT_juneUpdateRepository: ${{ vars.JUNE_UPDATE_REPOSITORY || 'DenserMeerkat/June' }}
+  JUNE_VERSION_CODE_BASE: ${{ vars.JUNE_VERSION_CODE_BASE }}
+
+# Serialise releases so older builds cannot replace a newer latest release.
+concurrency:
+  group: foss-release
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: ${{ vars.JUNE_APPLICATION_ID != '' && 'signing' || 'release' }}
     permissions:
       contents: write
       id-token: write
@@ -17,29 +32,43 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: set up JDK 17
+    - name: set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
         cache: gradle
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    - name: Configure fork version code
+      run: bash .github/scripts/fork-version.sh
+
     - name: Decode Keystore
       env:
         ENCODED_STRING: ${{ secrets.RELEASE_KEYSTORE }}
       run: |
-        echo $ENCODED_STRING | base64 --decode > release.jks
+        test -n "$ENCODED_STRING"
+        umask 077
+        printf '%s' "$ENCODED_STRING" | base64 --decode > "$RUNNER_TEMP/release.p12"
 
     - name: Build with Gradle
       env:
-        RELEASE_STORE_FILE: ../release.jks
+        RELEASE_STORE_FILE: ${{ runner.temp }}/release.p12
         RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
         RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
         RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-      run: ./gradlew assembleFossRelease
+      run: bash gradlew :core:testReleaseUnitTest :app:testFossReleaseUnitTest :app:assembleFossRelease :app:signingReport
+
+    - name: Verify Production APK
+      env:
+        EXPECTED_CERT: ${{ vars.JUNE_RELEASE_CERT_SHA256 }}
+      run: python3 .github/scripts/verify-apk.py app/build/outputs/apk/foss/release/app-foss-release.apk "$ORG_GRADLE_PROJECT_juneApplicationId" "$JUNE_BUILD_VERSION_CODE" "$EXPECTED_CERT"
+
+    - name: Remove signing material
+      if: always()
+      run: rm -f "$RUNNER_TEMP/release.p12"
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
@@ -69,8 +98,13 @@ jobs:
         '
 
         if [ ! -s release_notes.md ]; then
-          echo "::warning::Could not find changelog for ${{ github.ref_name }} in changelog.json"
+          echo "::warning::Could not find changelog for $GITHUB_REF_NAME in changelog.json"
         fi
+
+    - name: Record fork APK version code
+      if: vars.JUNE_APPLICATION_ID != ''
+      run: |
+        printf '\n<!-- junenotes-version-code: %s -->\n' "$JUNE_BUILD_VERSION_CODE" >> release_notes.md
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
