@@ -39,6 +39,8 @@ fun LightboxTopBar(
     currentPreview: CompressionPreviewResult?,
     hasUncompressedOriginal: Boolean,
     uncompressedOriginalBytes: Long?,
+    previewFailed: Boolean = false,
+    onRetryPreview: () -> Unit = {},
     allowCompression: Boolean = true,
     onBackOrCancel: () -> Unit,
     onSaveCompression: () -> Unit,
@@ -78,6 +80,7 @@ fun LightboxTopBar(
             }
 
             if (isCompressMode) {
+                val previewFailureText = stringResource(R.string.compression_preview_failed)
                 val compressionStatus = remember(
                     uncompressedOriginalBytes,
                     exifInfo,
@@ -85,7 +88,9 @@ fun LightboxTopBar(
                     hasUncompressedOriginal,
                     selectedPreset,
                     appliedPreset,
-                    isGeneratingPreview
+                    isGeneratingPreview,
+                    previewFailed,
+                    previewFailureText
                 ) {
                     val origBytes = uncompressedOriginalBytes ?: exifInfo?.fileSizeBytes ?: currentPreview?.originalSizeBytes ?: 0L
                     val originalSizeStr = if (origBytes > 0L) origBytes.formatBytes() else (exifInfo?.fileSizeFormatted ?: "")
@@ -95,6 +100,7 @@ fun LightboxTopBar(
                         (currentPreview?.isAlreadyOptimal == true && !isRevertingToOriginal)
 
                     val subtitleText = when {
+                        previewFailed -> previewFailureText
                         isGeneratingPreview -> "Estimating..."
                         isCurrentState -> exifInfo?.fileSizeFormatted ?: originalSizeStr
                         selectedPreset == CompressionPreset.ORIGINAL -> originalSizeStr
@@ -158,7 +164,11 @@ fun LightboxTopBar(
 
                 val canSave = compressionStatus.canSave
 
-                FilledIconButton(
+                if (previewFailed) {
+                    TextButton(onClick = onRetryPreview, enabled = !isCompressing && !isGeneratingPreview) {
+                        Text(stringResource(R.string.retry_preview))
+                    }
+                } else FilledIconButton(
                     onClick = onSaveCompression,
                     enabled = canSave && !isCompressing,
                     colors = IconButtonDefaults.filledIconButtonColors(

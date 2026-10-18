@@ -21,6 +21,9 @@ import kotlin.coroutines.resume
 
 object VideoCompressor {
 
+    @UnstableApi
+    internal fun presentationForShortEdge(edge: Int): Presentation = Presentation.createForShortSide(edge)
+
     internal fun getRotatedShortEdge(retriever: MediaMetadataRetriever): Int {
         val origHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
         val origWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
@@ -234,7 +237,7 @@ object VideoCompressor {
         val effectiveTargetHeight = if (actualHeight in 1..targetHeight) actualHeight else targetHeight
 
         try {
-            val presentationEffect = Presentation.createForHeight(effectiveTargetHeight)
+            val presentationEffect = presentationForShortEdge(effectiveTargetHeight)
             val effects = Effects(emptyList(), listOf(presentationEffect))
 
             val mediaItem = if (clipEndMs != null && clipEndMs > 0L) {

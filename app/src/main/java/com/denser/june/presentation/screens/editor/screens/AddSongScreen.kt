@@ -47,6 +47,9 @@ import com.denser.june.presentation.screens.editor.components.TrimmerStepView
 import com.denser.june.presentation.screens.editor.components.UnimportedSongRow
 import com.denser.june.presentation.screens.editor.components.UnimportedSongsHeader
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
+import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 
 enum class AddSongStep {
@@ -71,9 +74,16 @@ fun AddSongScreen(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
-    var currentStep by remember { mutableStateOf(AddSongStep.Library) }
+    var currentStep by rememberSaveable { mutableStateOf(AddSongStep.Library) }
     var activeTrimmerSong by remember { mutableStateOf<SongDetails?>(null) }
-    var activeEditingSong by remember { mutableStateOf<SongDetails?>(null) }
+    val songSaver = remember {
+        Saver<SongDetails?, String>(
+            save = { it?.let { song -> Json.encodeToString(SongDetails.serializer(), song) } },
+            restore = { Json.decodeFromString(SongDetails.serializer(), it) }
+        )
+    }
+    var activeEditingSong by rememberSaveable(stateSaver = songSaver) { mutableStateOf<SongDetails?>(null) }
+    var isArtImportBusy by remember { mutableStateOf(false) }
 
     var showLinkInput by remember { mutableStateOf(false) }
     var songLink by remember { mutableStateOf("") }
@@ -129,12 +139,12 @@ fun AddSongScreen(
         }
     }
 
-    var editTitle by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.title ?: "") }
-    var editArtist by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.artistName ?: "") }
-    var editAlbum by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.albumName ?: "") }
-    var editGenre by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.genre ?: "") }
-    var editArtPath by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.localThumbnailPath) }
-    var isArtRemoved by remember(activeEditingSong) { mutableStateOf(false) }
+    var editTitle by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.title ?: "") }
+    var editArtist by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.artistName ?: "") }
+    var editAlbum by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.albumName ?: "") }
+    var editGenre by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.genre ?: "") }
+    var editArtPath by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.localThumbnailPath) }
+    var isArtRemoved by rememberSaveable(activeEditingSong) { mutableStateOf(false) }
 
     LaunchedEffect(state.journalEditSongPending) {
         if (state.journalEditSongPending && state.songDetails != null) {
@@ -291,6 +301,7 @@ fun AddSongScreen(
                         )
                         JuneFloatingAction(
                             onClick = {
+                                if (isArtImportBusy) return@JuneFloatingAction
                                 val orig = activeEditingSong ?: return@JuneFloatingAction
                                 val updated = buildUpdatedSong(
                                     orig = orig,
@@ -305,6 +316,7 @@ fun AddSongScreen(
                                 activeEditingSong = null
                                 currentStep = AddSongStep.Library
                             },
+                            enabled = !isArtImportBusy,
                             label = "Save",
                             icon = {
                                 Icon(
@@ -335,6 +347,7 @@ fun AddSongScreen(
                         )
                         JuneFloatingAction(
                             onClick = {
+                                if (isArtImportBusy) return@JuneFloatingAction
                                 val orig = activeEditingSong ?: return@JuneFloatingAction
                                 val updated = buildUpdatedSong(
                                     orig = orig,
@@ -349,6 +362,7 @@ fun AddSongScreen(
                                 activeEditingSong = null
                                 currentStep = AddSongStep.Library
                             },
+                            enabled = !isArtImportBusy,
                             label = "Save",
                             icon = {
                                 Icon(
@@ -597,6 +611,7 @@ fun AddSongScreen(
                         onGenreChange = { editGenre = it },
                         artPath = editArtPath,
                         isArtRemoved = isArtRemoved,
+                        onArtImportBusyChange = { isArtImportBusy = it },
                         onArtPathChange = {
                             editArtPath = it
                             isArtRemoved = false
@@ -627,6 +642,7 @@ fun AddSongScreen(
                         onGenreChange = { editGenre = it },
                         artPath = editArtPath,
                         isArtRemoved = isArtRemoved,
+                        onArtImportBusyChange = { isArtImportBusy = it },
                         onArtPathChange = {
                             editArtPath = it
                             isArtRemoved = false

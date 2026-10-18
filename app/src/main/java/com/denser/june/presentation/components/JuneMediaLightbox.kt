@@ -245,6 +245,8 @@ fun JuneMediaLightbox(
                 isInfoVisible = isInfoVisible,
                 isDarkTheme = isDarkTheme,
                 isGeneratingPreview = compressionState.isGeneratingPreview,
+                previewFailed = compressionState.previewFailed,
+                onRetryPreview = compressionState::retryPreview,
                 isCompressing = compressionState.isCompressing,
                 selectedPreset = compressionState.selectedPreset,
                 appliedPreset = compressionState.appliedPreset,

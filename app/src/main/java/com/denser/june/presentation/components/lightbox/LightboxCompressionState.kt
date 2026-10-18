@@ -6,6 +6,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.denser.june.core.media.compress.CompressUtils
@@ -13,6 +14,7 @@ import com.denser.june.core.media.compress.model.CompressionPreset
 import com.denser.june.core.media.compress.model.CompressionPreviewResult
 import com.denser.june.core.media.exif.ExifUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 class LightboxCompressionState(
@@ -30,10 +32,36 @@ class LightboxCompressionState(
     var appliedPreset by mutableStateOf<CompressionPreset?>(null)
     var availablePresets by mutableStateOf(setOf(CompressionPreset.ORIGINAL))
     var isGeneratingPreview by mutableStateOf(false)
+    var previewFailed by mutableStateOf(false)
+    var previewRequest by mutableIntStateOf(0)
+        private set
     val sessionPreviewCache = mutableMapOf<CompressionPreset, CompressionPreviewResult>()
 
     val currentPreview: CompressionPreviewResult?
         get() = selectedPreset?.let { sessionPreviewCache[it] }
+
+    fun retryPreview() {
+        if (!isCompressing && !isGeneratingPreview) previewRequest++
+    }
+
+    suspend fun generatePreview(preset: CompressionPreset) {
+        val path = currentPath ?: return
+        isGeneratingPreview = true
+        previewFailed = false
+        try {
+            val result = withContext(Dispatchers.IO) {
+                if (ExifUtils.isVideoPath(path)) CompressUtils.estimateVideoCompression(context, path, preset)
+                else CompressUtils.generatePhotoPreview(context, path, preset)
+            }
+            sessionPreviewCache[preset] = result
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            previewFailed = true
+        } finally {
+            isGeneratingPreview = false
+        }
+    }
 
     fun updateQualityPreferences(photoQuality: Int, videoQuality: Int) {
         photoQualityPref = photoQuality
@@ -98,6 +126,7 @@ class LightboxCompressionState(
         CompressUtils.cleanupPreviewCache(sessionPreviewCache)
         sessionPreviewCache.clear()
         hasUserSelectedPreset = false
+        previewFailed = false
         isCompressMode = false
     }
 
@@ -152,7 +181,8 @@ fun rememberLightboxCompressionState(
         }
     }
 
-    LaunchedEffect(state.isCompressMode, state.selectedPreset, currentPath) {
+    LaunchedEffect(state.isCompressMode, state.selectedPreset, currentPath, state.previewRequest) {
+        state.previewFailed = false
         val preset = state.selectedPreset
         if (!state.isCompressMode || currentPath == null || preset == null) return@LaunchedEffect
         if (preset == CompressionPreset.ORIGINAL) {
@@ -164,16 +194,7 @@ fun rememberLightboxCompressionState(
             return@LaunchedEffect
         }
 
-        state.isGeneratingPreview = true
-        val result = withContext(Dispatchers.IO) {
-            if (ExifUtils.isVideoPath(currentPath)) {
-                CompressUtils.estimateVideoCompression(context, currentPath, preset)
-            } else {
-                CompressUtils.generatePhotoPreview(context, currentPath, preset)
-            }
-        }
-        state.sessionPreviewCache[preset] = result
-        state.isGeneratingPreview = false
+        state.generatePreview(preset)
     }
 
     return state

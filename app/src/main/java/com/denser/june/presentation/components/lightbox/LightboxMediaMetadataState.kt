@@ -10,6 +10,7 @@ import com.denser.june.core.media.exif.ExifUtils
 import com.denser.june.core.media.exif.model.MediaExifInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.combine
 import java.io.File
 
 class LightboxMediaMetadataState(
@@ -34,25 +35,14 @@ fun rememberLightboxMediaMetadataState(
     val isSyncEnabled by syncPrefs.getSyncEnabled().collectAsStateWithLifecycle(initialValue = false)
     val syncProvider by syncPrefs.getSelectedProvider().collectAsStateWithLifecycle(initialValue = null)
 
-    var parentJournal by remember { mutableStateOf<Journal?>(null) }
-    var allJournalsCache by remember { mutableStateOf<List<Journal>?>(null) }
-
-    LaunchedEffect(journalId) {
-        if (journalId == null) {
-            allJournalsCache = withContext(Dispatchers.IO) { journalRepo.getAllJournals() }
-        }
+    val journalFlow = remember(journalRepo) {
+        combine(journalRepo.getJournals(), journalRepo.getDeletedJournals()) { active, deleted -> active + deleted }
     }
-
-    LaunchedEffect(currentPath, journalId, allJournalsCache) {
-        if (currentPath == null) return@LaunchedEffect
-        if (journalId != null) {
-            parentJournal = journalRepo.getJournalById(journalId)
-        } else {
-            val fileName = File(currentPath).name
-            parentJournal = allJournalsCache?.firstOrNull { j ->
-                j.images.any { File(it).name == fileName }
-            }
-        }
+    val journals by journalFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val parentJournal = remember(journals, journalId, currentPath) {
+        if (currentPath == null) null
+        else if (journalId != null) journals.firstOrNull { it.id == journalId }
+        else journals.firstOrNull { journal -> journal.images.any { File(it).name == File(currentPath).name } }
     }
 
     var exifInfo by remember { mutableStateOf<MediaExifInfo?>(null) }
@@ -60,8 +50,6 @@ fun rememberLightboxMediaMetadataState(
     val isPendingSync = remember(currentPath, newlyCompressedPaths, parentJournal, isSyncEnabled) {
         if (!isSyncEnabled || currentPath == null) {
             false
-        } else if (newlyCompressedPaths.contains(currentPath)) {
-            true
         } else {
             val journal = parentJournal
             if (journal != null && !journal.isDraft) {
@@ -69,7 +57,7 @@ fun rememberLightboxMediaMetadataState(
                 val updatedAt = journal.updatedAt
                 syncedAt == null || (updatedAt != null && updatedAt > syncedAt)
             } else {
-                false
+                newlyCompressedPaths.contains(currentPath)
             }
         }
     }
@@ -89,7 +77,7 @@ fun rememberLightboxMediaMetadataState(
         }
     }
 
-    LaunchedEffect(currentPath, refreshTrigger, parentJournal, isMediaBackedUp) {
+    LaunchedEffect(currentPath, fallbackDateTime, refreshTrigger, parentJournal, isMediaBackedUp) {
         if (currentPath == null) return@LaunchedEffect
         val info = withContext(Dispatchers.IO) {
             ExifUtils.readMediaExif(

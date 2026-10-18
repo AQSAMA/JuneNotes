@@ -171,12 +171,19 @@ object PhotoCompressor {
             rotatedBitmap
         }
 
-        cacheFile.outputStream().use { out ->
-            finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        try {
+            val encoded = writeMediaFileAtomically(cacheFile, 0L) { staged ->
+                staged.outputStream().use { out ->
+                    if (!finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)) {
+                        throw java.io.IOException("JPEG encoding failed")
+                    }
+                }
+                copyExifAttributes(sourceFile, staged, preset)
+            }
+            if (!encoded) throw java.io.IOException("Unable to store compression preview")
+        } finally {
+            finalBitmap.recycle()
         }
-        finalBitmap.recycle()
-
-        copyExifAttributes(sourceFile, cacheFile, preset)
 
         val newLength = cacheFile.length()
         val savings = if (origLength > 0L) {

@@ -1,5 +1,6 @@
 package com.denser.june.core.media
 
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -9,6 +10,7 @@ import android.util.Base64
 import androidx.exifinterface.media.ExifInterface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.denser.june.core.media.storage.SongMediaStorage
 import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.core.media.compress.PhotoCompressor
 import com.denser.june.core.media.compress.model.CompressionPreset
@@ -107,20 +109,15 @@ class PhotoCompressionSafetyTest {
                         saveAttributes()
                     }
                     val original = file.readBytes()
+                    val artwork = File(checkNotNull(SongMediaStorage.persistSongArt(context, Uri.fromFile(file))))
+                    try {
+                        val decodedArt = BitmapFactory.decodeFile(artwork.path)!!
+                        try { assertDiagonalOrientation(decodedArt, orientation) } finally { decodedArt.recycle() }
+                    } finally { artwork.delete() }
                     assertTrue(PhotoCompressor.compressPhoto(context, file.path, CompressionPreset.LOW))
                     val compressed = BitmapFactory.decodeFile(file.path)!!
                     try {
-                        assertTrue(compressed.width < compressed.height)
-                        val expected = if (orientation == ExifInterface.ORIENTATION_TRANSPOSE) {
-                            listOf(Color.RED, Color.BLUE, Color.GREEN, Color.YELLOW)
-                        } else listOf(Color.YELLOW, Color.GREEN, Color.BLUE, Color.RED)
-                        expected.forEachIndexed { index, color ->
-                            val pixel = compressed.getPixel(compressed.width * (if (index % 2 == 0) 1 else 3) / 4,
-                                compressed.height * (if (index / 2 == 0) 1 else 3) / 4)
-                            assertTrue("Wrong red channel for orientation $orientation", kotlin.math.abs(Color.red(pixel) - Color.red(color)) < 40)
-                            assertTrue("Wrong green channel for orientation $orientation", kotlin.math.abs(Color.green(pixel) - Color.green(color)) < 40)
-                            assertTrue("Wrong blue channel for orientation $orientation", kotlin.math.abs(Color.blue(pixel) - Color.blue(color)) < 40)
-                        }
+                        assertDiagonalOrientation(compressed, orientation)
                     } finally { compressed.recycle() }
                     assertEquals(ExifInterface.ORIENTATION_NORMAL, ExifInterface(file.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 0))
                     assertTrue(CompressUtils.restoreUncompressedOriginalFile(context, file.path))
@@ -128,6 +125,20 @@ class PhotoCompressionSafetyTest {
                 } finally { CompressUtils.cleanUncompressedOriginalFile(context, file.path); file.delete() }
             }
         } finally { bitmap.recycle() }
+    }
+
+    private fun assertDiagonalOrientation(bitmap: Bitmap, orientation: Int) {
+        assertTrue(bitmap.width < bitmap.height)
+        val expected = if (orientation == ExifInterface.ORIENTATION_TRANSPOSE) {
+            listOf(Color.RED, Color.BLUE, Color.GREEN, Color.YELLOW)
+        } else listOf(Color.YELLOW, Color.GREEN, Color.BLUE, Color.RED)
+        expected.forEachIndexed { index, color ->
+            val pixel = bitmap.getPixel(bitmap.width * (if (index % 2 == 0) 1 else 3) / 4,
+                bitmap.height * (if (index / 2 == 0) 1 else 3) / 4)
+            assertTrue("Wrong red channel for orientation $orientation", kotlin.math.abs(Color.red(pixel) - Color.red(color)) < 40)
+            assertTrue("Wrong green channel for orientation $orientation", kotlin.math.abs(Color.green(pixel) - Color.green(color)) < 40)
+            assertTrue("Wrong blue channel for orientation $orientation", kotlin.math.abs(Color.blue(pixel) - Color.blue(color)) < 40)
+        }
     }
 
     private suspend fun assertPreserved(file: File) {

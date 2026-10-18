@@ -138,7 +138,7 @@ fun EditorScreen() {
 
     BackHandler { onBack() }
 
-    val mediaOperations = remember(state.images) {
+    val mediaOperations = remember(state.images, state.dateTime, state.journalId, state.songDetails) {
         MediaOperations(
             onItemSheetToggle = { dialogState.showAddItemSheet = it },
             onRemoveMedia = {

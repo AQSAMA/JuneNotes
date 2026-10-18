@@ -76,7 +76,7 @@ development builds.
 - Production: dispatch **FOSS Release Build** on main for a signed artifact, or
   push a new `v*` tag from reviewed main history to create a stable GitHub Release.
   No Google Play account or credentials are needed. Do not reuse upstream's tags
-  for fork releases; use a new tag such as `v1.2.1-junenotes.1` for this main base.
+  for fork releases; use a new tag such as `v1.3.1-junenotes.1` for a reviewed v1.3.1 base.
 - Preview: main builds replace the `preview` prerelease APK. The tag identifies the
   channel; the release notes identify the exact source SHA and APK versionCode.
   Dispatch **Preview APK** on main to rebuild it. `test_only=true` enables tests
@@ -111,9 +111,9 @@ git push -u origin HEAD
 gh pr create --repo AQSAMA/JuneNotes --base main
 ```
 
-Main intentionally has not been replaced by the newer upstream tree. Existing
-upstream-sync work, including PR #5, remains separate and untouched. Sync commits
-may need small conflict resolutions in the Gradle/workflow files listed here.
+Upstream changes enter the existing fork history through reviewed merge PRs.
+Sync commits may need small conflict resolutions in the Gradle/workflow files
+listed here; retain the fork inputs and protected signing rules when resolving them.
 
 Start upstream contributions from the upstream tree, never from JuneNotes main:
 

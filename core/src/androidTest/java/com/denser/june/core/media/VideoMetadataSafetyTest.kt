@@ -19,6 +19,15 @@ class VideoMetadataSafetyTest {
     private val fallbackDate = 1_700_000_000_000L
     private val corruptBytes = byteArrayOf(1, 2, 3, 4)
 
+    @Test fun compressionPreservesTheRequestedShortEdgeInBothOrientations() {
+        val portrait = com.denser.june.core.media.compress.VideoCompressor.presentationForShortEdge(720).configure(1080, 1920)
+        assertEquals(720, portrait.width)
+        assertEquals(1280, portrait.height)
+        val landscape = com.denser.june.core.media.compress.VideoCompressor.presentationForShortEdge(720).configure(1920, 1080)
+        assertEquals(1280, landscape.width)
+        assertEquals(720, landscape.height)
+    }
+
     @Test fun corruptLocalVideoReturnsFallbackMetadata() {
         val file = File(context.cacheDir, "corrupt-${UUID.randomUUID()}.mp4")
         try {

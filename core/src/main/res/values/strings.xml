@@ -625,4 +625,6 @@
     <string name="folder_collapse_all">Collapse all folders</string>
     <string name="media_import_failed">Unable to import media</string>
     <string name="compression_save_failed">Unable to save compressed media</string>
+    <string name="compression_preview_failed">Unable to create preview</string>
+    <string name="retry_preview">Retry</string>
 </resources>
