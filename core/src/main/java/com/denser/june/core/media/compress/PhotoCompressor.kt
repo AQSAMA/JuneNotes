@@ -208,8 +208,8 @@ object PhotoCompressor {
         }
 
         if (!supportsPhotoCompression(origFile ?: file)) return@withContext false
-        if (origFile == null) {
-            CompressUtils.saveUncompressedOriginalFile(context, path)
+        if (origFile == null && CompressUtils.saveUncompressedOriginalFile(context, path) == null) {
+            return@withContext false
         }
 
         val preview = generatePhotoPreview(context, path, preset)

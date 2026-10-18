@@ -8,13 +8,14 @@ import com.denser.june.core.media.compress.model.CompressionPreviewResult
 import com.denser.june.core.media.exif.ExifUtils
 import com.denser.june.core.media.storage.MediaStorageManager
 import java.io.File
+import java.nio.file.Files
 
 object CompressUtils {
 
     fun getUncompressedOriginalFile(context: Context, path: String): File? {
         val file = MediaStorageManager.resolveMediaFile(context, path)
         val tempOrig = File(context.cacheDir, "uncompressed_${file.name}")
-        return if (tempOrig.exists() && tempOrig.length() > 0L) tempOrig else null
+        return if (tempOrig.isFile && tempOrig.length() > 0L) tempOrig else null
     }
 
     fun saveUncompressedOriginalFile(context: Context, path: String): File? {
@@ -22,26 +23,32 @@ object CompressUtils {
         if (!file.exists() || file.length() == 0L) return null
         val tempOrig = File(context.cacheDir, "uncompressed_${file.name}")
         if (!tempOrig.exists()) {
+            var staged: File? = null
             try {
-                file.copyTo(tempOrig, overwrite = true)
+                // A failed copy must never leave a partial file that looks like a backup.
+                staged = Files.createTempFile(context.cacheDir.toPath(), ".uncompressed-", ".tmp").toFile()
+                file.copyTo(staged, overwrite = true)
+                if (staged.length() != file.length()) return null
+                Files.move(staged.toPath(), tempOrig.toPath())
             } catch (_: Exception) {
                 return null
+            } finally {
+                staged?.delete()
             }
         }
-        return if (tempOrig.exists() && tempOrig.length() > 0L) tempOrig else null
+        return if (tempOrig.isFile && tempOrig.length() > 0L) tempOrig else null
     }
 
-    fun restoreUncompressedOriginalFile(context: Context, path: String): Boolean {
+    fun restoreUncompressedOriginalFile(context: Context, path: String, keepBackup: Boolean = false): Boolean {
         val file = MediaStorageManager.resolveMediaFile(context, path)
         val tempOrig = File(context.cacheDir, "uncompressed_${file.name}")
-        val success = if (tempOrig.exists() && tempOrig.length() > 0L) {
+        val success = if (tempOrig.isFile && tempOrig.length() > 0L) {
             try {
                 val origTimestamp = tempOrig.lastModified()
                 val copied = tempOrig.copyTo(file, overwrite = true)
                 if (origTimestamp > 0L) {
                     file.setLastModified(origTimestamp)
                 }
-                tempOrig.delete()
                 copied.exists()
             } catch (_: Exception) {
                 false
@@ -49,7 +56,8 @@ object CompressUtils {
         } else {
             false
         }
-        cleanUncompressedOriginalFile(context, path)
+        // Keep the only original available if restoration fails (for example, low storage).
+        if (success && !keepBackup) cleanUncompressedOriginalFile(context, path)
         return success
     }
 

@@ -195,8 +195,8 @@ object VideoCompressor {
             return@withContext false
         }
 
-        if (origFile == null) {
-            CompressUtils.saveUncompressedOriginalFile(context, path)
+        if (origFile == null && CompressUtils.saveUncompressedOriginalFile(context, path) == null) {
+            return@withContext false
         }
 
         val inputFile = origFile ?: targetFile

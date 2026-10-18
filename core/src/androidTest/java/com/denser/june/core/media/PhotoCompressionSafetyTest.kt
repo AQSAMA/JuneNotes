@@ -12,6 +12,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class PhotoCompressionSafetyTest {
@@ -44,6 +45,40 @@ class PhotoCompressionSafetyTest {
             assertTrue(PhotoCompressor.shouldCompressPhoto(file))
             assertTrue(CompressUtils.getAvailablePresets(file).contains(CompressionPreset.HIGH))
         } finally { bitmap.recycle(); file.delete() }
+    }
+
+    @Test fun cachedPreviewCannotReplaceMediaWhenOriginalBackupFails() = runBlocking {
+        val bitmap = Bitmap.createBitmap(2300, 2300, Bitmap.Config.ARGB_8888)
+        val file = File(context.cacheDir, "safety-backup-${UUID.randomUUID()}.jpg")
+        val backup = File(context.cacheDir, "uncompressed_${file.name}")
+        try {
+            bitmap.eraseColor(0xFF55AA33.toInt())
+            file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
+            val original = file.readBytes()
+            val preview = PhotoCompressor.generatePhotoPreview(context, file.path, CompressionPreset.LOW)
+            assertNotEquals(file.path, preview.previewPath)
+            // An unusable destination makes saving the only original fail.
+            assertTrue(backup.createNewFile())
+            assertFalse(PhotoCompressor.compressPhoto(context, file.path, CompressionPreset.LOW))
+            assertArrayEquals(original, file.readBytes())
+            File(preview.previewPath).delete()
+        } finally { bitmap.recycle(); file.delete(); backup.delete() }
+    }
+
+    @Test fun failedRestoreKeepsTheOriginalAvailableForRetry() {
+        val file = File(context.cacheDir, "safety-restore-${UUID.randomUUID()}.jpg")
+        val original = byteArrayOf(1, 2, 3)
+        val backup = File(context.cacheDir, "uncompressed_${file.name}")
+        val obstruction = File(file, "obstruction")
+        try {
+            file.writeBytes(original)
+            assertNotNull(CompressUtils.saveUncompressedOriginalFile(context, file.path))
+            assertTrue(file.delete())
+            assertTrue(file.mkdir())
+            obstruction.writeText("Prevent replacement")
+            assertFalse(CompressUtils.restoreUncompressedOriginalFile(context, file.path))
+            assertArrayEquals(original, backup.readBytes())
+        } finally { obstruction.delete(); file.delete(); backup.delete() }
     }
 
     private suspend fun assertPreserved(file: File) {
