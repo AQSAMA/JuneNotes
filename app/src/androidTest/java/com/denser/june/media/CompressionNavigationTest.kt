@@ -113,7 +113,7 @@ class CompressionNavigationTest {
                 LightboxCompressionSliderCard(state.selectedPreset!!, false, state::selectPreset)
             }
         }
-        ui.onNode(hasSetProgressAction()).performTouchInput {
+        ui.onNodeWithTag("compression-preset-slider").performTouchInput {
             click(Offset(width / 3f, center.y))
         }
         ui.runOnIdle {
@@ -129,7 +129,7 @@ class CompressionNavigationTest {
                 LightboxCompressionSliderCard(selected, false, { selected = it })
             }
         }
-        ui.onNode(hasSetProgressAction()).performTouchInput {
+        ui.onNodeWithTag("compression-preset-slider").performTouchInput {
             click(Offset(width * 0.95f, center.y))
         }
         ui.runOnIdle { assertEquals(CompressionPreset.HIGH, selected) }
