@@ -29,11 +29,16 @@ on:
 
 jobs:
   release:
+    # Forks must explicitly opt in with their own package and Play credentials.
+    if: github.repository == 'DenserMeerkat/June' || vars.JUNE_ENABLE_PLAY_RELEASE == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
     env:
+      ORG_GRADLE_PROJECT_juneApplicationId: ${{ vars.JUNE_APPLICATION_ID || 'com.denser.june' }}
+      ORG_GRADLE_PROJECT_juneAppName: ${{ vars.JUNE_APP_NAME || 'June' }}
+      ORG_GRADLE_PROJECT_juneUpdateRepository: ${{ vars.JUNE_UPDATE_REPOSITORY || 'DenserMeerkat/June' }}
       WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
 
     steps:
@@ -130,7 +135,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ steps.auth.outputs.credentials_file_path }}
-          packageName: com.denser.june.play
+          packageName: ${{ vars.JUNE_APPLICATION_ID != '' && format('{0}.play', vars.JUNE_APPLICATION_ID) || 'com.denser.june.play' }}
           releaseFiles: ${{ env.AAB_PATH }}
           tracks: ${{ inputs.track || 'production' }}
           status: ${{ inputs.status || 'completed' }}
@@ -142,7 +147,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: com.denser.june.play
+          packageName: ${{ vars.JUNE_APPLICATION_ID != '' && format('{0}.play', vars.JUNE_APPLICATION_ID) || 'com.denser.june.play' }}
           releaseFiles: ${{ env.AAB_PATH }}
           tracks: ${{ inputs.track || 'production' }}
           status: ${{ inputs.status || 'completed' }}

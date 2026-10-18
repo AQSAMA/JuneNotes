@@ -5,9 +5,20 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      test_only:
+        description: 'Use temporary signing for an upstream sync or other untrusted branch'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+env:
+  ORG_GRADLE_PROJECT_juneApplicationId: ${{ vars.JUNE_APPLICATION_ID || 'com.denser.june' }}
+  ORG_GRADLE_PROJECT_juneAppName: ${{ vars.JUNE_APP_NAME || 'June' }}
+  ORG_GRADLE_PROJECT_juneUpdateRepository: ${{ vars.JUNE_UPDATE_REPOSITORY || 'DenserMeerkat/June' }}
+  JUNE_VERSION_CODE_BASE: ${{ vars.JUNE_VERSION_CODE_BASE }}
 
 concurrency:
   group: preview-${{ github.ref }}
@@ -15,9 +26,15 @@ concurrency:
 
 jobs:
   preview:
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
     runs-on: ubuntu-latest
+    # PR merge refs cannot enter the branch-restricted signing environment.
+    environment: ${{ github.event_name != 'pull_request' && !inputs.test_only && vars.JUNE_APPLICATION_ID != '' && 'signing' || 'ci' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -27,42 +44,59 @@ jobs:
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
-      - name: Restore stable preview signing key
-        id: preview-key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: june-preview-signing-v1
-      - name: Require the existing Preview signing key
+      - name: Verify upstream default variants
+        run: |
+          env -u ORG_GRADLE_PROJECT_juneApplicationId -u ORG_GRADLE_PROJECT_juneAppName -u ORG_GRADLE_PROJECT_juneUpdateRepository bash gradlew :app:generateFossReleaseBuildConfig :app:generateFossPreviewBuildConfig :app:generateFossDebugBuildConfig :app:generatePlayReleaseBuildConfig :app:generatePlayPreviewBuildConfig :app:generatePlayDebugBuildConfig
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          for flavor in ('foss', 'play'):
+              for build in ('release', 'preview', 'debug'):
+                  config = Path(f'app/build/generated/source/buildConfig/{flavor}/{build}/com/denser/june/BuildConfig.java').read_text()
+                  app_id = 'com.denser.june' + ('.play' if flavor == 'play' else '') + ('.' + build if build != 'release' else '')
+                  assert f'APPLICATION_ID = "{app_id}"' in config, config
+                  assert 'package com.denser.june;' in config
+                  assert 'https://api.github.com/repos/DenserMeerkat/June/releases/latest' in config
+                  print('Verified upstream default:', app_id)
+          PYTHON
+      - name: Configure fork version code
+        id: version
+        run: bash .github/scripts/fork-version.sh
+      - name: Restore permanent Preview signing key
+        if: github.event_name != 'pull_request' && !inputs.test_only && vars.JUNE_APPLICATION_ID != ''
         env:
           PREVIEW_KEYSTORE_BASE64: ${{ secrets.JUNE_PREVIEW_KEYSTORE_BASE64 }}
+          PREVIEW_STORE_PASSWORD: ${{ secrets.JUNE_PREVIEW_STORE_PASSWORD }}
+          PREVIEW_KEY_ALIAS: ${{ secrets.JUNE_PREVIEW_KEY_ALIAS }}
+          PREVIEW_KEY_PASSWORD: ${{ secrets.JUNE_PREVIEW_KEY_PASSWORD }}
         run: |
-          mkdir -p ~/.android
-          if [ -n "$PREVIEW_KEYSTORE_BASE64" ]; then
-            printf '%s' "$PREVIEW_KEYSTORE_BASE64" | base64 --decode > ~/.android/debug.keystore
-          fi
-          if [ ! -f ~/.android/debug.keystore ]; then
-            echo '::error::Preview signing key is missing. Restore the existing key via JUNE_PREVIEW_KEYSTORE_BASE64; do not generate a replacement.'
-            exit 1
-          fi
-          preview_cert="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
-          test "$preview_cert" = '8550b3514bf050d00665eea91f3a8cc939ec398576359fe73bc8725f05861448'
+          test -n "$PREVIEW_KEYSTORE_BASE64"
+          test -n "$PREVIEW_STORE_PASSWORD"
+          test -n "$PREVIEW_KEY_ALIAS"
+          test -n "$PREVIEW_KEY_PASSWORD"
+          umask 077
+          printf '%s' "$PREVIEW_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/preview.p12"
+          echo "ORG_GRADLE_PROJECT_previewStoreFile=$RUNNER_TEMP/preview.p12" >> "$GITHUB_ENV"
       - name: Validate and build Preview APK
-        run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest :app:assembleFossPreview -PpreviewVersionCode=$((102010 + GITHUB_RUN_NUMBER)) -PpreviewStoreFile="$HOME/.android/debug.keystore" --stacktrace
-      - name: Name Preview APK
+        env:
+          PREVIEW_STORE_PASSWORD: ${{ secrets.JUNE_PREVIEW_STORE_PASSWORD }}
+          PREVIEW_KEY_ALIAS: ${{ secrets.JUNE_PREVIEW_KEY_ALIAS }}
+          PREVIEW_KEY_PASSWORD: ${{ secrets.JUNE_PREVIEW_KEY_PASSWORD }}
+        run: bash gradlew :core:testReleaseUnitTest :app:testFossPreviewUnitTest :app:assembleFossPreview :app:assembleFossDebug :app:assemblePlayDebug :app:signingReport --stacktrace
+      - name: Verify APK identities
+        env:
+          EXPECTED_PREVIEW_CERT: ${{ github.event_name != 'pull_request' && !inputs.test_only && vars.JUNE_APPLICATION_ID != '' && vars.JUNE_PREVIEW_CERT_SHA256 || '' }}
         run: |
           cp app/build/outputs/apk/foss/preview/*.apk June-Preview.apk
-          preview_apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
-          preview_expected_cert="$(keytool -exportcert -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey | sha256sum | cut -d ' ' -f 1)"
-          preview_actual_cert="$("$preview_apksigner" verify --print-certs June-Preview.apk | sed -n 's/^.*certificate SHA-256 digest: //p' | head -n 1)"
-          echo "Cached certificate: $preview_expected_cert"
-          echo "APK certificate: $preview_actual_cert"
-          test "$preview_expected_cert" = "$preview_actual_cert"
-          echo "Preview APK signing certificate matches the cached key."
+          python3 .github/scripts/verify-apk.py June-Preview.apk "$ORG_GRADLE_PROJECT_juneApplicationId.preview" "$JUNE_BUILD_VERSION_CODE" "$EXPECTED_PREVIEW_CERT"
+          python3 .github/scripts/verify-apk.py app/build/outputs/apk/foss/debug/app-foss-debug.apk "$ORG_GRADLE_PROJECT_juneApplicationId.debug" "$JUNE_BUILD_VERSION_CODE"
+          python3 .github/scripts/verify-apk.py app/build/outputs/apk/play/debug/app-play-debug.apk "$ORG_GRADLE_PROJECT_juneApplicationId.play.debug" "$JUNE_BUILD_VERSION_CODE"
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/preview.p12"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Preview APK
+          name: ${{ (github.event_name == 'pull_request' || inputs.test_only) && 'Preview APK (PR test, temporary signature)' || 'Preview APK' }}
           path: June-Preview.apk
           if-no-files-found: error
           retention-days: 30
@@ -134,3 +168,34 @@ jobs:
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
             app/build/ui-checks/
+
+  publish-preview:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && !inputs.test_only && vars.JUNE_APPLICATION_ID != ''
+    needs: [preview, folder-database-tests, folder-ui-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: Preview APK
+      - name: Publish signed Preview prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          APK_VERSION_CODE: ${{ needs.preview.outputs.version_code }}
+        run: |
+          set -euo pipefail
+          code="$APK_VERSION_CODE"
+          [[ "$code" =~ ^[0-9]+$ ]]
+          python3 .github/scripts/check-release-version.py preview "$code"
+          printf 'Trusted Preview from %s.\n\n<!-- junenotes-version-code: %s -->\n' "$GITHUB_SHA" "$code" > notes.md
+          if gh release view preview >/dev/null 2>&1; then
+            gh release edit preview --notes-file notes.md --prerelease --latest=false
+          else
+            gh release create preview --target "$GITHUB_SHA" --title 'JuneNotes Preview' --prerelease --latest=false --notes-file notes.md
+          fi
+          gh release upload preview June-Preview.apk --clobber
