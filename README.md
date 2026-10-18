@@ -1,3 +1,5 @@
+> JuneNotes fork: see [FORK.md](FORK.md) for independent APKs, signing recovery, releases, upstream sync, and clean upstream contributions.
+
 # June
 
 <p align="center">

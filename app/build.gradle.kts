@@ -12,8 +12,11 @@ plugins {
     alias(libs.plugins.aboutLibraries)
 }
 
-val appName = "June"
-val appId = "com.denser.june"
+// Optional build inputs keep the upstream identity unchanged by default.
+val appName = providers.gradleProperty("juneAppName").getOrElse("June")
+val appId = providers.gradleProperty("juneApplicationId").getOrElse("com.denser.june")
+val updateRepository = providers.gradleProperty("juneUpdateRepository").getOrElse("DenserMeerkat/June")
+require(updateRepository.matches(Regex("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")))
 val appNamespace = "com.denser.june"
 val apkNamePrefix = "june"
 
@@ -54,10 +57,11 @@ android {
         applicationId = appId
         minSdk = 28
         targetSdk = 36
-        versionCode = if (project.gradle.startParameter.taskNames.any { it.contains("Preview", ignoreCase = true) })
-            providers.gradleProperty("previewVersionCode").orNull?.toInt() ?: appVersionCode else appVersionCode
+        versionCode = providers.gradleProperty("juneVersionCode").orNull?.toInt() ?: appVersionCode
         versionName = appVersionName
         buildConfigField("String", "HYPHEN_VERSION", "\"${libs.versions.hyphen.get()}\"")
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
+        buildConfigField("String", "UPDATE_RELEASES_URL", "\"https://api.github.com/repos/$updateRepository/releases/latest\"")
 
         if (!enableAbiSplits) {
             ndk {
@@ -83,9 +87,9 @@ android {
         providers.gradleProperty("previewStoreFile").orNull?.let { previewStoreFile ->
             create("preview") {
                 storeFile = file(previewStoreFile)
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+                storePassword = System.getenv("PREVIEW_STORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("PREVIEW_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("PREVIEW_KEY_PASSWORD") ?: "android"
             }
         }
         create("playRelease") {
@@ -148,7 +152,10 @@ android {
             initWith(getByName("release"))
             applicationIdSuffix = ".preview"
             versionNameSuffix = "-preview"
-            resValue("string", "app_name", "June Preview")
+            resValue("string", "app_name", "$appName Preview")
+            if (updateRepository != "DenserMeerkat/June") {
+                buildConfigField("String", "UPDATE_RELEASES_URL", "\"https://api.github.com/repos/$updateRepository/releases/tags/preview\"")
+            }
             isDebuggable = false
             signingConfig = signingConfigs.findByName("preview") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
@@ -187,6 +194,14 @@ android {
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("preview")) { variant ->
+        providers.gradleProperty("previewVersionCode").orNull?.let { code ->
+            variant.outputs.forEach { it.versionCode.set(code.toInt()) }
+        }
     }
 }
 
