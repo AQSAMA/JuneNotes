@@ -114,7 +114,7 @@ class CompressionNavigationTest {
             }
         }
         ui.onNodeWithTag("compression-preset-slider").performTouchInput {
-            click(Offset(width / 3f, center.y))
+            click(Offset(width * CompressionPreset.MEDIUM.stepIndex / 3f, center.y))
         }
         ui.runOnIdle {
             state.updateQualityPreferences(70, 1080)
@@ -130,7 +130,7 @@ class CompressionNavigationTest {
             }
         }
         ui.onNodeWithTag("compression-preset-slider").performTouchInput {
-            click(Offset(width * 0.95f, center.y))
+            click(Offset(width * CompressionPreset.HIGH.stepIndex / 3f, center.y))
         }
         ui.runOnIdle { assertEquals(CompressionPreset.HIGH, selected) }
     }

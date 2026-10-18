@@ -42,20 +42,7 @@ object CompressUtils {
     fun restoreUncompressedOriginalFile(context: Context, path: String, keepBackup: Boolean = false): Boolean {
         val file = MediaStorageManager.resolveMediaFile(context, path)
         val tempOrig = File(context.cacheDir, "uncompressed_${file.name}")
-        val success = if (tempOrig.isFile && tempOrig.length() > 0L) {
-            try {
-                val origTimestamp = tempOrig.lastModified()
-                val copied = tempOrig.copyTo(file, overwrite = true)
-                if (origTimestamp > 0L) {
-                    file.setLastModified(origTimestamp)
-                }
-                copied.exists()
-            } catch (_: Exception) {
-                false
-            }
-        } else {
-            false
-        }
+        val success = replaceMediaFile(tempOrig, file, tempOrig.lastModified())
         // Keep the only original available if restoration fails (for example, low storage).
         if (success && !keepBackup) cleanUncompressedOriginalFile(context, path)
         return success
@@ -137,17 +124,7 @@ object CompressUtils {
 
 
     fun applyCompressedFile(previewFile: File, targetOriginalFile: File): Boolean {
-        if (!previewFile.exists() || previewFile.length() == 0L) return false
-        return try {
-            val origTimestamp = targetOriginalFile.lastModified()
-            val copied = previewFile.copyTo(targetOriginalFile, overwrite = true)
-            if (origTimestamp > 0L) {
-                targetOriginalFile.setLastModified(origTimestamp)
-            }
-            copied.exists() && copied.length() > 0L
-        } catch (_: Exception) {
-            false
-        }
+        return replaceMediaFile(previewFile, targetOriginalFile)
     }
 
     fun cleanupPreviewCache(cacheMap: Map<CompressionPreset, CompressionPreviewResult>, excludeFile: File? = null) {

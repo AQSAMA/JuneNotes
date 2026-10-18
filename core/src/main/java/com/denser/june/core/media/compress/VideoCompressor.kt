@@ -185,12 +185,7 @@ object VideoCompressor {
         val origFile = CompressUtils.getUncompressedOriginalFile(context, path)
         if (preset == CompressionPreset.ORIGINAL) {
             if (origFile != null && origFile.exists()) {
-                val origTimestamp = targetFile.lastModified()
-                val ok = origFile.copyTo(targetFile, overwrite = true).exists()
-                if (origTimestamp > 0L) {
-                    targetFile.setLastModified(origTimestamp)
-                }
-                return@withContext ok
+                return@withContext replaceMediaFile(origFile, targetFile)
             }
             return@withContext false
         }
@@ -210,13 +205,9 @@ object VideoCompressor {
 
         if (success && tempOutputFile.exists() && tempOutputFile.length() > 0L) {
             if (tempOutputFile.length() < targetFile.length() || origFile != null) {
-                val origTimestamp = targetFile.lastModified()
-                tempOutputFile.copyTo(targetFile, overwrite = true)
-                if (origTimestamp > 0L) {
-                    targetFile.setLastModified(origTimestamp)
-                }
+                val replaced = CompressUtils.applyCompressedFile(tempOutputFile, targetFile)
                 tempOutputFile.delete()
-                true
+                replaced
             } else {
                 tempOutputFile.delete()
                 false

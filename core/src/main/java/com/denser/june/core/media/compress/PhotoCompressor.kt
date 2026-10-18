@@ -205,12 +205,7 @@ object PhotoCompressor {
         val origFile = CompressUtils.getUncompressedOriginalFile(context, path)
         if (preset == CompressionPreset.ORIGINAL) {
             if (origFile != null && origFile.exists()) {
-                val origTimestamp = origFile.lastModified()
-                val ok = origFile.copyTo(file, overwrite = true).exists()
-                if (origTimestamp > 0L) {
-                    file.setLastModified(origTimestamp)
-                }
-                return@withContext ok
+                return@withContext replaceMediaFile(origFile, file, origFile.lastModified())
             }
             return@withContext false
         }
