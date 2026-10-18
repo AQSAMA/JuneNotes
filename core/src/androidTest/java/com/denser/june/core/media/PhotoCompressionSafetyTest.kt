@@ -1,7 +1,12 @@
 package com.denser.june.core.media
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.util.Base64
+import androidx.exifinterface.media.ExifInterface
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.denser.june.core.media.compress.CompressUtils
@@ -47,7 +52,7 @@ class PhotoCompressionSafetyTest {
         } finally { bitmap.recycle(); file.delete() }
     }
 
-    @Test fun cachedPreviewCannotReplaceMediaWhenOriginalBackupFails() = runBlocking {
+    @Test fun cachedPreviewCannotReplaceMediaWhenOriginalBackupFails() = runBlocking<Unit> {
         val bitmap = Bitmap.createBitmap(2300, 2300, Bitmap.Config.ARGB_8888)
         val file = File(context.cacheDir, "safety-backup-${UUID.randomUUID()}.jpg")
         val backup = File(context.cacheDir, "uncompressed_${file.name}")
@@ -79,6 +84,50 @@ class PhotoCompressionSafetyTest {
             assertFalse(CompressUtils.restoreUncompressedOriginalFile(context, file.path))
             assertArrayEquals(original, backup.readBytes())
         } finally { obstruction.delete(); file.delete(); backup.delete() }
+    }
+
+    @Test fun compressionPreservesBothDiagonalExifOrientations() = runBlocking<Unit> {
+        val bitmap = Bitmap.createBitmap(2400, 1200, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint()
+        val sourceColors = listOf(Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW)
+        sourceColors.forEachIndexed { index, color ->
+            paint.color = color
+            val left = (index % 2) * 1200f
+            val top = (index / 2) * 600f
+            canvas.drawRect(left, top, left + 1200f, top + 600f, paint)
+        }
+        try {
+            for (orientation in listOf(ExifInterface.ORIENTATION_TRANSPOSE, ExifInterface.ORIENTATION_TRANSVERSE)) {
+                val file = File(context.cacheDir, "orientation-${UUID.randomUUID()}.jpg")
+                try {
+                    file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)) }
+                    ExifInterface(file.path).apply {
+                        setAttribute(ExifInterface.TAG_ORIENTATION, orientation.toString())
+                        saveAttributes()
+                    }
+                    val original = file.readBytes()
+                    assertTrue(PhotoCompressor.compressPhoto(context, file.path, CompressionPreset.LOW))
+                    val compressed = BitmapFactory.decodeFile(file.path)!!
+                    try {
+                        assertTrue(compressed.width < compressed.height)
+                        val expected = if (orientation == ExifInterface.ORIENTATION_TRANSPOSE) {
+                            listOf(Color.RED, Color.BLUE, Color.GREEN, Color.YELLOW)
+                        } else listOf(Color.YELLOW, Color.GREEN, Color.BLUE, Color.RED)
+                        expected.forEachIndexed { index, color ->
+                            val pixel = compressed.getPixel(compressed.width * (if (index % 2 == 0) 1 else 3) / 4,
+                                compressed.height * (if (index / 2 == 0) 1 else 3) / 4)
+                            assertTrue("Wrong red channel for orientation $orientation", kotlin.math.abs(Color.red(pixel) - Color.red(color)) < 40)
+                            assertTrue("Wrong green channel for orientation $orientation", kotlin.math.abs(Color.green(pixel) - Color.green(color)) < 40)
+                            assertTrue("Wrong blue channel for orientation $orientation", kotlin.math.abs(Color.blue(pixel) - Color.blue(color)) < 40)
+                        }
+                    } finally { compressed.recycle() }
+                    assertEquals(ExifInterface.ORIENTATION_NORMAL, ExifInterface(file.path).getAttributeInt(ExifInterface.TAG_ORIENTATION, 0))
+                    assertTrue(CompressUtils.restoreUncompressedOriginalFile(context, file.path))
+                    assertArrayEquals(original, file.readBytes())
+                } finally { CompressUtils.cleanUncompressedOriginalFile(context, file.path); file.delete() }
+            }
+        } finally { bitmap.recycle() }
     }
 
     private suspend fun assertPreserved(file: File) {
