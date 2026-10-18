@@ -14,6 +14,29 @@ import java.io.File
 
 class SyncMediaTest : BaseSyncTest() {
 
+    @Test fun `failed attachment upload retains text and media dirtiness for retry`() = runTest {
+        val file = harness.givenMediaFileOnDisk("edited.jpg", byteArrayOf(1, 2, 3))
+        val original = harness.givenSyncedJournal("retry", images = listOf(file.path))
+        harness.givenCloudMedia(original.id, file.name, file.readBytes())
+        val editedBytes = byteArrayOf(8, 9)
+        file.writeBytes(editedBytes)
+        harness.repo.seed(original.copy(content = "New text", updatedAt = T2))
+        harness.cloud.failNextUploadMedia = true
+
+        assertTrue(harness.sync().isFailure)
+        assertEquals(original.syncedAt, harness.repo.getJournalById(original.id)!!.syncedAt)
+        assertEquals(original.content, harness.cloud.getJournal(original.id)!!.content)
+        org.junit.Assert.assertArrayEquals(editedBytes, file.readBytes())
+
+        assertTrue(harness.sync().isSuccess)
+        assertEquals("New text", harness.cloud.getJournal(original.id)!!.content)
+        org.junit.Assert.assertArrayEquals(editedBytes, file.readBytes())
+        val downloaded = File(harness.mediaDir, "verify-download")
+        harness.cloud.downloadMedia(original.id, file.name, downloaded).getOrThrow()
+        org.junit.Assert.assertArrayEquals(editedBytes, downloaded.readBytes())
+        assertEquals(T2, harness.repo.getJournalById(original.id)!!.syncedAt)
+    }
+
     @Test
     fun `journal upload includes referenced media file`() = runTest {
         val mediaFile = harness.givenMediaFileOnDisk("photo1.jpg", byteArrayOf(1, 2, 3))

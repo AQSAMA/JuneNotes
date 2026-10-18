@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -89,13 +91,17 @@ class SyncManager(
     private val songMediaArtDir = File(songMediaDir, "art").apply { if (!exists()) mkdirs() }
     companion object {
         const val SYNC_THRESHOLD_MS = 2000L
-        const val CURRENT_DATA_REPAIR_VERSION = 5
+        const val CURRENT_DATA_REPAIR_VERSION = 6
     }
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     private val syncMutex = Mutex()
     private val _syncActive = AtomicBoolean(false)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
+    private val startupRepair: Deferred<Boolean>
+
+    /** Cleanup must not snapshot paths while startup repair is still publishing files. */
+    suspend fun awaitStartupRepair(): Boolean = startupRepair.await()
 
     init {
         applicationScope.launch {
@@ -114,18 +120,19 @@ class SyncManager(
             }
         }
 
-        applicationScope.launch(Dispatchers.IO) {
+        startupRepair = applicationScope.async(Dispatchers.IO) {
             val lastVersion = syncPrefs.getLastCompletedDataRepairVersion().first()
-            if (lastVersion >= CURRENT_DATA_REPAIR_VERSION) return@launch
+            if (lastVersion >= CURRENT_DATA_REPAIR_VERSION) return@async true
             if (lastVersion < 1) {
                 repairDoubleConcatenatedImages()
             }
             if (lastVersion < 2) {
                 repairSongDetailsAndPaths()
             }
-            // Version 5 retries per-file failures acknowledged by earlier repair versions.
-            if (!repairRepeatedMediaFileNames()) return@launch
+            // Version 6 coordinates cleanup and retries repairs acknowledged by earlier versions.
+            if (!repairRepeatedMediaFileNames()) return@async false
             syncPrefs.setLastCompletedDataRepairVersion(CURRENT_DATA_REPAIR_VERSION)
+            true
         }
 
         applicationScope.launch {
@@ -586,6 +593,7 @@ class SyncManager(
 
     fun repairSync(context: android.content.Context) {
         applicationScope.launch(Dispatchers.IO) {
+            if (!awaitStartupRepair()) return@launch
             try {
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Starting comprehensive sync repair...")
                 repairDoubleConcatenatedImages()
@@ -626,6 +634,8 @@ class SyncManager(
     suspend fun sync(isFullRevalidation: Boolean = false): Result<Unit> = syncMutex.withLock {
         val isSyncEnabled = syncPrefs.getSyncEnabled().first()
         if (!isSyncEnabled) return@withLock Result.failure(Exception("Sync is disabled"))
+
+        if (!awaitStartupRepair()) return@withLock Result.failure(Exception("Startup media repair is incomplete"))
 
         _syncActive.set(true)
         _status.value = SyncStatus.Preparing
@@ -854,22 +864,6 @@ class SyncManager(
                     updateProgress("Downloading update...", isDownload = true)
                 }.onFailure {
                     updateProgress("Downloading update...", isFailure = true)
-                }
-            }
-
-            toUpload.forEach { journal ->
-                _status.value = SyncStatus.Syncing(
-                    progress = (completedOperations.toFloat() / totalOperations).coerceIn(0f, 0.99f),
-                    uploadCount = uploadCount,
-                    downloadCount = downloadCount,
-                    totalOperations = totalOperations,
-                    currentOperation = "Pushing changes..."
-                )
-
-                pushJournal(provider, journal, remoteJournalMeta[journal.id]?.rev ?: 0).onSuccess {
-                    updateProgress("Pushing changes...", isUpload = true)
-                }.onFailure {
-                    updateProgress("Pushing changes...", isFailure = true)
                 }
             }
 
@@ -1152,6 +1146,25 @@ class SyncManager(
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Downloaded $downloadedSongCount song files.")
             }
 
+            val uploadedJournals = mutableListOf<Triple<Journal, String, Long>>()
+            if (failedCount == 0) toUpload.forEach { journal ->
+                _status.value = SyncStatus.Syncing(
+                    progress = (completedOperations.toFloat() / totalOperations).coerceIn(0f, 0.99f),
+                    uploadCount = uploadCount,
+                    downloadCount = downloadCount,
+                    totalOperations = totalOperations,
+                    currentOperation = "Pushing changes..."
+                )
+
+                val acknowledgedTime = journal.updatedAt ?: System.currentTimeMillis()
+                pushJournal(provider, journal).onSuccess { cloudId ->
+                    uploadedJournals.add(Triple(journal, cloudId, acknowledgedTime))
+                    updateProgress("Pushing changes...", isUpload = true)
+                }.onFailure {
+                    updateProgress("Pushing changes...", isFailure = true)
+                }
+            }
+
             if (failedCount == 0) {
                 if (isFullRevalidation) {
                     _status.value = SyncStatus.Syncing(
@@ -1191,6 +1204,10 @@ class SyncManager(
                 )
                 provider.updateManifest(finalManifest).getOrThrow()
                 folderRepo.markSynced(finalManifest.folderData ?: com.denser.june.core.domain.folder.FolderSnapshot())
+                // A note stays dirty across failed media uploads or manifest writes, including retries.
+                uploadedJournals.forEach { (journal, cloudId, acknowledgedTime) ->
+                    journalRepo.updateSyncStatus(journal.id, cloudId, acknowledgedTime)
+                }
                 syncPrefs.setLastSyncTime(System.currentTimeMillis())
 
                 _status.value = if (folderRepo.hasPendingSync()) SyncStatus.Dirty else SyncStatus.Success
@@ -1270,7 +1287,7 @@ class SyncManager(
         }.map { Unit }
     }
 
-    private suspend fun pushJournal(provider: CloudProvider, journal: Journal, currentRemoteRev: Int = 0): Result<Unit> {
+    private suspend fun pushJournal(provider: CloudProvider, journal: Journal): Result<String> {
         AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Pushing journal: ${journal.id}")
 
         val sanitizedImages = journal.images.map { File(it).name }
@@ -1280,11 +1297,7 @@ class SyncManager(
         )
         val sanitizedJournal = journal.copy(images = sanitizedImages, songDetails = sanitizedSong)
 
-        val now = System.currentTimeMillis()
-        return provider.uploadJournal(sanitizedJournal).onSuccess { cloudId ->
-            val effectiveTime = maxOf(now, journal.updatedAt ?: 0L)
-            journalRepo.updateSyncStatus(journal.id, cloudId, effectiveTime)
-        }.map { Unit }
+        return provider.uploadJournal(sanitizedJournal)
     }
 
     private suspend fun cleanupCloudOrphanedMedia(

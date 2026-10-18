@@ -24,6 +24,7 @@ class JuneApplication : Application(), ImageLoaderFactory {
     private val journalRepo: JournalRepository by inject()
     private val songRepo: com.denser.june.core.domain.repository.SongRepository by inject()
     private val imageLoader: ImageLoader by inject()
+    private val syncManager: com.denser.june.core.domain.sync.SyncManager by inject()
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun newImageLoader(): ImageLoader = imageLoader
@@ -45,6 +46,7 @@ class JuneApplication : Application(), ImageLoaderFactory {
         appScope.launch {
             try {
                 delay(3000L.milliseconds)
+                if (!syncManager.awaitStartupRepair()) return@launch
                 val allJournals = journalRepo.getAllJournalsIncludeDeletedSync()
                 val librarySongs = songRepo.getLibrarySongs().first()
                 val activePaths = allJournals.flatMap { it.images } +
