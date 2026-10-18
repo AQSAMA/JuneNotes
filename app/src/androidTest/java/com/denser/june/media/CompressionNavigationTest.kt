@@ -8,6 +8,10 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.denser.june.presentation.components.lightbox.CompressionBackHandler
+import com.denser.june.presentation.components.lightbox.LightboxCompressionSliderCard
+import com.denser.june.presentation.components.lightbox.LightboxCompressionState
+import com.denser.june.core.media.compress.model.CompressionPreset
+import androidx.compose.ui.geometry.Offset
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -93,6 +97,29 @@ class CompressionNavigationTest {
         ui.onNodeWithContentDescription("More options").performClick()
         ui.onNodeWithText(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.getString(com.denser.june.core.R.string.delete)).performClick()
         ui.runOnIdle { assertEquals(1, deletes) }
+    }
+
+    @Test fun tappingTheDisplayedSliderStepPreservesThatChoiceWhenPreferencesArrive() {
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        lateinit var state: LightboxCompressionState
+        ui.setContent {
+            state = remember {
+                LightboxCompressionState("photo.jpg", context, 80, 1080) { false }.apply {
+                    updateMediaPresets(null, setOf(CompressionPreset.LOW, CompressionPreset.MEDIUM, CompressionPreset.HIGH))
+                    startCompression()
+                }
+            }
+            androidx.compose.material3.MaterialTheme {
+                LightboxCompressionSliderCard(state.selectedPreset!!, false, state::selectPreset)
+            }
+        }
+        ui.onNode(hasSetProgressAction()).performTouchInput {
+            click(Offset(width / 3f, center.y))
+        }
+        ui.runOnIdle {
+            state.updateQualityPreferences(70, 1080)
+            assertEquals(CompressionPreset.MEDIUM, state.selectedPreset)
+        }
     }
 
 }

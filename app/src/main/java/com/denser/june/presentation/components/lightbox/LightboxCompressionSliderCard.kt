@@ -61,9 +61,11 @@ fun LightboxCompressionSliderCard(
                     val newPreset = CompressionPreset.fromStepIndex(step)
                     if (newPreset != selectedPreset) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onPresetChanged(newPreset)
                     }
+                    onPresetChanged(newPreset)
                 },
+                // A tap on the current step is still an explicit preference choice.
+                onValueChangeFinished = { onPresetChanged(selectedPreset) },
                 valueRange = 0f..3f,
                 steps = 2,
                 modifier = Modifier.fillMaxWidth()
