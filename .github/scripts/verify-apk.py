@@ -24,8 +24,8 @@ assert package, "APK package metadata missing"
 assert package[1] == expected_id, (package[1], expected_id)
 assert package[2] == expected_code, (package[2], expected_code)
 output = subprocess.check_output([tool("apksigner"), "verify", "--verbose", "--print-certs", apk], text=True)
-fingerprint = re.search(r"Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]+)", output)
-assert fingerprint, "APK signing certificate missing"
+fingerprint = re.search(r"certificate SHA-256 digest: ([a-fA-F0-9]+)", output)
+assert fingerprint, f"APK signing certificate missing: {output}"
 if cert and cert[0]:
     assert fingerprint[1].lower() == cert[0].replace(":", "").lower(), "Unexpected signing certificate"
 print(f"Verified {apk}: package={package[1]} versionCode={package[2]} SHA-256={fingerprint[1]}")
