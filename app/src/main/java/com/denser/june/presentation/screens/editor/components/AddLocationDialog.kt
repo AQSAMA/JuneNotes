@@ -435,6 +435,7 @@ fun AddLocationDialog(
                     },
                     onClear = {
                         searchJob?.cancel()
+                        isSearching = false
                         searchQuery = ""
                         searchResults = emptyList()
                         hasSearched = false
