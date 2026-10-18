@@ -2,6 +2,7 @@ package com.denser.june.core.media.exif
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.exifinterface.media.ExifInterface
@@ -41,20 +42,14 @@ object ExifUtils {
             val sizeFormatted = size.formatBytes()
 
             if (isVideoUri) {
-                val retriever = android.media.MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(context, uri)
-                } catch (_: Exception) {}
-
-                val videoMeta = VideoMetadataParser.parseVideoMetadata(retriever, fallbackDateTime)
-
-                val (isHdr, hdrFormat) = try {
+                val (videoMeta, hdrInfo) = readVideoInfo(fallbackDateTime,
+                    initialize = { it.setDataSource(context, uri) }
+                ) { retriever ->
                     context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
                         VideoMetadataParser.isHdrVideo(retriever, pfd = pfd)
                     } ?: VideoMetadataParser.isHdrVideo(retriever)
-                } catch (_: Exception) { Pair(false, null) }
-
-                try { retriever.release() } catch (_: Exception) {}
+                }
+                val (isHdr, hdrFormat) = hdrInfo
 
                 val extractedDevice = try {
                     context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
@@ -148,14 +143,10 @@ object ExifUtils {
         val isVideoFile = isVideoPath(name) || isVideoPath(cleanPath)
 
         if (isVideoFile && file.exists() && size > 0L) {
-            val retriever = android.media.MediaMetadataRetriever()
-            try {
-                retriever.setDataSource(file.absolutePath)
-            } catch (_: Exception) {}
-
-            val videoMeta = VideoMetadataParser.parseVideoMetadata(retriever, fallbackDateTime ?: file.lastModified())
-            val (isHdr, hdrFormat) = VideoMetadataParser.isHdrVideo(retriever, file = file)
-            try { retriever.release() } catch (_: Exception) {}
+            val (videoMeta, hdrInfo) = readVideoInfo(fallbackDateTime ?: file.lastModified(),
+                initialize = { it.setDataSource(file.absolutePath) }
+            ) { VideoMetadataParser.isHdrVideo(it, file = file) }
+            val (isHdr, hdrFormat) = hdrInfo
 
             val extractedDevice = VideoDeviceParser.extractVideoDeviceInfo(file)
             val cleanDevice = extractedDevice?.trim()?.takeIf { !it.matches(REGEX_NUMBERS_ONLY) && it.length >= 3 }
@@ -247,6 +238,28 @@ object ExifUtils {
             isVideo = false,
             isHdr = photo.isHdr
         )
+    }
+
+    private fun readVideoInfo(
+        fallbackDateTime: Long?,
+        initialize: (MediaMetadataRetriever) -> Unit,
+        readHdr: (MediaMetadataRetriever) -> Pair<Boolean, String?>
+    ): Pair<ParsedVideoInfo, Pair<Boolean, String?>> {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            initialize(retriever)
+            val metadata = VideoMetadataParser.parseVideoMetadata(retriever, fallbackDateTime)
+            val hdr = try { readHdr(retriever) } catch (_: Exception) { false to null }
+            metadata to hdr
+        } catch (_: Exception) {
+            ParsedVideoInfo(
+                width = 0, height = 0, durationStr = null,
+                dateTakenMillis = fallbackDateTime ?: System.currentTimeMillis(),
+                fps = null, bitrate = null, qualityLabel = null, resolution = null
+            ) to (false to null)
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
+        }
     }
 
     private fun sanitizeMediaPath(path: String): String {
