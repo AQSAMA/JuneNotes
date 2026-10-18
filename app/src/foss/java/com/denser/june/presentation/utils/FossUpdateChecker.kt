@@ -3,7 +3,6 @@ package com.denser.june.presentation.utils
 import android.content.Context
 import com.denser.june.BuildConfig
 import com.denser.june.core.domain.preferences.PrivacyPreferences
-import com.denser.june.core.utils.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -35,7 +34,7 @@ class FossUpdateChecker(
                 }
 
                 val request = Request.Builder()
-                    .url(Constants.GITHUB_RELEASES_LATEST_URL)
+                    .url(BuildConfig.UPDATE_RELEASES_URL)
                     .header("User-Agent", "JuneApp/${context.packageName}")
                     .build()
 
@@ -53,7 +52,12 @@ class FossUpdateChecker(
                     val currentVersion = BuildConfig.VERSION_NAME
 
                     launch(Dispatchers.Main) {
-                        if (isNewerVersion(currentVersion, latestTag)) {
+                        val forkVersionCode = if (BuildConfig.UPDATE_REPOSITORY != "DenserMeerkat/June") {
+                            releaseVersionCode(changelog)
+                        } else null
+                        val hasUpdate = forkVersionCode?.let { it > BuildConfig.VERSION_CODE }
+                            ?: isNewerVersion(currentVersion, latestTag)
+                        if (hasUpdate) {
                             onUpdateAvailable(latestTag, changelog, downloadUrl)
                         } else {
                             onNoUpdate()
