@@ -4,7 +4,7 @@ import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.denser.june.core.domain.repository.JournalRepository
-import com.denser.june.core.utils.FileUtils
+import com.denser.june.core.media.storage.MediaStorageManager
 import com.denser.june.di.flavorModule
 import com.denser.june.di.juneModules
 import com.denser.june.notification.NotificationsHelper
@@ -24,6 +24,7 @@ class JuneApplication : Application(), ImageLoaderFactory {
     private val journalRepo: JournalRepository by inject()
     private val songRepo: com.denser.june.core.domain.repository.SongRepository by inject()
     private val imageLoader: ImageLoader by inject()
+    private val syncManager: com.denser.june.core.domain.sync.SyncManager by inject()
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun newImageLoader(): ImageLoader = imageLoader
@@ -45,12 +46,13 @@ class JuneApplication : Application(), ImageLoaderFactory {
         appScope.launch {
             try {
                 delay(3000L.milliseconds)
+                if (!syncManager.awaitStartupRepair()) return@launch
                 val allJournals = journalRepo.getAllJournalsIncludeDeletedSync()
                 val librarySongs = songRepo.getLibrarySongs().first()
                 val activePaths = allJournals.flatMap { it.images } +
                     allJournals.mapNotNull { it.songDetails?.localThumbnailPath } +
                     librarySongs.mapNotNull { it.localThumbnailPath }
-                FileUtils.cleanOrphanedFiles(applicationContext, activePaths)
+                MediaStorageManager.cleanOrphanedFiles(applicationContext, activePaths)
                 songRepo.cleanupUnreferencedSongMedia(allJournals)
             } catch (e: Exception) {
                 e.printStackTrace()

@@ -4,7 +4,6 @@ import android.content.Context
 import com.denser.june.core.data.database.journal.JournalDao
 import com.denser.june.core.data.database.journal.TagEntity
 import com.denser.june.core.data.database.journal.JournalTagCrossRef
-import com.denser.june.core.data.database.journal.DeletedJournalTombstone
 import com.denser.june.core.data.mappers.asDomain
 import com.denser.june.core.data.mappers.asEntity
 import com.denser.june.core.data.sync.SyncWorker
@@ -73,6 +72,19 @@ class JournalRepositoryImpl(
         return journalToInsert.id
     }
 
+    override suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean =
+        journalDao.repairMediaPaths(id, expected, repaired, modifiedAt, com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS)
+
+    override suspend fun markMediaModified(path: String, modifiedAt: Long) {
+        journalDao.markMediaModified(path, modifiedAt)
+    }
+
+    override suspend fun getPendingMediaChanges(): Map<String, String> = journalDao.getPendingMediaChanges()
+    override fun observePendingMediaChanges(): Flow<Boolean> = journalDao.observePendingMediaChanges()
+    override suspend fun acknowledgeMediaChanges(expected: Map<String, String>) {
+        expected.forEach { (name, generation) -> journalDao.acknowledgeMediaChange(name, generation) }
+    }
+
     override suspend fun softDeleteJournal(id: String) {
         journalDao.softDeleteJournal(id, System.currentTimeMillis())
     }
@@ -83,11 +95,7 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun hardDeleteJournal(id: String) {
-        val journal = journalDao.getJournalById(id)
-        if (journal?.syncedAt != null) {
-            journalDao.insertTombstone(DeletedJournalTombstone(id))
-        }
-        journalDao.hardDeleteJournal(id)
+        journalDao.hardDeleteWithTombstone(id)
     }
 
     override suspend fun deleteAllJournals() {
@@ -95,12 +103,7 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun emptyBin() {
-        val deleted = journalDao.getDeletedJournalsSync()
-        val syncedDeletedIds = deleted.filter { it.syncedAt != null }.map { it.id }
-        if (syncedDeletedIds.isNotEmpty()) {
-            journalDao.insertTombstones(syncedDeletedIds.map { DeletedJournalTombstone(it) })
-        }
-        journalDao.emptyBin()
+        journalDao.emptyBinWithTombstones()
     }
 
     override suspend fun restoreAllJournals() {
@@ -183,6 +186,9 @@ class JournalRepositoryImpl(
     override suspend fun updateSyncStatus(id: String, cloudId: String, syncedAt: Long) {
         journalDao.updateSyncStatus(id, cloudId, syncedAt)
     }
+
+    override suspend fun acknowledgeSync(expected: Journal, cloudId: String, syncedAt: Long): Boolean =
+        journalDao.acknowledgeSync(expected.asEntity(), cloudId, syncedAt)
 
     override suspend fun resetAllSyncStatuses() {
         journalDao.resetAllSyncStatuses()

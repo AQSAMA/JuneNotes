@@ -15,13 +15,21 @@ import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.SongDetails
 import com.denser.june.core.domain.model.SongFetchEvent
 import com.denser.june.core.domain.model.SongFetchProgress
-import com.denser.june.core.utils.FileUtils
+import com.denser.june.core.media.storage.MediaStorageManager
 import com.denser.june.core.utils.getTodayAtMidnight
 import com.denser.hyphen.model.TriggerConfig
 import com.denser.hyphen.state.HyphenTextState
+import android.content.Context
+import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.denser.june.core.media.exif.ExifUtils
+import com.denser.june.core.media.compress.model.CompressionPreset
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +40,7 @@ import java.io.File
 @OptIn(FlowPreview::class)
 class EditorVM(
     savedStateHandle: SavedStateHandle,
+    private val context: Context,
     private val journalRepo: JournalRepository,
     private val journalPrefs: JournalPreferences,
     private val songRepo: SongRepository,
@@ -52,6 +61,7 @@ class EditorVM(
     )
 
     private var existingJournal: Journal? = null
+    private val saveMutex = Mutex()
 
     private var searchTagsJob: Job? = null
 
@@ -138,8 +148,8 @@ class EditorVM(
         viewModelScope.launch {
             _saveTrigger
                 .debounce(5000L)
-                .collect { stateToSave ->
-                    saveDraft(stateToSave)
+                .collect {
+                    saveDraft()
                 }
         }
 
@@ -168,11 +178,37 @@ class EditorVM(
             is EditorAction.ChangeDateTime -> updateState { it.copy(dateTime = action.dateTime) }
             is EditorAction.ChangeEmoji -> updateState { it.copy(emoji = action.emoji) }
 
+            is EditorAction.ImportMedia -> importMedia(action)
             is EditorAction.AddImage -> updateState { it.copy(images = it.images + action.uri) }
             is EditorAction.AddImages -> updateState { it.copy(images = it.images + action.uris) }
+            is EditorAction.ReplaceImage -> {
+                updateState { current ->
+                    val newImages = current.images.map { if (it == action.oldUri) action.newPath else it }
+                    val newProcessing = current.processingMediaPaths.toMutableSet().apply {
+                        if (remove(action.oldUri)) {
+                            add(action.newPath)
+                        }
+                    }
+                    current.copy(images = newImages, processingMediaPaths = newProcessing)
+                }
+            }
+            is EditorAction.SetMediaProcessing -> {
+                _state.update { current ->
+                    val updated = if (action.isProcessing) {
+                        current.processingMediaPaths + action.path
+                    } else {
+                        current.processingMediaPaths - action.path
+                    }
+                    current.copy(processingMediaPaths = updated)
+                }
+                val completed = _state.value
+                if (!action.isProcessing && completed.processingMediaPaths.isEmpty() && completed.isDraft && completed.isDirty) {
+                    _saveTrigger.tryEmit(completed)
+                }
+            }
 
             is EditorAction.RemoveImage -> {
-                updateState { it.copy(images = it.images - action.uri) }
+                updateState { it.copy(images = it.images - action.uri, processingMediaPaths = it.processingMediaPaths - action.uri) }
             }
             is EditorAction.MoveImageToFront -> {
                 val currentImages = _state.value.images.toMutableList()
@@ -181,6 +217,7 @@ class EditorVM(
                     updateState { it.copy(images = currentImages) }
                 }
             }
+            is EditorAction.Refresh -> updateState { it }
 
             is EditorAction.UpdateTags -> updateState { it.copy(tags = action.tags) }
             is EditorAction.SearchTags -> {
@@ -294,15 +331,49 @@ class EditorVM(
             is EditorAction.ToggleBookmark -> toggleBookmark()
             is EditorAction.ToggleArchive -> toggleArchive()
             is EditorAction.SaveJournal -> saveJournal()
+            is EditorAction.SaveJournalAndNavigateBack -> saveJournal(navigateBack = true)
+            is EditorAction.DiscardChanges -> discardChanges()
             is EditorAction.NavigateBack -> {
+                if (_state.value.isSaving) return
                 if (_state.value.isDraft && _state.value.isDirty) {
-                    saveDraft(_state.value)
+                    saveDraftAndNavigateBack()
+                } else {
+                    navigator.navigateBack()
                 }
-                navigator.navigateBack()
             }
             is EditorAction.DeleteJournal -> deleteJournal()
             is EditorAction.RestoreJournal -> restoreJournal()
         }
+    }
+
+    private fun importMedia(action: EditorAction.ImportMedia) {
+        val appContext = context.applicationContext
+        viewModelScope.importEditorMedia(
+            uri = action.uri.toString(),
+            persist = { withContext(Dispatchers.IO) { MediaStorageManager.persistMedia(appContext, action.uri) } },
+            compress = { path ->
+                val photosEnabled = journalPrefs.isCompressPhotosEnabled().first()
+                val videosEnabled = journalPrefs.isCompressVideosEnabled().first()
+                val photoQuality = journalPrefs.getPhotoCompressionQuality().first()
+                val videoQuality = journalPrefs.getVideoCompressionQuality().first()
+                withContext(Dispatchers.IO) {
+                    val isVideo = action.isVideoHint ?: ExifUtils.isVideoPath(path)
+                    val enabled = if (isVideo) videosEnabled else photosEnabled
+                    if (enabled && CompressUtils.shouldCompressMedia(appContext, path, targetVideoHeight = videoQuality, maxPhotoDimension = 2048)) {
+                        CompressUtils.saveUncompressedOriginalFile(appContext, path)
+                        val preset = if (isVideo) {
+                            when { videoQuality <= 480 -> CompressionPreset.LOW; videoQuality <= 720 -> CompressionPreset.MEDIUM; else -> CompressionPreset.HIGH }
+                        } else {
+                            when { photoQuality <= 70 -> CompressionPreset.LOW; photoQuality <= 80 -> CompressionPreset.MEDIUM; else -> CompressionPreset.HIGH }
+                        }
+                        if (isVideo) CompressUtils.compressVideo(appContext, path, preset)
+                        else CompressUtils.compressPhoto(appContext, path, preset)
+                    }
+                }
+            },
+            onAction = ::onAction,
+            onFailure = { _uiEvent.trySend(context.getString(com.denser.june.core.R.string.media_import_failed)) }
+        )
     }
 
     private fun updateState(update: (EditorState) -> EditorState) {
@@ -317,6 +388,11 @@ class EditorVM(
     }
 
     private fun isDirtyCheck(currentState: EditorState): Boolean {
+        val hasMediaModified = currentState.images.any {
+            CompressUtils.getUncompressedOriginalFile(context, it) != null
+        }
+        if (hasMediaModified) return true
+
         val original = existingJournal ?: return currentState.title.isNotBlank() ||
                 currentState.content.isNotBlank() ||
                 currentState.images.isNotEmpty() ||
@@ -444,12 +520,67 @@ class EditorVM(
         }
     }
 
-    private fun saveDraft(currentState: EditorState) {
+    private fun discardChanges() {
+        if (_state.value.isSaving) return
+        _state.update { it.copy(isSaving = true) }
         viewModelScope.launch {
-            if (existingJournal != null && !existingJournal!!.isDraft) return@launch
+            try {
+                saveMutex.withLock {
+                    val current = _state.awaitFinishedMedia()
+                    // Deleted attachments still belong to the persisted note until Save.
+                    val paths = (existingJournal?.images.orEmpty() + current.images).toSet()
+                    val restored = withContext(Dispatchers.IO) {
+                        var complete = true
+                        for (path in paths) {
+                            com.denser.june.core.media.storage.MediaMutationLocks.withFile(path) {
+                                withContext(kotlinx.coroutines.NonCancellable) {
+                                    if (CompressUtils.getUncompressedOriginalFile(context, path) != null) {
+                                        if (CompressUtils.restoreUncompressedOriginalFile(context, path, keepBackup = true)) {
+                                            journalRepo.markMediaModified(path, System.currentTimeMillis())
+                                            CompressUtils.cleanUncompressedOriginalFile(context, path)
+                                        } else complete = false
+                                    }
+                                }
+                            }
+                        }
+                        complete
+                    }
+                    if (restored) navigator.navigateBack()
+                    else _uiEvent.trySend(context.getString(com.denser.june.core.R.string.media_restore_failed))
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiEvent.trySend(context.getString(com.denser.june.core.R.string.media_restore_failed))
+            } finally {
+                _state.update { it.copy(isSaving = false) }
+            }
+        }
+    }
 
+    private fun saveDraftAndNavigateBack() {
+        _state.update { it.copy(isSaving = true) }
+        viewModelScope.launch {
+            try {
+                _state.awaitFinishedMedia()
+                saveDraft(allowSaving = true)
+                navigator.navigateBack()
+            } finally {
+                _state.update { it.copy(isSaving = false) }
+            }
+        }
+    }
+
+    private suspend fun saveDraft(allowSaving: Boolean = false) {
+        saveMutex.withLock {
             val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
+            val currentState = _state.value
+            if ((!allowSaving && currentState.isSaving) || currentState.processingMediaPaths.isNotEmpty()) return@withLock
+            if (existingJournal != null && !existingJournal!!.isDraft) return@withLock
+
             val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
+
+            if (currentState.images.any { it.startsWith("content://") }) return@withLock
 
             if (currentState.title.isBlank() &&
                 currentMarkdown.isBlank() &&
@@ -458,7 +589,7 @@ class EditorVM(
                 currentState.songDetails == null &&
                 currentState.location == null &&
                 currentState.tags.isEmpty()
-            ) return@launch
+            ) return@withLock
 
             val currentTime = System.currentTimeMillis()
             val isNewEntry = existingJournal == null
@@ -488,9 +619,12 @@ class EditorVM(
                 _state.update { it.copy(journalId = newId, content = currentMarkdown, isDirty = false, isDraft = true) }
             } else {
                 val imagesToDelete = existingJournal?.images.orEmpty().toSet() - currentState.images.toSet()
-                imagesToDelete.forEach { FileUtils.deleteMedia(it) }
                 journalRepo.updateJournal(journalToSave)
                 existingJournal = journalToSave
+                imagesToDelete.forEach {
+                    MediaStorageManager.deleteMedia(it)
+                    CompressUtils.cleanUncompressedOriginalFile(context, it)
+                }
                 _state.update { it.copy(content = currentMarkdown, isDirty = false) }
             }
         }
@@ -507,41 +641,56 @@ class EditorVM(
         }
     }
 
-    private fun saveJournal() {
+    private fun saveJournal(navigateBack: Boolean = false) {
+        if (_state.value.isSaving) return
+        _state.update { it.copy(isSaving = true) }
         viewModelScope.launch {
-            val currentState = _state.value
-            val currentTime = System.currentTimeMillis()
-            val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
-            val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
+            try {
+                saveMutex.withLock {
+                    val isMarkdownEnabled = journalPrefs.isMarkdownEnabled().first()
+                    val currentState = _state.awaitFinishedMedia()
+                    val currentTime = System.currentTimeMillis()
+                    val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
 
-            val journalToSave = Journal(
-                id = existingJournal?.id ?: "",
-                title = currentState.title,
-                content = currentMarkdown,
-                emoji = currentState.emoji,
-                images = currentState.images,
-                location = currentState.location,
-                songDetails = currentState.songDetails,
-                tags = currentState.tags,
-                createdAt = existingJournal?.createdAt ?: currentTime,
-                updatedAt = currentTime,
-                dateTime = currentState.dateTime,
-                isBookmarked = currentState.isBookmarked,
-                isArchived = currentState.isArchived,
-                isDraft = false
-            )
+                    val journalToSave = Journal(
+                        id = existingJournal?.id ?: "",
+                        title = currentState.title,
+                        content = currentMarkdown,
+                        emoji = currentState.emoji,
+                        images = currentState.images,
+                        location = currentState.location,
+                        songDetails = currentState.songDetails,
+                        tags = currentState.tags,
+                        createdAt = existingJournal?.createdAt ?: currentTime,
+                        updatedAt = currentTime,
+                        dateTime = currentState.dateTime,
+                        isBookmarked = currentState.isBookmarked,
+                        isArchived = currentState.isArchived,
+                        isDraft = false,
+                        syncedAt = existingJournal?.syncedAt,
+                        cloudId = existingJournal?.cloudId
+                    )
 
-            if (existingJournal != null) {
-                journalRepo.updateJournal(journalToSave)
-                existingJournal = journalToSave
-            } else {
-                val newId = journalRepo.insertJournal(journalToSave)
-                assignInitialFolder(newId)
-                existingJournal = journalToSave.copy(id = newId)
-                _state.update { it.copy(journalId = newId) }
+                    val previousImages = existingJournal?.images.orEmpty()
+                    if (existingJournal != null) {
+                        journalRepo.updateJournal(journalToSave)
+                        existingJournal = journalToSave
+                    } else {
+                        val newId = journalRepo.insertJournal(journalToSave)
+                        assignInitialFolder(newId)
+                        existingJournal = journalToSave.copy(id = newId)
+                        _state.update { it.copy(journalId = newId) }
+                    }
+
+                    (previousImages + currentState.images).toSet().forEach {
+                        CompressUtils.cleanUncompressedOriginalFile(context, it)
+                    }
+                    _state.update { it.copy(isDirty = false, isDraft = false) }
+                    if (navigateBack) navigator.navigateBack()
+                }
+            } finally {
+                _state.update { it.copy(isSaving = false) }
             }
-
-            _state.update { it.copy(isDirty = false, isDraft = false) }
         }
     }
 

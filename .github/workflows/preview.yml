@@ -163,6 +163,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
+          name: Debug APK (arm64)
+          path: app/build/outputs/apk/foss/debug/*arm64-v8a*.apk
+          if-no-files-found: warn
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
           name: Folder UI tests and screenshots
           path: |
             app/build/reports/androidTests/

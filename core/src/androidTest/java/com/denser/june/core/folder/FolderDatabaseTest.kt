@@ -23,6 +23,21 @@ class FolderDatabaseTest {
         emptyList(), FrameworkSQLiteOpenHelperFactory()
     )
 
+    @Test fun mediaOwnershipMigrationPreservesExistingNotesWithoutInventingDirtyMedia() {
+        migrations.createDatabase("media-ownership-migration", 6).apply {
+            execSQL("INSERT INTO journals (id,title,content,images,tags,createdAt,dateTime,isBookmarked,isArchived,isDraft) VALUES ('original','Original note','Text','[\"photo.jpg\"]','[]',1,1,0,0,0)")
+            close()
+        }
+        migrations.runMigrationsAndValidate("media-ownership-migration", 7, true, DatabaseMigrations.MIGRATION_6_7).use { db ->
+            db.query("SELECT title FROM journals WHERE id = 'original'").use { cursor ->
+                assertTrue(cursor.moveToFirst()); assertEquals("Original note", cursor.getString(0))
+            }
+            db.query("SELECT COUNT(*) FROM pending_media_changes").use { cursor ->
+                assertTrue(cursor.moveToFirst()); assertEquals(0, cursor.getInt(0))
+            }
+        }
+    }
+
     @Test fun migrationKeepsOriginalNotesAndValidatesNewTables() {
         migrations.createDatabase("folder-migration", 5).apply {
             execSQL("INSERT INTO journals (id,title,content,images,tags,createdAt,dateTime,isBookmarked,isArchived,isDraft) VALUES ('original','Original note','Text','[]','[]',1,1,0,0,0)")

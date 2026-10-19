@@ -1,13 +1,13 @@
 package com.denser.june.presentation.screens.home.folders
 
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import com.denser.june.BuildConfig
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,7 +18,9 @@ import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -27,6 +29,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -36,8 +39,12 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.toSize
 import com.denser.june.core.R
+
+// Geometry is updated synchronously in layout; it does not need to trigger recomposition.
+private class FolderDragBounds { var rect: Rect? = null }
 
 private val LocalFolderDragController = staticCompositionLocalOf<FolderDragController> { error("FolderDragHost is required") }
 
@@ -46,8 +53,11 @@ private val LocalFolderDragController = staticCompositionLocalOf<FolderDragContr
 internal fun FolderDragSource(item: FolderDrag, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val controller = LocalFolderDragController.current
     val key = remember { Any() }
+    val bounds = remember { FolderDragBounds() }
     DisposableEffect(controller, key) { onDispose { controller.unregisterSource(key) } }
+    SideEffect { bounds.rect?.let { controller.registerSource(key, item, it, {}, immediate = false) } }
     Box(modifier.onGloballyPositioned {
+        bounds.rect = it.boundsInRoot()
         controller.registerSource(key, item, it.boundsInRoot(), {}, immediate = false)
     }) { content() }
 }
@@ -56,14 +66,17 @@ internal fun FolderDragSource(item: FolderDrag, modifier: Modifier = Modifier, c
 fun FolderDragHandle(item: FolderDrag, onMove: () -> Unit) {
     val controller = LocalFolderDragController.current
     val key = remember { Any() }
+    val bounds = remember { FolderDragBounds() }
     val currentMove by rememberUpdatedState(onMove)
     val description = stringResource(R.string.folder_drag_or_move)
     DisposableEffect(controller, key) { onDispose { controller.unregisterSource(key) } }
+    SideEffect { bounds.rect?.let { controller.registerSource(key, item, it, { currentMove() }) } }
     Box(
         Modifier.size(48.dp).semantics {
             contentDescription = description
             onClick { currentMove(); true }
         }.onGloballyPositioned {
+            bounds.rect = it.boundsInRoot()
             controller.registerSource(key, item, it.boundsInRoot(), { currentMove() })
         }, contentAlignment = Alignment.Center
     ) { Icon(painterResource(R.drawable.drag_indicator_24px), null) }
@@ -80,16 +93,20 @@ fun FolderDragHost(
 ) {
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    val controller = remember {
+    val sidebarGestures = LocalSidebarGestureState.current
+    val navigationSlop = with(LocalDensity.current) { 12.dp.toPx() }
+    val controller = remember(navigationSlop, haptic) {
         FolderDragController(scope, debugTrace = if (BuildConfig.DEBUG) { { message ->
             if (Log.isLoggable("JuneFolderDrag", Log.DEBUG)) Log.d("JuneFolderDrag", message())
-        } } else null) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+        } } else null, navigationSlop = navigationSlop) { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
     }
     val currentAccepts by rememberUpdatedState(accepts)
     val currentDrop by rememberUpdatedState(onDrop)
     val currentActive by rememberUpdatedState(onDragActive)
     var origin by remember { mutableStateOf(Offset.Zero) }
-    DisposableEffect(controller) { onDispose { controller.end(); currentActive(false) } }
+    fun finishDrag() { controller.end(); sidebarGestures?.folderDragActive = false; currentActive(false) }
+    DisposableEffect(controller) { onDispose { finishDrag() } }
+    BackHandler(controller.item != null) { finishDrag() }
     CompositionLocalProvider(LocalFolderDragController provides controller) {
         Box(modifier.onGloballyPositioned {
             origin = it.positionInRoot()
@@ -120,6 +137,7 @@ fun FolderDragHost(
                 controller.begin(source.item)
                 controller.move(origin + start)
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                sidebarGestures?.folderDragActive = true
                 currentActive(true)
                 try {
                     var released = false
@@ -127,6 +145,7 @@ fun FolderDragHost(
                         // Keep the same pass for initiation and tracking. Switching to Main here
                         // would read the slop event we just consumed and cancel an immediate drag.
                         val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (controller.item == null) break
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (change.isConsumed) break
                         controller.move(origin + change.position)
@@ -137,7 +156,7 @@ fun FolderDragHost(
                         if (controller.drop { if (currentAccepts(it)) { currentDrop(it); true } else false })
                             haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
                     }
-                } finally { controller.end(); currentActive(false) }
+                } finally { finishDrag() }
             }
         }) {
             content()
@@ -179,21 +198,50 @@ fun FolderDropSurface(
 ) {
     val controller = LocalFolderDragController.current
     val key = remember { Any() }
+    val bounds = remember { FolderDragBounds() }
     val currentAccepts by rememberUpdatedState(accepts)
     val currentDrop by rememberUpdatedState(onDrop)
     val currentOpen by rememberUpdatedState(onHoverOpen)
     val hovered = controller.hovered == key && priority >= 0
     DisposableEffect(controller, key, enabled) { onDispose { controller.unregister(key) } }
-    val color by animateColorAsState(if (hovered) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "folder_drop_color")
+    // Layout need not change when acceptance, hover navigation, or enabled changes.
+    SideEffect {
+        if (!enabled) controller.unregister(key)
+        else bounds.rect?.let { controller.register(key, it, { currentAccepts(it) },
+            { currentDrop(it) }, if (onHoverOpen == null) null else { { currentOpen?.invoke() } }, priority) }
+    }
+    val highlight by animateFloatAsState(if (hovered) 1f else 0f, label = "folder_drop_highlight")
+    val opening = controller.opening == key
+    val hold by animateFloatAsState(if (opening) 1f else 0f,
+        animationSpec = tween(if (opening) 650 else 0), label = "folder_hover_hold")
+    val tint = MaterialTheme.colorScheme.primary
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     Box(modifier.onGloballyPositioned {
+        bounds.rect = it.boundsInRoot()
         if (enabled) controller.register(key, it.boundsInRoot(), { currentAccepts(it) },
             { currentDrop(it) }, if (onHoverOpen == null) null else { { currentOpen?.invoke() } }, priority)
+    }.drawWithContent {
+        drawContent()
+        // Draw above opaque row surfaces and keep the row's measurement unchanged.
+        if (!insertion && highlight > 0f) {
+            val inset = 1.dp.toPx()
+            val radius = CornerRadius(16.dp.toPx())
+            drawRoundRect(tint.copy(alpha = 0.10f * highlight), cornerRadius = radius)
+            drawRoundRect(tint.copy(alpha = highlight), topLeft = Offset(inset, inset),
+                size = androidx.compose.ui.geometry.Size((size.width - inset * 2).coerceAtLeast(0f), (size.height - inset * 2).coerceAtLeast(0f)),
+                cornerRadius = radius, style = Stroke(2.dp.toPx()))
+            if (hold > 0f) {
+                val start = if (rtl) size.width - 16.dp.toPx() else 16.dp.toPx()
+                val distance = (size.width - 32.dp.toPx()).coerceAtLeast(0f) * hold * if (rtl) -1f else 1f
+                drawLine(tint.copy(alpha = highlight), Offset(start, size.height - 4.dp.toPx()),
+                    Offset(start + distance, size.height - 4.dp.toPx()), 3.dp.toPx())
+            }
+        }
     }) {
         if (insertion) {
             content()
             if (hovered) HorizontalDivider(Modifier.align(markerAlignment).fillMaxWidth(), thickness = 3.dp, color = MaterialTheme.colorScheme.primary)
-        } else Surface(color = color, border = if (hovered) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-            shape = RoundedCornerShape(24.dp)) { content() }
+        } else content()
     }
 }
 
@@ -223,12 +271,15 @@ internal fun FolderDragAutoScroll(listState: LazyListState, modifier: Modifier =
         if (penetration == 0f || !canScroll) return@LaunchedEffect
         controller.setScrolling(true)
         try {
-            var previous = withFrameNanos { it }
-            while (controller.item != null && speed != 0f) {
-                val now = withFrameNanos { it }
-                val elapsed = ((now - previous) / 1_000_000_000f).coerceAtMost(0.032f)
-                previous = now
-                listState.scrollBy(speed * elapsed)
+            // Own one scroll mutation for the whole hold, replacing any preceding fling.
+            listState.scroll(MutatePriority.UserInput) {
+                var previous = withFrameNanos { it }
+                while (controller.item != null && speed != 0f) {
+                    val now = withFrameNanos { it }
+                    val elapsed = ((now - previous) / 1_000_000_000f).coerceAtMost(0.032f)
+                    previous = now
+                    if (scrollBy(speed * elapsed) == 0f) break
+                }
             }
         } finally { controller.setScrolling(false) }
     }

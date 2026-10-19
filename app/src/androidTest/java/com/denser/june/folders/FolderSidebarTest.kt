@@ -3,6 +3,7 @@ package com.denser.june.folders
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,12 +31,17 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import org.junit.runner.RunWith
 import org.koin.core.context.GlobalContext
 
 @RunWith(AndroidJUnit4::class)
 class FolderSidebarTest {
     @get:Rule val ui = createComposeRule()
+    @get:Rule(order = 1) val captureFailures = object : TestWatcher() {
+        override fun failed(error: Throwable, description: Description) { screenshot("failed-${description.methodName}") }
+    }
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val repository get() = GlobalContext.get().get<FolderRepository>()
     private fun model() = FoldersVM(repository, GlobalContext.get().get<JournalRepository>(), GlobalContext.get().get(), SavedStateHandle())
@@ -138,6 +144,102 @@ class FolderSidebarTest {
 
     @Test fun nativeEdgeSwipeRevealsBothPanesAndSwipeClosesInLtr() = verifyReveal(LayoutDirection.Ltr)
     @Test fun nativeEdgeSwipeRevealsBothPanesAndSwipeClosesInRtl() = verifyReveal(LayoutDirection.Rtl)
+
+    @Test fun searchRevealsCollapsedAncestorsAndClearingRestoresTheTree() {
+        val parent = runBlocking { repository.create("Search parent", null) }
+        val child = runBlocking { repository.create("Search child", parent) }
+        val leaf = runBlocking { repository.create("Deep research", child) }
+        val vm = model()
+        try {
+            ui.setContent { Theme { FolderSidebar(vm, false, {}, {}, {}) } }
+            ui.waitUntil(5000) { ui.onAllNodesWithTag("sidebar-folder-$parent").fetchSemanticsNodes().isNotEmpty() }
+            ui.onNodeWithTag("sidebar-folder-$leaf").assertDoesNotExist()
+            ui.onNode(hasSetTextAction()).performTextInput("Deep research")
+            ui.onNode(hasSetTextAction()).performImeAction()
+            ui.onNodeWithTag("sidebar-folder-$leaf").assertIsDisplayed()
+            ui.onNodeWithTag("sidebar-folder-$parent").assertIsDisplayed()
+            screenshot("sidebar-search-nested")
+            ui.onNode(hasSetTextAction()).performTextClearance()
+            ui.onNodeWithTag("sidebar-folder-$leaf").assertDoesNotExist()
+            ui.onNodeWithTag("sidebar-toggle-branches").performClick()
+            ui.onNodeWithTag("sidebar-folder-$leaf").assertIsDisplayed()
+            ui.onNodeWithTag("sidebar-toggle-branches").performClick()
+            ui.onNodeWithTag("sidebar-folder-$leaf").assertDoesNotExist()
+        } finally { runBlocking { repository.delete(leaf); repository.delete(child); repository.delete(parent) } }
+    }
+
+    @Test fun horizontalFolderDragDoesNotDismissSidebarAndBackCancelsBeforeClosing() {
+        val folder = runBlocking { repository.create("Drag without closing", null) }
+        val vm = model()
+        var open by mutableStateOf(true)
+        try {
+            ui.setContent { Theme {
+                FolderSidebarLayout(open, { open = it }, {
+                    FolderSidebar(vm, false, {}, {}, { open = false })
+                }) { Text("Main pane") }
+            } }
+            ui.waitUntil(5000) { ui.onAllNodesWithTag("sidebar-folder-$folder").fetchSemanticsNodes().isNotEmpty() }
+            val from = center(ui.onNodeWithText("Drag without closing"))
+            val down = SystemClock.uptimeMillis()
+            inject(MotionEvent.ACTION_DOWN, from, down)
+            try {
+                SystemClock.sleep(750)
+                ui.mainClock.advanceTimeBy(800)
+                ui.waitForIdle()
+                ui.onNodeWithTag("folder-drag-preview").assertExists()
+                val to = from - Offset(90f, 0f)
+                move(from, to, down)
+                ui.onNodeWithTag("folder-drag-preview").assertExists()
+                assertTrue(open)
+                instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                ui.waitForIdle()
+                ui.onNodeWithTag("folder-drag-preview").assertDoesNotExist()
+                assertTrue(open)
+                inject(MotionEvent.ACTION_UP, to, down)
+            } catch (e: Throwable) { inject(MotionEvent.ACTION_CANCEL, from, down); throw e }
+            instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            ui.waitForIdle()
+            assertFalse(open)
+        } finally { runBlocking { repository.delete(folder) } }
+    }
+
+    @Test fun openDrawerAdaptsToWindowResizeAndScrimDismissesIt() {
+        var width by mutableStateOf(400.dp)
+        var open by mutableStateOf(true)
+        ui.setContent { Theme {
+            Box(Modifier.width(width).fillMaxHeight()) {
+                FolderSidebarLayout(open, { open = it }, { Text("Drawer") }) {
+                    Box(Modifier.fillMaxSize().testTag("resize-main")) { Text("Main") }
+                }
+            }
+        } }
+        ui.runOnIdle { width = 260.dp }
+        ui.waitForIdle()
+        val sidebar = ui.onNodeWithTag("folder-sidebar").fetchSemanticsNode().boundsInRoot
+        val scrim = ui.onNodeWithTag("folder-sidebar-scrim").fetchSemanticsNode().boundsInRoot
+        assertEquals(sidebar.right, scrim.left, 1f)
+        ui.onNodeWithTag("folder-sidebar-scrim").performClick()
+        ui.onNodeWithTag("folder-sidebar").assertDoesNotExist()
+        assertFalse(open)
+    }
+
+    @Test fun sidebarBackTakesPriorityOverMainPaneNavigation() {
+        var open by mutableStateOf(true)
+        var mainBacks = 0
+        ui.setContent { Theme {
+            FolderSidebarLayout(open, { open = it }, { Text("Drawer") }) {
+                BackHandler { mainBacks++ }
+                Text("Main")
+            }
+        } }
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        ui.waitForIdle()
+        assertFalse(open)
+        assertEquals(0, mainBacks)
+        instrumentation.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        ui.waitForIdle()
+        assertEquals(1, mainBacks)
+    }
 
     private fun verifyReveal(direction: LayoutDirection) {
         var open by mutableStateOf(false)

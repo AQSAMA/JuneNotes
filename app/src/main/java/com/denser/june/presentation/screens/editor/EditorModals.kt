@@ -10,7 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.enums.TimeFormat
-import com.denser.june.core.utils.FileUtils
+import com.denser.june.core.media.storage.MediaStorageManager
 import com.denser.june.presentation.components.JuneDialog
 import com.denser.june.presentation.components.JuneDateTimePicker
 import com.denser.june.presentation.components.JuneDateTimePickerMode
@@ -22,6 +22,7 @@ import com.denser.june.presentation.screens.editor.components.emoji.JournalEmoji
 import com.denser.june.presentation.screens.editor.components.emoji.loadEmojiAssets
 import com.denser.june.presentation.screens.editor.components.JournalTagsDialog
 import com.denser.june.presentation.screens.home.components.DeleteConfirmationSheet
+import java.io.File
 import org.koin.compose.koinInject
 
 class EditorDialogState {
@@ -56,19 +57,21 @@ fun EditorModals(
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
     var tempVideoUri by remember { mutableStateOf<Uri?>(null) }
 
+    fun processImportedMedia(uri: Uri, isVideoHint: Boolean? = null) {
+        onAction(EditorAction.ImportMedia(uri, isVideoHint))
+    }
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris ->
-        val newPaths = uris.mapNotNull { FileUtils.persistMedia(context, it) }
-        if (newPaths.isNotEmpty()) onAction(EditorAction.AddImages(newPaths))
+        uris.forEach { processImportedMedia(it) }
     }
 
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
     ) { success ->
         if (success && tempCameraUri != null) {
-            FileUtils.persistMedia(context, tempCameraUri!!)
-                ?.let { onAction(EditorAction.AddImage(it)) }
+            processImportedMedia(tempCameraUri!!, isVideoHint = false)
         }
     }
 
@@ -76,8 +79,7 @@ fun EditorModals(
         contract = ActivityResultContracts.CaptureVideo()
     ) { success ->
         if (success && tempVideoUri != null) {
-            FileUtils.persistMedia(context, tempVideoUri!!)
-                ?.let { onAction(EditorAction.AddImage(it)) }
+            processImportedMedia(tempVideoUri!!, isVideoHint = true)
         }
     }
 
@@ -89,7 +91,7 @@ fun EditorModals(
             confirmButton = {
                 TextButton(onClick = {
                     dialogState.showCameraSelectionDialog = false
-                    val uri = FileUtils.createTempVideoUri(context)
+                    val uri = MediaStorageManager.createTempVideoUri(context)
                     tempVideoUri = uri
                     videoLauncher.launch(uri)
                 }) { Text(stringResource(R.string.record_video)) }
@@ -97,7 +99,7 @@ fun EditorModals(
             dismissButton = {
                 TextButton(onClick = {
                     dialogState.showCameraSelectionDialog = false
-                    val uri = FileUtils.createTempPictureUri(context)
+                    val uri = MediaStorageManager.createTempPictureUri(context)
                     tempCameraUri = uri
                     photoLauncher.launch(uri)
                 }) { Text(stringResource(R.string.take_photo)) }
@@ -114,14 +116,13 @@ fun EditorModals(
             confirmButton = {
                 Button(onClick = {
                     dialogState.showExitDialog = false
-                    onAction(EditorAction.SaveJournal)
-                    onAction(EditorAction.NavigateBack)
+                    onAction(EditorAction.SaveJournalAndNavigateBack)
                 }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
                 OutlinedButton(onClick = {
                     dialogState.showExitDialog = false
-                    onAction(EditorAction.NavigateBack)
+                    onAction(EditorAction.DiscardChanges)
                 }) { Text(stringResource(R.string.discard)) }
             },
             text = { Text(stringResource(R.string.save_progress_message)) }

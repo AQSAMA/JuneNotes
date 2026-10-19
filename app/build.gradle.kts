@@ -21,8 +21,8 @@ val appNamespace = "com.denser.june"
 val apkNamePrefix = "june"
 
 // Format: M mm pp b
-val appVersionCode = 102010
-val appVersionName = "1.2.1"
+val appVersionCode = 103010
+val appVersionName = "1.3.1"
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties()
@@ -265,6 +265,7 @@ dependencies {
     implementation(libs.osmdroid)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    implementation(libs.telephoto.zoomable.coil)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
     implementation(libs.media3.common)

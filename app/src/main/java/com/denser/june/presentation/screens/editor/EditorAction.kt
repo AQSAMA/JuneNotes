@@ -12,10 +12,14 @@ sealed interface EditorAction {
     data class ChangeEmoji(val emoji: String?) : EditorAction
     data class ChangeDateTime(val dateTime: Long) : EditorAction
 
+    data class ImportMedia(val uri: Uri, val isVideoHint: Boolean? = null) : EditorAction
     data class AddImage(val uri: String) : EditorAction
     data class AddImages(val uris: List<String>) : EditorAction
+    data class ReplaceImage(val oldUri: String, val newPath: String) : EditorAction
+    data class SetMediaProcessing(val path: String, val isProcessing: Boolean) : EditorAction
     data class RemoveImage(val uri: String) : EditorAction
     data class MoveImageToFront(val uri: String) : EditorAction
+    data object Refresh : EditorAction
 
     data class UpdateTags(val tags: List<String>) : EditorAction
     data class SearchTags(val query: String) : EditorAction
@@ -43,6 +47,8 @@ sealed interface EditorAction {
     data object ToggleArchive : EditorAction
 
     data object SaveJournal : EditorAction
+    data object SaveJournalAndNavigateBack : EditorAction
+    data object DiscardChanges : EditorAction
     data object NavigateBack : EditorAction
     data object DeleteJournal : EditorAction
     data object RestoreJournal : EditorAction

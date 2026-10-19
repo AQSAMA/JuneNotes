@@ -22,13 +22,12 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.denser.june.core.R
 import com.denser.june.core.domain.model.SongDetails
-import com.denser.june.core.utils.FileUtils
 import com.denser.june.presentation.components.JuneDropdownMenu
 import com.denser.june.presentation.components.JuneDropdownMenuItem
 import com.denser.june.presentation.components.JuneTextField
 import com.denser.june.presentation.components.RestrictedAsyncImage
 
-import kotlinx.coroutines.launch
+
 @Composable
 fun EditSongView(
     modifier: Modifier = Modifier,
@@ -46,19 +45,29 @@ fun EditSongView(
     isArtRemoved: Boolean,
     onArtPathChange: (String) -> Unit,
     onRemoveArt: () -> Unit,
-    enabled: Boolean = true
+    onArtImportBusyChange: (Boolean) -> Unit = {},
+    enabled: Boolean = true,
+    importer: SongArtImportVM = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "song-art-$editScope-${song.localPreviewPath}-${song.previewUrl}-${song.title}-${song.artistName}"
+    )
 ) {
     val context = LocalContext.current
+    val currentOnArtPathChange by rememberUpdatedState(onArtPathChange)
+    DisposableEffect(importer.busy) {
+        onArtImportBusyChange(importer.busy)
+        onDispose { onArtImportBusyChange(false) }
+    }
+    LaunchedEffect(importer.importedPath) {
+        importer.importedPath?.let { path ->
+            currentOnArtPathChange(path)
+            importer.acknowledge(path)
+        }
+    }
 
     val photoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
-        if (uri != null) {
-            val persistedPath = FileUtils.persistSongArt(context, uri)
-            if (persistedPath != null) {
-                onArtPathChange(persistedPath)
-            }
-        }
+        if (uri != null) importer.importArtwork(context, uri)
     }
 
     val hasArtwork = !isArtRemoved && (artPath != null || song.thumbnailUrl != null || song.localThumbnailPath != null)

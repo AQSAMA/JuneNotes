@@ -23,6 +23,7 @@ data class EditorState(
     val isBookmarked: Boolean = false,
     val isArchived: Boolean = false,
     val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
     val usePlainTextEditor: Boolean = false,
     val isDirty: Boolean = false,
     val isDraft: Boolean = true,
@@ -38,7 +39,8 @@ data class EditorState(
     val importingSongKeys: Set<String> = emptySet(),
     val clipTrimmerSong: SongDetails? = null,
     val pendingStagedSong: SongDetails? = null,
-    val journalEditSongPending: Boolean = false
+    val journalEditSongPending: Boolean = false,
+    val processingMediaPaths: Set<String> = emptySet()
 ) {
     val isDeleted: Boolean get() = deletedAt != null
     val hasContent: Boolean

@@ -93,6 +93,7 @@
     <string name="no_journals_yet_desc">Start capturing your journey today. Create your first entry to start your collection.</string>
     <string name="no_links_available">No links available</string>
     <string name="no_locations_this_month">No locations added for this month.</string>
+    <string name="no_locations_found">No locations found</string>
     <string name="no_media_this_month">No media this month.</string>
     <string name="no_music_this_month">No music tracked this month.</string>
     <string name="empty_library">Your library is empty</string>
@@ -228,6 +229,13 @@
     <string name="keyboard_capitalization_desc">Capitalize first word of sentences</string>
     <string name="map_settings">Map settings</string>
     <string name="map_settings_desc">Select style and manage API keys</string>
+    <string name="compression">Compression</string>
+    <string name="compress_photos">Compress photos</string>
+    <string name="compress_photos_desc">Auto compress added photos</string>
+    <string name="photo_quality">Photo quality</string>
+    <string name="compress_videos">Compress videos</string>
+    <string name="compress_videos_desc">Auto compress added videos</string>
+    <string name="video_quality">Video quality</string>
     <string name="markdown_editor">Markdown editor</string>
     <string name="markdown_editor_desc">Rich text formatting enabled</string>
     <string name="plain_text_mode">Plain text mode</string>
@@ -508,8 +516,25 @@
     <string name="maps_require_internet_tiles">Maps require internet access to load tiles.</string>
     <string name="maps_search_require_internet">Maps and search require internet access.</string>
     <string name="preview">Preview</string>
+    <string name="collapse_map">Collapse Map</string>
+    <string name="confirm_location">Confirm Location</string>
+    <string name="current_location">Current Location</string>
+    <string name="expand_map">Expand Map</string>
+    <string name="fetching_address">Fetching address…</string>
+    <string name="gps_accuracy_estimate">GPS • ±5m</string>
+    <string name="locating">Locating…</string>
+    <string name="move_map_to_select">Move map to select</string>
+    <string name="network_restricted">Network restricted</string>
+    <string name="no_address_available">No address available</string>
+    <string name="pinned_location">Pinned Location</string>
+    <string name="remove_location">Remove Location</string>
+    <string name="search_location_placeholder">Search location…</string>
     <string name="stadia" translatable="false">Stadia Maps</string>
     <string name="stadia_api_key_placeholder">Stadia API key</string>
+    <string name="toggle_dark_mode">Toggle Dark Mode</string>
+    <string name="unknown_place">Unknown Place</string>
+    <string name="zoom_in">Zoom In</string>
+    <string name="zoom_out">Zoom Out</string>
 
     <!-- About & Diagnostics -->
     <string name="about_june">About June</string>
@@ -596,4 +621,10 @@
     <string name="folder_organize">Organize folders</string>
     <string name="folder_drop_root">Move to top level</string>
     <string name="folder_sidebar_empty">Create a folder to organize your notes</string>
+    <string name="folder_expand_all">Expand all folders</string>
+    <string name="folder_collapse_all">Collapse all folders</string>
+    <string name="media_import_failed">Unable to import media</string>
+    <string name="compression_save_failed">Unable to save compressed media</string>
+    <string name="compression_preview_failed">Unable to create preview</string>
+    <string name="retry_preview">Retry</string>
 </resources>

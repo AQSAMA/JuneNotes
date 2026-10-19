@@ -2,6 +2,8 @@ package com.denser.june.presentation.screens.home.folders
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -26,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
 import com.denser.june.core.domain.folder.Folder
 import com.denser.june.presentation.components.JuneConfirmationDialog
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +43,7 @@ internal fun FolderSidebar(
     val state by viewModel.state.collectAsStateWithLifecycle()
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
     var managing by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     var dragging by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
     var createParent by remember { mutableStateOf<String?>(null) }
@@ -54,7 +58,20 @@ internal fun FolderSidebar(
     LaunchedEffect(state.path.map { it.id }) {
         expandedIds = (expandedIds + state.path.dropLast(1).map { it.id }).distinct()
     }
-    val rows = remember(state.liveFolders, expandedIds) { folderTreeRows(state.liveFolders, expandedIds.toSet()) }
+    val rows = remember(state.liveFolders, expandedIds, query) { folderTreeRows(state.liveFolders, expandedIds.toSet(), query) }
+    val selectedRow by rememberUpdatedState(rows.indexOfFirst { it.folder.id == state.currentId })
+    LaunchedEffect(query) { list.scrollToItem(0) }
+    // Remove deleted branches from saved state; preserve the user's remaining expansion choices.
+    LaunchedEffect(state.liveFolders) {
+        if (!state.loading) expandedIds = expandedIds.filter { id -> state.liveFolders.any { it.id == id } }
+    }
+    LaunchedEffect(state.currentId, folderSelected, query.isBlank()) {
+        if (folderSelected && query.isBlank() && state.currentId != null) {
+            // Reveal once per selection/entry, without jumping back after manual reordering.
+            val index = snapshotFlow { selectedRow }.first { it >= 0 }
+            list.animateScrollToItem(index + 3)
+        }
+    }
     val siblings = remember(state.liveFolders) {
         state.liveFolders.groupBy { it.parentId }.mapValues { (_, folders) -> folders.sortedWith(compareBy({ it.position }, { it.id })) }
     }
@@ -67,6 +84,9 @@ internal fun FolderSidebar(
             Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = onClose) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.folder_close_sidebar)) }
+            }
+            Box(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
+                FolderSearchField(query, { query = it }, stringResource(R.string.folder_search_folders))
             }
             FolderDragHost({ false }, {}, { dragging = it }, Modifier.weight(1f)) {
                 Box(Modifier.fillMaxSize()) {
@@ -86,6 +106,14 @@ internal fun FolderSidebar(
                             HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(R.string.folders), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                if (state.liveFolders.any { it.parentId != null }) {
+                                    val expanded = expandedIds.isNotEmpty()
+                                    IconButton(onClick = {
+                                        expandedIds = if (expanded) emptyList() else state.liveFolders.map { it.id }
+                                    }, enabled = query.isBlank(), modifier = Modifier.testTag("sidebar-toggle-branches")) {
+                                        Icon(painterResource(if (expanded) R.drawable.expand_less_24px else R.drawable.expand_more_24px), stringResource(if (expanded) R.string.folder_collapse_all else R.string.folder_expand_all))
+                                    }
+                                }
                                 IconButton(onClick = { createParent = null; creating = true }) {
                                     Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder))
                                 }
@@ -94,10 +122,12 @@ internal fun FolderSidebar(
                         items(rows, key = { "tree-${it.folder.id}" }) { row ->
                             val folder = row.folder
                             val item = FolderDrag(folder.id, true, folder.name)
-                            val expanded = folder.id in expandedIds
+                            val expanded = query.isNotBlank() || folder.id in expandedIds
                             val selectedFolder = folderSelected && folder.id == state.currentId
                             val indent = (row.depth.coerceAtMost(5) * 16).dp
-                            FolderDragItem(item, Modifier.animateItem().testTag("sidebar-folder-${folder.id}")) {
+                            FolderDragItem(item, Modifier.animateItem(
+                                placementSpec = if (dragging) null else spring(stiffness = Spring.StiffnessMediumLow)
+                            ).testTag("sidebar-folder-${folder.id}")) {
                                 Box(Modifier.padding(start = indent)) {
                                     FolderDropSurface(
                                         accepts = { accepts(it, folder.id) }, onDrop = {
@@ -111,7 +141,7 @@ internal fun FolderSidebar(
                                             Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                                                 if (row.hasChildren) {
                                                     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "folder_expansion")
-                                                    IconButton(onClick = { expandedIds = if (expanded) expandedIds - folder.id else expandedIds + folder.id }, modifier = Modifier.size(48.dp).testTag("sidebar-expand-${folder.id}")) {
+                                                    IconButton(onClick = { expandedIds = if (expanded) expandedIds - folder.id else expandedIds + folder.id }, enabled = query.isBlank(), modifier = Modifier.size(48.dp).testTag("sidebar-expand-${folder.id}")) {
                                                         Icon(painterResource(R.drawable.expand_more_24px), stringResource(if (expanded) R.string.folder_collapse else R.string.folder_expand), Modifier.size(20.dp).graphicsLayer { rotationZ = rotation })
                                                     }
                                                 } else Spacer(Modifier.width(12.dp))
@@ -138,7 +168,8 @@ internal fun FolderSidebar(
                                             }
                                         }
                                     }
-                                    if (dragging) {
+                                    // Search shows a filtered hierarchy, so it cannot define sibling order.
+                                    if (dragging && query.isBlank()) {
                                         SidebarInsertion(Modifier.align(Alignment.TopCenter).testTag("sidebar-before-${folder.id}"), Alignment.TopCenter,
                                             { it.id != folder.id && accepts(it, folder.parentId) }, { viewModel.move(it, folder.parentId, folder.id) })
                                         SidebarInsertion(Modifier.align(Alignment.BottomCenter).testTag("sidebar-after-${folder.id}"), Alignment.BottomCenter,
@@ -155,7 +186,7 @@ internal fun FolderSidebar(
                             FolderDropSurface({ accepts(it, null) }, { viewModel.move(it, null) }) {
                                 Box(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(12.dp), contentAlignment = Alignment.Center) {
                                     if (dragging) Text(stringResource(R.string.folder_drop_root), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                    else if (rows.isEmpty() && !state.loading) Text(stringResource(R.string.folder_sidebar_empty), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    else if (rows.isEmpty() && !state.loading) Text(stringResource(if (query.isBlank()) R.string.folder_sidebar_empty else R.string.no_matches_found), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     else if (state.loading) CircularProgressIndicator(Modifier.size(24.dp))
                                 }
                             }

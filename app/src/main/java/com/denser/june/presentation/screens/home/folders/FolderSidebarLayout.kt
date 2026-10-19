@@ -26,6 +26,12 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.denser.june.core.R
 
+/** Shared with nested drag hosts so filing a folder never turns into a drawer swipe. */
+internal class SidebarGestureState {
+    var folderDragActive by mutableStateOf(false)
+}
+internal val LocalSidebarGestureState = compositionLocalOf<SidebarGestureState?> { null }
+
 /** A reveal drawer: both surfaces follow one offset, read only in their graphics layers. */
 @Composable
 internal fun FolderSidebarLayout(
@@ -35,6 +41,7 @@ internal fun FolderSidebarLayout(
     content: @Composable () -> Unit
 ) {
     val savedSidebar = rememberSaveableStateHolder()
+    val interactions = remember { SidebarGestureState() }
     val density = LocalDensity.current
     val direction = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
     val dismissLabel = stringResource(R.string.folder_close_sidebar)
@@ -46,19 +53,26 @@ internal fun FolderSidebarLayout(
         var offset by remember { mutableFloatStateOf(if (open) width else 0f) }
         var dragging by remember { mutableStateOf(false) }
         var releaseVelocity by remember { mutableFloatStateOf(0f) }
+        var lastWidth by remember { mutableFloatStateOf(width) }
         LaunchedEffect(open, width, dragging) {
+            if (lastWidth != width) {
+                offset = if (lastWidth > 0f) offset / lastWidth * width else if (open) width else 0f
+                lastWidth = width
+                releaseVelocity = 0f
+            }
             if (!dragging) animate(
                 initialValue = offset.coerceIn(0f, width), targetValue = if (open) width else 0f,
                 initialVelocity = releaseVelocity,
                 animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 500f)
             ) { value, _ -> offset = value.coerceIn(0f, width) }
+            if (!dragging) releaseVelocity = 0f
         }
         val requestedOpen by rememberUpdatedState(open)
         val visible by remember { derivedStateOf { requestedOpen || dragging || offset > 0f } }
-        BackHandler(open || dragging) { dragging = false; releaseVelocity = 0f; onOpenChange(false) }
         val dragState = rememberDraggableState { delta -> offset = (offset + delta * direction).coerceIn(0f, width) }
         val gesture = Modifier.draggable(
             state = dragState, orientation = Orientation.Horizontal,
+            enabled = !interactions.folderDragActive,
             onDragStarted = { dragging = true; releaseVelocity = 0f },
             onDragStopped = { velocity ->
                 releaseVelocity = velocity * direction
@@ -70,7 +84,11 @@ internal fun FolderSidebarLayout(
         if (visible) {
             Box(Modifier.align(Alignment.CenterStart).width(drawerWidth).fillMaxHeight()
                 .graphicsLayer { translationX = direction * (offset - width) }
-                .then(gesture).testTag("folder-sidebar")) { savedSidebar.SaveableStateProvider("folders") { sidebar() } }
+                .then(gesture).testTag("folder-sidebar")) {
+                CompositionLocalProvider(LocalSidebarGestureState provides interactions) {
+                    savedSidebar.SaveableStateProvider("folders") { sidebar() }
+                }
+            }
         }
         Box(Modifier.fillMaxSize().graphicsLayer { translationX = direction * offset }
             .then(if (open || dragging) Modifier.clearAndSetSemantics { } else Modifier)) {
@@ -86,7 +104,7 @@ internal fun FolderSidebarLayout(
         }
         // Keep the edge gesture node alive for its entire stream, including the first reveal frame.
         Box(Modifier.align(Alignment.CenterStart).width(24.dp).fillMaxHeight()
-            .draggable(state = dragState, orientation = Orientation.Horizontal, enabled = !open,
+            .draggable(state = dragState, orientation = Orientation.Horizontal, enabled = !open && !interactions.folderDragActive,
                 onDragStarted = { dragging = true; releaseVelocity = 0f },
                 onDragStopped = { velocity ->
                     releaseVelocity = velocity * direction
@@ -94,5 +112,11 @@ internal fun FolderSidebarLayout(
                     dragging = false
                 })
             .testTag("folder-sidebar-edge"))
+        // Register after the main pane so its navigation handlers cannot consume drawer Back.
+        BackHandler((open || dragging) && !interactions.folderDragActive) {
+            dragging = false
+            releaseVelocity = 0f
+            onOpenChange(false)
+        }
     }
 }

@@ -21,6 +21,22 @@ import org.junit.Test
 
 class SyncFaultToleranceTest : BaseSyncTest() {
 
+    @Test fun `uploaded journal remains dirty when edited concurrently with manifest write`() = runTest {
+        val original = harness.givenLocalOnlyJournal("concurrent-upload")
+        harness.cloud.beforeManifestWrite = {
+            harness.repo.seed(original.copy(title = "Newer title", updatedAt = original.updatedAt))
+        }
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(original.title, harness.cloud.getJournal(original.id)!!.title)
+        assertEquals("Newer title", harness.repo.getJournalById(original.id)!!.title)
+        assertNull(harness.repo.getJournalById(original.id)!!.syncedAt)
+        harness.cloud.beforeManifestWrite = null
+        assertTrue(harness.sync().isSuccess)
+        assertEquals("Newer title", harness.repo.getJournalById(original.id)!!.title)
+        assertEquals("Newer title", harness.cloud.getJournal(original.id)!!.title)
+        assertNotNull(harness.repo.getJournalById(original.id)!!.syncedAt)
+    }
+
     @Test
     fun `partial upload failure does not write manifest and preserves other uploaded journals`() = runTest {
         harness.givenLocalOnlyJournal("j1", updatedAt = T0)

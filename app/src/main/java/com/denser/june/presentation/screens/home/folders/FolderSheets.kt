@@ -1,6 +1,8 @@
 package com.denser.june.presentation.screens.home.folders
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -25,6 +27,7 @@ import com.denser.june.core.domain.model.Journal
 import com.denser.june.presentation.screens.home.components.JournalCard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
 import org.koin.compose.koinInject
 
 internal fun matchingFolderNotes(notes: List<Journal>, query: String): List<Journal> {
@@ -89,7 +92,11 @@ internal fun ExistingFolderNoteSheet(
 @Composable
 fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
     val repository = koinInject<FolderRepository>()
-    val snapshot by repository.observe().collectAsStateWithLifecycle(FolderSnapshot())
+    val observed by remember(repository) { repository.observe().map<FolderSnapshot, FolderSnapshot?> { it } }
+        .collectAsStateWithLifecycle(null)
+    val snapshot = observed ?: FolderSnapshot()
+    val loading = observed == null
+    var initialized by rememberSaveable(item.id) { mutableStateOf(false) }
     var parent by rememberSaveable(item.id) { mutableStateOf<String?>(null) }
     var query by rememberSaveable(item.id) { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -102,6 +109,15 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
     val live = remember(snapshot) { snapshot.folders.filterNot { it.deleted } }
     val byId = remember(live) { live.associateBy { it.id } }
     val current = byId[parent]
+    val path = remember(live, parent) { folderAncestorPath(live, parent) }
+    val pathScroll = rememberScrollState()
+    LaunchedEffect(parent, pathScroll.maxValue) { pathScroll.animateScrollTo(pathScroll.maxValue) }
+    LaunchedEffect(observed) {
+        if (!loading && !initialized) {
+            parent = if (item.folder) byId[item.id]?.parentId else snapshot.journals.firstOrNull { it.journalId == item.id }?.folderId
+            initialized = true
+        }
+    }
     val validParent = parent == null || current != null
     val folders = remember(snapshot, item, parent, query) {
         live.filter { folder ->
@@ -109,14 +125,15 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
                 if (query.isBlank()) folder.parentId == parent else folder.name.contains(query.trim(), true)
         }.sortedWith(compareBy({ it.position }, { it.id }))
     }
-    LaunchedEffect(parent, validParent) { if (!validParent) { parent = null; query = "" } }
+    LaunchedEffect(parent, validParent, loading) { if (!loading && !validParent) { parent = null; query = "" } }
     fun open(id: String?) { parent = id; query = ""; error = null }
     ModalBottomSheet(
         onDismissRequest = { if (!busy) onDismiss() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ) {
         Column(Modifier.fillMaxHeight(0.78f).imePadding().padding(horizontal = 16.dp)) {
-            SheetHeading(stringResource(R.string.folder_move), "", busy, onDismiss)
+            SheetHeading(stringResource(R.string.folder_move), item.label, busy, onDismiss)
+            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (parent != null) {
                     IconButton(onClick = { open(null) }, enabled = !busy) {
@@ -128,8 +145,17 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
                 }
                 Text(current?.name ?: stringResource(R.string.folders), Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                IconButton(onClick = { createFolder = true }, enabled = !busy) {
+                IconButton(onClick = { createFolder = true }, enabled = !busy && !loading) {
                     Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder))
+                }
+            }
+            if (path.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(pathScroll), verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { open(null) }, enabled = !busy) { Text(stringResource(R.string.folders)) }
+                path.forEach { folder ->
+                    Icon(painterResource(R.drawable.chevron_right_24px), null, Modifier.size(16.dp))
+                    TextButton(onClick = { open(folder.id) }, enabled = !busy) {
+                        Text(folder.name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
+                    }
                 }
             }
             FolderSearchField(query, { query = it }, stringResource(R.string.folder_search_folders))
@@ -141,7 +167,10 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
                 items(folders, key = { it.id }) { folder ->
                     ListItem(
                         headlineContent = { Text(folder.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = if (query.isNotBlank()) { { Text(byId[folder.parentId]?.name ?: stringResource(R.string.folders)) } } else null,
+                        supportingContent = if (query.isNotBlank()) { {
+                            Text(folderAncestorPath(live, folder.parentId).joinToString(" / ") { it.name }
+                                .ifBlank { stringResource(R.string.folders) }, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        } } else null,
                         leadingContent = { Icon(painterResource(R.drawable.folder_open_24px), null, tint = MaterialTheme.colorScheme.primary) },
                         trailingContent = { Icon(painterResource(R.drawable.chevron_right_24px), null) },
                         modifier = Modifier.clickable(enabled = !busy) { open(folder.id) }
@@ -150,7 +179,7 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 8.dp)) }
             Button(
-                enabled = !busy && validParent && (!item.folder || snapshot.canMove(item.id, parent)),
+                enabled = !busy && !loading && initialized && validParent && (!item.folder || snapshot.canMove(item.id, parent)),
                 onClick = {
                     busy = true
                     scope.launch {

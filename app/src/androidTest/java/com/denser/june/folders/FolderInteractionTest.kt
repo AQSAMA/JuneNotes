@@ -136,7 +136,8 @@ class FolderInteractionTest {
             ui.waitUntil(3000) { active }
             moveAndSettle(source + Offset(-80f, 0f), target, downTime)
             // No further layout or pointer updates: the pending hold must recheck acceptance.
-            ui.runOnIdle { accepting = false }
+            // Do not wait for the 650 ms hover indicator: revoke during the actual hold.
+            instrumentation.runOnMainSync { accepting = false }
             SystemClock.sleep(750)
             ui.mainClock.advanceTimeBy(750)
             ui.runOnIdle { assertFalse(opened); assertTrue(active) }

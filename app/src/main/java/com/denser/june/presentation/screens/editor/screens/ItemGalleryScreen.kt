@@ -64,7 +64,7 @@ fun ItemGalleryScreen(
 
     var showLocationDialog by remember { mutableStateOf(false) }
 
-    val mediaOperations = remember(state.images) {
+    val mediaOperations = remember(state.images, state.songDetails, state.journalId, state.dateTime) {
         MediaOperations(
             onRemoveMedia = { viewModel.onAction(EditorAction.RemoveImage(it)) },
             onMoveToFront = { viewModel.onAction(EditorAction.MoveImageToFront(it)) },
@@ -72,7 +72,8 @@ fun ItemGalleryScreen(
                 navigator.navigateTo(
                     Route.JournalMediaDetail(
                         journalId = state.journalId ?: "",
-                        initialIndex = state.images.reversed().indexOf(path)
+                        initialIndex = state.images.reversed().indexOf(path),
+                        dateTime = state.dateTime
                     ),
                     isSingleTop = true,
                 )
@@ -80,6 +81,15 @@ fun ItemGalleryScreen(
             frontMediaPath = state.images.lastOrNull(),
             onRemoveSong = { viewModel.onAction(EditorAction.RemoveSong) },
             onSongSheetToggle = { navigator.navigateTo(Route.AddSong, isSingleTop = true) },
+            onTrimSong = {
+                val song = state.songDetails ?: return@MediaOperations
+                viewModel.onAction(EditorAction.OpenClipTrimmer(song))
+                navigator.navigateTo(Route.AddSong, isSingleTop = true)
+            },
+            onEditJournalSong = {
+                viewModel.onAction(EditorAction.OpenJournalSongEdit)
+                navigator.navigateTo(Route.AddSong, isSingleTop = true)
+            },
             onRemoveLocation = { viewModel.onAction(EditorAction.RemoveLocation) },
             onLocationDialogToggle = { showLocationDialog = true },
         )
@@ -159,6 +169,7 @@ fun ItemGalleryScreen(
                     operations = mediaOperations,
                     isLargeItem = false,
                     enablePlayback = false,
+                    isProcessing = state.processingMediaPaths.contains(path),
                 )
             }
         }

@@ -21,6 +21,8 @@ interface JournalRepository {
     fun getJournalsByMultipleTags(tags: List<String>): Flow<List<Journal>>
     
     suspend fun insertJournal(journal: Journal): String
+    /** Atomically replace only the expected attachment list, retaining concurrent note edits. */
+    suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean
     suspend fun softDeleteJournal(id: String)
     suspend fun restoreJournal(id: String)
     suspend fun hardDeleteJournal(id: String)
@@ -28,6 +30,12 @@ interface JournalRepository {
     suspend fun emptyBin()
     suspend fun restoreAllJournals()
     suspend fun updateJournal(journal: Journal)
+    /** Mark every current reference to an in-place media change dirty without replacing note content. */
+    suspend fun markMediaModified(path: String, modifiedAt: Long)
+
+    suspend fun getPendingMediaChanges(): Map<String, String>
+    fun observePendingMediaChanges(): Flow<Boolean>
+    suspend fun acknowledgeMediaChanges(expected: Map<String, String>)
 
     fun getDeletedJournals(): Flow<List<Journal>>
     suspend fun getJournalsToSync(threshold: Long): List<Journal>
@@ -35,6 +43,8 @@ interface JournalRepository {
     suspend fun getOldDeletedJournals(threshold: Long): List<Journal>
     
     suspend fun updateSyncStatus(id: String, cloudId: String, syncedAt: Long)
+    /** Acknowledge only the exact snapshot committed to the cloud, atomically with the revision check. */
+    suspend fun acknowledgeSync(expected: Journal, cloudId: String, syncedAt: Long): Boolean
     suspend fun resetAllSyncStatuses()
 
     suspend fun getAllTombstones(): List<String>

@@ -16,6 +16,15 @@ interface JournalDao {
     @Update
     suspend fun updateJournal(journal: JournalEntity)
 
+    @Transaction
+    suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long, syncThreshold: Long): Boolean {
+        val current = getJournalById(id) ?: return false
+        if (current.images != expected) return false
+        val updatedAt = maxOf(modifiedAt, current.updatedAt ?: 0L, (current.syncedAt ?: 0L) + syncThreshold + 1L)
+        updateJournal(current.copy(images = repaired, updatedAt = updatedAt))
+        return true
+    }
+
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun deleteJournal(id: String)
 
@@ -191,8 +200,61 @@ interface JournalDao {
     @Query("UPDATE journals SET deletedAt = :timestamp, updatedAt = :timestamp WHERE id = :id")
     suspend fun softDeleteJournal(id: String, timestamp: Long)
 
+    @Transaction
+    suspend fun markMediaModified(path: String, modifiedAt: Long): Int {
+        val fileName = java.io.File(path).name
+        if (fileName.isEmpty()) return 0
+        val referencing = getAllJournalsIncludeDeletedSync().filter { journal ->
+            journal.images.any { java.io.File(it).name == fileName }
+        }
+        if (referencing.isNotEmpty()) {
+            putPendingMediaChange(PendingMediaChangeEntity(fileName.lowercase(), java.util.UUID.randomUUID().toString()))
+            referencing.forEach { markJournalMediaModified(it.id, modifiedAt) }
+        }
+        return referencing.size
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putPendingMediaChange(change: PendingMediaChangeEntity)
+
+    @Query("SELECT * FROM pending_media_changes")
+    suspend fun getMediaChanges(): List<PendingMediaChangeEntity>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM pending_media_changes)")
+    fun observePendingMediaChanges(): Flow<Boolean>
+
+    @Query("DELETE FROM pending_media_changes WHERE fileName = :fileName AND generation = :generation")
+    suspend fun acknowledgeMediaChange(fileName: String, generation: String)
+
+    @Transaction
+    suspend fun getPendingMediaChanges(): Map<String, String> {
+        val referenced = getAllJournalsIncludeDeletedSync().flatMap { it.images }
+            .map { java.io.File(it).name.lowercase() }.toSet()
+        val pending = getMediaChanges()
+        pending.filter { it.fileName !in referenced }.forEach { acknowledgeMediaChange(it.fileName, it.generation) }
+        return pending.filter { it.fileName in referenced }.associate { it.fileName to it.generation }
+    }
+
+    @Query("UPDATE journals SET updatedAt = MAX(COALESCE(updatedAt, 0), :modifiedAt), syncedAt = NULL WHERE id = :id")
+    suspend fun markJournalMediaModified(id: String, modifiedAt: Long)
+
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun hardDeleteJournal(id: String)
+
+    @Transaction
+    suspend fun hardDeleteWithTombstone(id: String) {
+        if (getJournalById(id) == null) return
+        // syncedAt can be cleared by an in-place media edit after publication.
+        insertTombstone(DeletedJournalTombstone(id))
+        hardDeleteJournal(id)
+    }
+
+    @Transaction
+    suspend fun emptyBinWithTombstones() {
+        val deleted = getDeletedJournalsSync()
+        if (deleted.isNotEmpty()) insertTombstones(deleted.map { DeletedJournalTombstone(it.id) })
+        emptyBin()
+    }
 
     @Query("UPDATE journals SET deletedAt = :timestamp, updatedAt = :timestamp WHERE deletedAt IS NULL")
     suspend fun softDeleteAllJournals(timestamp: Long)
@@ -208,6 +270,19 @@ interface JournalDao {
 
     @Query("UPDATE journals SET cloudId = :cloudId, syncedAt = :syncedAt WHERE id = :id")
     suspend fun updateSyncStatus(id: String, cloudId: String, syncedAt: Long)
+
+    @Transaction
+    suspend fun acknowledgeSync(expected: JournalEntity, cloudId: String, syncedAt: Long): Boolean {
+        val current = getJournalById(expected.id) ?: return false
+        if (current != expected) {
+            // Our older snapshot is now on the cloud. Keep the current edit newer
+            // than that upload so the next timestamp-based plan cannot pull it back.
+            markJournalMediaModified(expected.id, System.currentTimeMillis() + com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS + 1L)
+            return false
+        }
+        updateSyncStatus(expected.id, cloudId, syncedAt)
+        return true
+    }
 
     @Query("UPDATE journals SET cloudId = NULL, syncedAt = NULL")
     suspend fun resetAllSyncStatuses()

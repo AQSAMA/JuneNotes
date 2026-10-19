@@ -1,0 +1,3 @@
+<resources>
+    <string name="media_restore_failed">Couldn’t restore the original attachment. Your backup is preserved; try again.</string>
+</resources>

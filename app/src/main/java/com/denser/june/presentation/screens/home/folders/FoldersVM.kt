@@ -30,18 +30,7 @@ data class FoldersState(
     }
     val folderCounts = liveFolders.groupingBy { it.parentId }.eachCount()
     val noteCounts = notes.groupingBy { memberships[it.id]?.folderId }.eachCount()
-    val path: List<Folder> = run {
-        val byId = liveFolders.associateBy { it.id }
-        val result = mutableListOf<Folder>()
-        val seen = mutableSetOf<String>()
-        var id = currentId
-        while (id != null && seen.add(id)) {
-            val folder = byId[id] ?: break
-            result.add(folder)
-            id = folder.parentId
-        }
-        result.reversed()
-    }
+    val path: List<Folder> = folderAncestorPath(liveFolders, currentId)
 
 }
 

@@ -42,11 +42,15 @@ import com.denser.june.presentation.screens.editor.components.ActiveJournalSongB
 import com.denser.june.presentation.screens.editor.components.EditSongScope
 import com.denser.june.presentation.screens.editor.components.EditSongView
 import com.denser.june.presentation.screens.editor.components.LibrarySongRow
+import com.denser.june.presentation.screens.editor.components.SongArtImportVM
 import com.denser.june.presentation.screens.editor.components.SongInputCard
 import com.denser.june.presentation.screens.editor.components.TrimmerStepView
 import com.denser.june.presentation.screens.editor.components.UnimportedSongRow
 import com.denser.june.presentation.screens.editor.components.UnimportedSongsHeader
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
+import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 
 enum class AddSongStep {
@@ -71,9 +75,22 @@ fun AddSongScreen(
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
-    var currentStep by remember { mutableStateOf(AddSongStep.Library) }
-    var activeTrimmerSong by remember { mutableStateOf<SongDetails?>(null) }
-    var activeEditingSong by remember { mutableStateOf<SongDetails?>(null) }
+    var currentStep by rememberSaveable { mutableStateOf(AddSongStep.Library) }
+    val songSaver = remember {
+        Saver<SongDetails?, String>(
+            save = { it?.let { song -> Json.encodeToString(SongDetails.serializer(), song) } },
+            restore = { Json.decodeFromString(SongDetails.serializer(), it) }
+        )
+    }
+    var activeTrimmerSong by rememberSaveable(stateSaver = songSaver) { mutableStateOf<SongDetails?>(null) }
+    var activeEditingSong by rememberSaveable(stateSaver = songSaver) { mutableStateOf<SongDetails?>(null) }
+    val artImporter: SongArtImportVM = androidx.lifecycle.viewmodel.compose.viewModel(key = "add-song-art-import")
+    val isArtImportBusy = artImporter.busy || artImporter.importedPath != null
+    val cancelEdit: () -> Unit = {
+        artImporter.discard()
+        activeEditingSong = null
+        currentStep = AddSongStep.Library
+    }
 
     var showLinkInput by remember { mutableStateOf(false) }
     var songLink by remember { mutableStateOf("") }
@@ -122,19 +139,18 @@ fun AddSongScreen(
         when (currentStep) {
             AddSongStep.Trimmer -> trimmerDismiss()
             AddSongStep.Edit, AddSongStep.EditJournal -> {
-                activeEditingSong = null
-                currentStep = AddSongStep.Library
+                cancelEdit()
             }
             AddSongStep.Library -> onNavigateBack()
         }
     }
 
-    var editTitle by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.title ?: "") }
-    var editArtist by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.artistName ?: "") }
-    var editAlbum by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.albumName ?: "") }
-    var editGenre by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.genre ?: "") }
-    var editArtPath by remember(activeEditingSong) { mutableStateOf(activeEditingSong?.localThumbnailPath) }
-    var isArtRemoved by remember(activeEditingSong) { mutableStateOf(false) }
+    var editTitle by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.title ?: "") }
+    var editArtist by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.artistName ?: "") }
+    var editAlbum by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.albumName ?: "") }
+    var editGenre by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.genre ?: "") }
+    var editArtPath by rememberSaveable(activeEditingSong) { mutableStateOf(activeEditingSong?.localThumbnailPath) }
+    var isArtRemoved by rememberSaveable(activeEditingSong) { mutableStateOf(false) }
 
     LaunchedEffect(state.journalEditSongPending) {
         if (state.journalEditSongPending && state.songDetails != null) {
@@ -167,8 +183,7 @@ fun AddSongScreen(
                             when (currentStep) {
                                 AddSongStep.Trimmer -> trimmerDismiss()
                                 AddSongStep.Edit, AddSongStep.EditJournal -> {
-                                    activeEditingSong = null
-                                    currentStep = AddSongStep.Library
+                                    cancelEdit()
                                 }
                                 AddSongStep.Library -> onNavigateBack()
                             }
@@ -188,7 +203,6 @@ fun AddSongScreen(
                     when (currentStep) {
                         AddSongStep.Library -> {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 FilledTonalIconButton(
@@ -276,10 +290,7 @@ fun AddSongScreen(
                 AddSongStep.Edit -> {
                     JuneFloatingActionBar {
                         JuneFloatingAction(
-                            onClick = {
-                                activeEditingSong = null
-                                currentStep = AddSongStep.Library
-                            },
+                            onClick = cancelEdit,
                             label = "Cancel",
                             icon = {
                                 Icon(
@@ -292,6 +303,7 @@ fun AddSongScreen(
                         )
                         JuneFloatingAction(
                             onClick = {
+                                if (isArtImportBusy) return@JuneFloatingAction
                                 val orig = activeEditingSong ?: return@JuneFloatingAction
                                 val updated = buildUpdatedSong(
                                     orig = orig,
@@ -303,9 +315,11 @@ fun AddSongScreen(
                                     isArtRemoved = isArtRemoved
                                 )
                                 viewModel.onAction(EditorAction.SaveLibrarySongMeta(orig, updated))
+                                artImporter.commit(updated.localThumbnailPath)
                                 activeEditingSong = null
                                 currentStep = AddSongStep.Library
                             },
+                            enabled = !isArtImportBusy,
                             label = "Save",
                             icon = {
                                 Icon(
@@ -320,10 +334,7 @@ fun AddSongScreen(
                 AddSongStep.EditJournal -> {
                     JuneFloatingActionBar {
                         JuneFloatingAction(
-                            onClick = {
-                                activeEditingSong = null
-                                currentStep = AddSongStep.Library
-                            },
+                            onClick = cancelEdit,
                             label = "Cancel",
                             icon = {
                                 Icon(
@@ -336,6 +347,7 @@ fun AddSongScreen(
                         )
                         JuneFloatingAction(
                             onClick = {
+                                if (isArtImportBusy) return@JuneFloatingAction
                                 val orig = activeEditingSong ?: return@JuneFloatingAction
                                 val updated = buildUpdatedSong(
                                     orig = orig,
@@ -347,9 +359,11 @@ fun AddSongScreen(
                                     isArtRemoved = isArtRemoved
                                 )
                                 viewModel.onAction(EditorAction.SaveJournalSongMeta(updated))
+                                artImporter.commit(updated.localThumbnailPath)
                                 activeEditingSong = null
                                 currentStep = AddSongStep.Library
                             },
+                            enabled = !isArtImportBusy,
                             label = "Save",
                             icon = {
                                 Icon(
@@ -380,8 +394,9 @@ fun AddSongScreen(
                         currentStep = AddSongStep.EditJournal
                     },
                     onTrim = {
-                        activeTrimmerSong = attachedSong
-                        viewModel.onAction(EditorAction.OpenClipTrimmer(attachedSong))
+                        val songToTrim = state.songDetails ?: attachedSong
+                        activeTrimmerSong = songToTrim
+                        viewModel.onAction(EditorAction.OpenClipTrimmer(songToTrim))
                         currentStep = AddSongStep.Trimmer
                     },
                     onRemove = { viewModel.onAction(EditorAction.RemoveSong) }
@@ -401,8 +416,7 @@ fun AddSongScreen(
                             activeEditingSong?.let {
                                 viewModel.onAction(EditorAction.RemoveLibrarySong(it))
                             }
-                            activeEditingSong = null
-                            currentStep = AddSongStep.Library
+                            cancelEdit()
                         }
                     ) {
                         Text("Remove")
@@ -475,8 +489,9 @@ fun AddSongScreen(
                                         song = song,
                                         isCurrentlyAttached = isCurrentlyAttached,
                                         onClick = {
-                                            activeTrimmerSong = song
-                                            viewModel.onAction(EditorAction.OpenClipTrimmer(song))
+                                            val songToTrim = if (isCurrentlyAttached) state.songDetails ?: song else song
+                                            activeTrimmerSong = songToTrim
+                                            viewModel.onAction(EditorAction.OpenClipTrimmer(songToTrim))
                                             currentStep = AddSongStep.Trimmer
                                         },
                                         onEdit = {
@@ -565,14 +580,16 @@ fun AddSongScreen(
 
             AddSongStep.Trimmer -> {
                 activeTrimmerSong?.let { song ->
-                    TrimmerStepView(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(paddingValues),
-                        songDetails = song,
-                        onBindSaveAction = { pendingTrimmerSave = it },
-                        onSaveClip = trimmerSaveClip
-                    )
+                    key(song.title, song.artistName, song.clipStartMs, song.clipEndMs, song.localPreviewPath) {
+                        TrimmerStepView(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(paddingValues),
+                            songDetails = song,
+                            onBindSaveAction = { pendingTrimmerSave = it },
+                            onSaveClip = trimmerSaveClip
+                        )
+                    }
                 }
             }
 
@@ -594,6 +611,7 @@ fun AddSongScreen(
                         onGenreChange = { editGenre = it },
                         artPath = editArtPath,
                         isArtRemoved = isArtRemoved,
+                        importer = artImporter,
                         onArtPathChange = {
                             editArtPath = it
                             isArtRemoved = false
@@ -624,6 +642,7 @@ fun AddSongScreen(
                         onGenreChange = { editGenre = it },
                         artPath = editArtPath,
                         isArtRemoved = isArtRemoved,
+                        importer = artImporter,
                         onArtPathChange = {
                             editArtPath = it
                             isArtRemoved = false

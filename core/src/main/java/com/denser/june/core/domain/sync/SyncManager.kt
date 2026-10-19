@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,11 +22,12 @@ import com.denser.june.core.data.database.journal.JournalDatabase
 import com.denser.june.core.utils.computeSHA256
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import com.denser.june.core.data.database.song.SongLibraryDao
 import com.denser.june.core.data.database.song.SongLibraryEntity
-import com.denser.june.core.domain.model.SongSourceType
+import com.denser.june.core.media.storage.MediaStorageManager
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.coroutineScope
@@ -88,13 +91,17 @@ class SyncManager(
     private val songMediaArtDir = File(songMediaDir, "art").apply { if (!exists()) mkdirs() }
     companion object {
         const val SYNC_THRESHOLD_MS = 2000L
-        const val CURRENT_DATA_REPAIR_VERSION = 2
+        const val CURRENT_DATA_REPAIR_VERSION = 6
     }
 
     private val _status = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     private val syncMutex = Mutex()
     private val _syncActive = AtomicBoolean(false)
     val status: StateFlow<SyncStatus> = _status.asStateFlow()
+    private val startupRepair: Deferred<Boolean>
+
+    /** Cleanup must not snapshot paths while startup repair is still publishing files. */
+    suspend fun awaitStartupRepair(): Boolean = startupRepair.await()
 
     init {
         applicationScope.launch {
@@ -113,15 +120,19 @@ class SyncManager(
             }
         }
 
-        applicationScope.launch(Dispatchers.IO) {
+        startupRepair = applicationScope.async(Dispatchers.IO) {
             val lastVersion = syncPrefs.getLastCompletedDataRepairVersion().first()
+            if (lastVersion >= CURRENT_DATA_REPAIR_VERSION) return@async true
             if (lastVersion < 1) {
                 repairDoubleConcatenatedImages()
             }
             if (lastVersion < 2) {
                 repairSongDetailsAndPaths()
             }
+            // Version 6 coordinates cleanup and retries repairs acknowledged by earlier versions.
+            if (!repairRepeatedMediaFileNames()) return@async false
             syncPrefs.setLastCompletedDataRepairVersion(CURRENT_DATA_REPAIR_VERSION)
+            true
         }
 
         applicationScope.launch {
@@ -130,8 +141,8 @@ class SyncManager(
                 else {
                     combine(
                         journalRepo.observeHasUnsyncedJournals(SYNC_THRESHOLD_MS),
-                        combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync()) { tombstones, foldersDirty ->
-                            tombstones || foldersDirty
+                        combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync(), journalRepo.observePendingMediaChanges()) { tombstones, foldersDirty, mediaDirty ->
+                            tombstones || foldersDirty || mediaDirty
                         },
                         songLibraryDao.observeAll(),
                         syncPrefs.getLastSyncTime()
@@ -165,8 +176,8 @@ class SyncManager(
                     else {
                         combine(
                             journalRepo.observeHasUnsyncedJournals(SYNC_THRESHOLD_MS),
-                            combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync()) { tombstones, foldersDirty ->
-                            tombstones || foldersDirty
+                            combine(journalRepo.observeHasTombstones(), folderRepo.observePendingSync(), journalRepo.observePendingMediaChanges()) { tombstones, foldersDirty, mediaDirty ->
+                            tombstones || foldersDirty || mediaDirty
                         },
                             songLibraryDao.observeAll(),
                             syncPrefs.getLastSyncTime()
@@ -292,6 +303,24 @@ class SyncManager(
         }
     }
 
+    private suspend fun repairRepeatedMediaFileNames(): Boolean {
+        return try {
+            AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Starting programmatic repeated media file name repair...")
+            val repairedCount = repairRepeatedMediaPaths(journalRepo, mediaDir)
+            AppLogger.d(
+                AppLogger.Category.SYNC,
+                "SyncManager",
+                "Repeated media file name repair completed. Repaired $repairedCount journals."
+            )
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "Error repairing repeated media file names", e)
+            false
+        }
+    }
+
     fun resetStatus() {
         applicationScope.launch {
             val isSyncEnabled = syncPrefs.getSyncEnabled().first()
@@ -299,7 +328,7 @@ class SyncManager(
                 _status.value = SyncStatus.Idle
                 return@launch
             }
-            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync()
+            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync() || journalRepo.getPendingMediaChanges().isNotEmpty()
             val hasTombstones = journalRepo.hasTombstones()
 
             _status.value = if (hasUnsynced || hasTombstones) SyncStatus.Dirty else SyncStatus.Idle
@@ -338,27 +367,6 @@ class SyncManager(
                 .map { File(it).name }.distinct()
                 .count { name -> File(mediaDir, name).let { it.exists() && it.length() > 0L } }
 
-            val remoteMediaMeta = remoteManifest?.mediaMetadata ?: emptyMap()
-            val mediaToUpload = localMediaFiles.filter { name ->
-                val file = File(mediaDir, name)
-                val isPhysicallyOnCloud = remoteMedia.any { it.equals(name, ignoreCase = true) } ||
-                    remoteMediaMeta.containsKey(name) ||
-                    remoteMediaMeta.containsKey(name.lowercase())
-                file.exists() && file.length() > 0L && !isPhysicallyOnCloud
-            }
-
-            val mediaToDownload = activeLocalJournals
-                .flatMap { it.images }
-                .map { File(it).name }
-                .distinct()
-                .filter { name ->
-                    val localFile = File(mediaDir, name)
-                    val isOnCloud = remoteMedia.any { it.equals(name, ignoreCase = true) } ||
-                        remoteMediaMeta.containsKey(name) ||
-                        remoteMediaMeta.containsKey(name.lowercase())
-                    isOnCloud && (!localFile.exists() || localFile.length() == 0L)
-                }
-
             val remoteStates = remoteJournals.associate { meta ->
                 val id = meta.name.removeSuffix(".json")
                 id to (meta.name to meta.lastModified)
@@ -372,6 +380,58 @@ class SyncManager(
                 localsToSync = emptyList(),
                 isFullRevalidation = true
             )
+
+            val locallyModifiedMedia = mediaWithLocalChanges(allLocalJournals, journalRepo.getPendingMediaChanges())
+
+            val remoteMediaMeta = remoteManifest?.mediaMetadata ?: emptyMap()
+            val mediaToUpload = localMediaFiles.filter { name ->
+                val file = File(mediaDir, name)
+                val isPhysicallyOnCloud = remoteMedia.any { it.equals(name, ignoreCase = true) } ||
+                    remoteMediaMeta.containsKey(name) ||
+                    remoteMediaMeta.containsKey(name.lowercase())
+                val remoteMeta = remoteMediaMeta[name] ?: remoteMediaMeta[name.lowercase()]
+                val localExists = file.exists() && file.length() > 0L
+                if (!localExists) return@filter false
+
+                if (!isPhysicallyOnCloud) {
+                    true
+                } else if (name.lowercase() !in locallyModifiedMedia) {
+                    false
+                } else if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
+                    val localHash = file.computeSHA256()
+                    localHash != remoteMeta.hash
+                } else {
+                    // Size alone cannot verify marked bytes, even when lengths match.
+                    true
+                }
+            }
+
+            val mediaToUploadSet = mediaToUpload.map { it.lowercase() }.toSet()
+            val mediaToDownload = activeLocalJournals
+                .flatMap { it.images }
+                .map { File(it).name }
+                .distinct()
+                .filter { name ->
+                    if (mediaToUploadSet.contains(name.lowercase())) return@filter false
+
+                    val localFile = File(mediaDir, name)
+                    val isOnCloud = remoteMedia.any { it.equals(name, ignoreCase = true) } ||
+                        remoteMediaMeta.containsKey(name) ||
+                        remoteMediaMeta.containsKey(name.lowercase())
+                    val remoteMeta = remoteMediaMeta[name] ?: remoteMediaMeta[name.lowercase()]
+                    if (!isOnCloud) return@filter false
+
+                    if (!localFile.exists() || localFile.length() == 0L) {
+                        true
+                    } else if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
+                        val localHash = localFile.computeSHA256()
+                        localHash != remoteMeta.hash
+                    } else if (remoteMeta != null && remoteMeta.size > 0L) {
+                        localFile.length() != remoteMeta.size
+                    } else {
+                        false
+                    }
+                }
 
             val localDeletions = remoteStates.keys
                 .filter { id -> id in tombstoneIds }
@@ -425,10 +485,62 @@ class SyncManager(
                     remoteSongMediaMeta.containsKey(fileName.lowercase())
                 file.exists() && file.length() > 0L && !isPhysicallyOnCloud
             }
-            val songsToDownload = remoteSongMedia.filter { name ->
-                isAudioFile(name) && localSongFileNames.none { it.equals(name, ignoreCase = true) }
+
+            val songsToUploadSet = songsToUpload.map { File(it.localPath).name.lowercase() }.toSet()
+
+            val activeSongFileNames = activeLocalJournals
+                .mapNotNull { it.songDetails }
+                .mapNotNull { song ->
+                    song.localPreviewPath?.let { File(it).name } ?: allLocalSongs.firstOrNull {
+                        it.title.trim().equals(song.title.trim(), ignoreCase = true) &&
+                        it.artistName.trim().equals(song.artistName.trim(), ignoreCase = true)
+                    }?.localPath?.let { File(it).name }
+                }
+                .distinct()
+
+            val songsToDownload = activeSongFileNames.filter { fileName ->
+                if (songsToUploadSet.contains(fileName.lowercase())) return@filter false
+
+                val targetFile = File(songMediaLibraryDir, fileName)
+                val localFile = if (targetFile.exists()) targetFile else {
+                    val existingPath = activeLocalJournals.mapNotNull { it.songDetails?.localPreviewPath }
+                        .firstOrNull { File(it).name.equals(fileName, ignoreCase = true) }
+                    if (existingPath != null && File(existingPath).exists()) File(existingPath) else targetFile
+                }
+
+                val isOnCloud = remoteSongMedia.any { it.equals(fileName, ignoreCase = true) } ||
+                    remoteSongMediaMeta.containsKey(fileName) ||
+                    remoteSongMediaMeta.containsKey(fileName.lowercase())
+                val remoteMeta = remoteSongMediaMeta[fileName] ?: remoteSongMediaMeta[fileName.lowercase()]
+                if (!isOnCloud) return@filter false
+
+                if (!localFile.exists() || localFile.length() == 0L) {
+                    true
+                } else if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
+                    val localHash = localFile.computeSHA256()
+                    localHash != remoteMeta.hash
+                } else if (remoteMeta != null && remoteMeta.size > 0L) {
+                    localFile.length() != remoteMeta.size
+                } else {
+                    false
+                }
             }
             val remoteSongAudioCount = remoteSongMedia.count { isAudioFile(it) }
+
+            val pendingSongDownloadsDisplayList = songsToDownload.map { fileName ->
+                val matchingSong = activeLocalJournals.mapNotNull { it.songDetails }.firstOrNull { song ->
+                    song.localPreviewPath?.let { File(it).name.equals(fileName, ignoreCase = true) } == true ||
+                    allLocalSongs.firstOrNull {
+                        it.title.trim().equals(song.title.trim(), ignoreCase = true) &&
+                        it.artistName.trim().equals(song.artistName.trim(), ignoreCase = true)
+                    }?.localPath?.let { File(it).name.equals(fileName, ignoreCase = true) } == true
+                }
+                if (matchingSong != null) {
+                    "${matchingSong.title} — ${matchingSong.artistName}"
+                } else {
+                    fileName
+                }
+            }
 
             Result.success(
                 SyncAnalysis(
@@ -452,7 +564,7 @@ class SyncManager(
                     pendingSongUploadsCount = songsToUpload.size,
                     pendingSongDownloadsCount = songsToDownload.size,
                     pendingSongUploadsList = songsToUpload.map { "${it.title} — ${it.artistName}" },
-                    pendingSongDownloadsList = songsToDownload.toList(),
+                    pendingSongDownloadsList = pendingSongDownloadsDisplayList,
                     pendingDeletionsCount = localDeletions.size,
                     pendingMediaUploadsList = mediaToUpload,
                     pendingMediaDownloadsList = mediaToDownload
@@ -480,12 +592,13 @@ class SyncManager(
 
     fun repairSync(context: android.content.Context) {
         applicationScope.launch(Dispatchers.IO) {
+            if (!awaitStartupRepair()) return@launch
             try {
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Starting comprehensive sync repair...")
                 repairDoubleConcatenatedImages()
                 val allJournals = journalRepo.getAllJournalsIncludeDeletedSync()
                 val activePaths = allJournals.flatMap { it.images } + allJournals.mapNotNull { it.songDetails?.localThumbnailPath }
-                com.denser.june.core.utils.FileUtils.cleanOrphanedFiles(context, activePaths)
+                MediaStorageManager.cleanOrphanedFiles(context, activePaths)
             } catch (e: Exception) {
                 AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "Error during local data repair before sync", e)
             }
@@ -521,6 +634,8 @@ class SyncManager(
         val isSyncEnabled = syncPrefs.getSyncEnabled().first()
         if (!isSyncEnabled) return@withLock Result.failure(Exception("Sync is disabled"))
 
+        if (!awaitStartupRepair()) return@withLock Result.failure(Exception("Startup media repair is incomplete"))
+
         _syncActive.set(true)
         _status.value = SyncStatus.Preparing
         AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Starting sync. isFullRevalidation: $isFullRevalidation")
@@ -549,6 +664,10 @@ class SyncManager(
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Processed ${remoteDeletedIds.size} remote deletions locally.")
             }
 
+            // Purge before taking either planning snapshot: deleted notes must never
+            // be republished by the delayed journal upload phase.
+            purgeOldBin(provider)
+
             val remoteMetaList = provider.listJournals().getOrThrow()
             val expectedRemoteTotal = remoteManifest?.totalJournals ?: -1
             val isListingTruncated = expectedRemoteTotal > 0 && remoteMetaList.size < (expectedRemoteTotal * 0.8).toInt()
@@ -561,7 +680,7 @@ class SyncManager(
                 )
             }
 
-            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync()
+            val hasUnsynced = journalRepo.hasUnsyncedJournals(SYNC_THRESHOLD_MS) || folderRepo.hasPendingSync() || journalRepo.getPendingMediaChanges().isNotEmpty()
             val hasTombstones = journalRepo.hasTombstones()
 
             val localsToSync = if (hasUnsynced || hasTombstones || isFullRevalidation) {
@@ -603,6 +722,9 @@ class SyncManager(
 
             val toDownload = plan.toDownload.toMutableList()
             val toUpload = plan.toUpload.toMutableList()
+            // Only explicit byte mutations own media. A text edit cannot claim all its attachments.
+            val pendingMediaChanges = journalRepo.getPendingMediaChanges()
+            val locallyModifiedMedia = mediaWithLocalChanges(allLocalJournals, pendingMediaChanges)
 
             AppLogger.d(
                 AppLogger.Category.SYNC,
@@ -613,16 +735,40 @@ class SyncManager(
             val preFetchedSongs = songLibraryDao.getAll()
 
             val activeJournalsForPreScan = allLocalJournals.filter { it.deletedAt == null }
+            val estimatedMediaUploadsList = mutableSetOf<String>()
             val estimatedMediaUploads = activeJournalsForPreScan
                 .flatMap { it.images }.map { File(it).name }.distinct()
                 .count { name ->
                     val f = File(mediaDir, name)
-                    f.exists() && f.length() > 0L && !remoteMedia.contains(name)
+                    val remoteMeta = remoteMediaMeta[name] ?: remoteMediaMeta[name.lowercase()]
+                    val isOnCloud = remoteMedia.any { it.equals(name, ignoreCase = true) } ||
+                        remoteMediaMeta.containsKey(name) ||
+                        remoteMediaMeta.containsKey(name.lowercase())
+                    val needsUp = f.exists() && f.length() > 0L && (
+                        !isOnCloud ||
+                        (name.lowercase() in locallyModifiedMedia && (
+                            (remoteMeta != null && remoteMeta.hash.isNotBlank() && sha256Cache.getOrPut(name) { f.computeSHA256() } != remoteMeta.hash) ||
+                            (remoteMeta != null && remoteMeta.size > 0L && f.length() != remoteMeta.size)
+                        ))
+                    )
+                    if (needsUp) estimatedMediaUploadsList.add(name.lowercase())
+                    needsUp
                 }
-            val estimatedMediaDownloads = remoteMedia.count { name ->
-                val f = File(mediaDir, name)
-                !f.exists() || f.length() == 0L
-            }
+            val estimatedMediaDownloads = activeJournalsForPreScan
+                .flatMap { it.images }.map { File(it).name }.distinct()
+                .count { name ->
+                    val f = File(mediaDir, name)
+                    val remoteMeta = remoteMediaMeta[name] ?: remoteMediaMeta[name.lowercase()]
+                    val isOnCloud = remoteMedia.any { it.equals(name, ignoreCase = true) } ||
+                        remoteMediaMeta.containsKey(name) ||
+                        remoteMediaMeta.containsKey(name.lowercase())
+                    isOnCloud && !estimatedMediaUploadsList.contains(name.lowercase()) && (
+                        !f.exists() || f.length() == 0L || (
+                            (remoteMeta != null && remoteMeta.hash.isNotBlank() && sha256Cache.getOrPut(name) { f.computeSHA256() } != remoteMeta.hash) ||
+                            (remoteMeta != null && remoteMeta.size > 0L && f.length() != remoteMeta.size)
+                        )
+                    )
+                }
 
             val localSongAudioFiles = mutableMapOf<String, File>()
             val localSongArtFiles = mutableMapOf<String, File>()
@@ -660,12 +806,26 @@ class SyncManager(
             } + localSongArtFiles.count { (name, _) ->
                 !remoteSongMediaMeta.containsKey(name) && !remoteSongMediaMeta.containsKey(name.lowercase())
             }
-            val estimatedSongDownloads = remoteSongMediaMeta.keys.count { name ->
+            val activeSongNamesForDownload = activeJournalsForPreScan
+                .mapNotNull { it.songDetails }
+                .mapNotNull { song ->
+                    song.localPreviewPath?.let { File(it).name } ?: preFetchedSongs.firstOrNull {
+                        it.title.trim().equals(song.title.trim(), ignoreCase = true) &&
+                        it.artistName.trim().equals(song.artistName.trim(), ignoreCase = true)
+                    }?.localPath?.let { File(it).name }
+                }
+                .distinct()
+            val estimatedSongDownloads = activeSongNamesForDownload.count { name ->
                 val f = File(songMediaLibraryDir, name)
-                !f.exists() || f.length() == 0L
+                val remoteMeta = remoteSongMediaMeta[name] ?: remoteSongMediaMeta[name.lowercase()]
+                val isPhysicallyOnCloud = remoteSongMediaMeta.containsKey(name) ||
+                    remoteSongMediaMeta.containsKey(name.lowercase())
+                isPhysicallyOnCloud && (!f.exists() || f.length() == 0L || (
+                    remoteMeta != null && remoteMeta.hash.isNotBlank() && sha256Cache.getOrPut(name) { f.computeSHA256() } != remoteMeta.hash
+                ))
             }
             var totalOperations = maxOf(
-                toUpload.size + toDownload.size + tombstones.size +
+                toUpload.size + toDownload.size +
                     estimatedMediaUploads + estimatedMediaDownloads +
                     estimatedSongUploads + estimatedSongDownloads,
                 1
@@ -710,22 +870,6 @@ class SyncManager(
                 }
             }
 
-            toUpload.forEach { journal ->
-                _status.value = SyncStatus.Syncing(
-                    progress = (completedOperations.toFloat() / totalOperations).coerceIn(0f, 0.99f),
-                    uploadCount = uploadCount,
-                    downloadCount = downloadCount,
-                    totalOperations = totalOperations,
-                    currentOperation = "Pushing changes..."
-                )
-
-                pushJournal(provider, journal, remoteJournalMeta[journal.id]?.rev ?: 0).onSuccess {
-                    updateProgress("Pushing changes...", isUpload = true)
-                }.onFailure {
-                    updateProgress("Pushing changes...", isFailure = true)
-                }
-            }
-
             val processedTombstoneIds = if (tombstones.isNotEmpty()) {
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Processing tombstones: ${tombstones.size}")
                 processTombstones(provider, tombstones)
@@ -742,9 +886,12 @@ class SyncManager(
             val remoteMediaResult = provider.listMedia()
             val remoteMediaList = remoteMediaResult.getOrDefault(emptyList()).map { it.lowercase() }.toSet()
             val confirmedCloudMedia = Collections.synchronizedSet((remoteMediaList + remoteMediaMeta.keys.map { it.lowercase() }).toMutableSet())
+            // Start with remote evidence, and replace it only with bytes verified during a transfer.
+            val committedMediaBytes = ConcurrentHashMap(remoteMediaMeta.mapKeys { it.key.lowercase() })
 
+            val failedMediaNames = Collections.synchronizedSet(mutableSetOf<String>())
             val mediaFilesToUpload = mutableListOf<Pair<String, File>>()
-            currentLocalsForUpload.filter { it.deletedAt == null }.forEach { journal ->
+            currentLocalsForUpload.filter { it.deletedAt == null || it.images.any { path -> File(path).name.lowercase() in locallyModifiedMedia } }.forEach { journal ->
                 journal.images.forEach { imgPath ->
                     val name = File(imgPath).name
                     val file = if (File(imgPath).isAbsolute && File(imgPath).exists()) File(imgPath) else File(mediaDir, name)
@@ -755,9 +902,9 @@ class SyncManager(
                         val isPhysicallyOnCloud = remoteMediaList.contains(name.lowercase())
                         if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
                             val localHash = sha256Cache.getOrPut(name) { file.computeSHA256() }
-                            (localHash != remoteMeta.hash) || !isPhysicallyOnCloud
+                            (name.lowercase() in locallyModifiedMedia && localHash != remoteMeta.hash) || !isPhysicallyOnCloud
                         } else {
-                            !isPhysicallyOnCloud
+                            name.lowercase() in locallyModifiedMedia || !isPhysicallyOnCloud
                         }
                     } else false
 
@@ -771,10 +918,18 @@ class SyncManager(
                 mediaFilesToUpload.forEach { (journalId, file) ->
                     launch {
                         syncSemaphore.withPermit {
-                            provider.uploadMedia(journalId, file).onSuccess {
+                            com.denser.june.core.media.storage.MediaMutationLocks.withFile(file.path) {
+                                // Hash exactly the bytes protected from in-place edits during upload.
+                                val uploadedMetadata = MediaSyncMeta(file.length(), file.computeSHA256())
+                                sha256Cache[file.name] = uploadedMetadata.hash
+                                provider.uploadMedia(journalId, file).onSuccess {
+                                    committedMediaBytes[file.name.lowercase()] = uploadedMetadata
+                                }
+                            }.onSuccess {
                                 confirmedCloudMedia.add(file.name.lowercase())
                                 updateProgress("Uploading media...", isUpload = true)
                             }.onFailure { err ->
+                                failedMediaNames.add(file.name.lowercase())
                                 updateProgress("Uploading media...", isFailure = true)
                                 AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "FAILED to upload media ${file.name}", err)
                             }
@@ -839,11 +994,9 @@ class SyncManager(
                 }
             }
 
-            AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Purging old bin items from remote...")
-            purgeOldBin(provider)
-
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Verifying local media attachments are downloaded...")
             val currentLocals = allLocalJournals
+            val uploadedMediaNames = mediaFilesToUpload.map { it.second.name.lowercase() }.toSet()
             val mediaFilesToDownload = mutableListOf<Pair<String, Pair<String, File>>>()
             currentLocals.forEach { journal ->
                 journal.images.forEach { imgPath ->
@@ -854,13 +1007,15 @@ class SyncManager(
                     val isPhysicallyOnCloud = remoteMediaList.contains(filename.lowercase()) ||
                         remoteMediaMeta.containsKey(filename) ||
                         remoteMediaMeta.containsKey(filename.lowercase())
-                    val needsDownload = if (!isPhysicallyOnCloud) {
+                    val needsDownload = if (!isPhysicallyOnCloud || uploadedMediaNames.contains(filename.lowercase())) {
                         false
                     } else if (!file.exists() || file.length() == 0L) {
                         true
                     } else if (remoteMeta != null && remoteMeta.hash.isNotBlank()) {
                         val localHash = sha256Cache.getOrPut(filename) { file.computeSHA256() }
                         localHash != remoteMeta.hash
+                    } else if (remoteMeta != null && remoteMeta.size > 0L) {
+                        file.length() != remoteMeta.size
                     } else {
                         false
                     }
@@ -876,9 +1031,25 @@ class SyncManager(
                     val (filename, file) = pair
                     launch {
                         syncSemaphore.withPermit {
-                            provider.downloadMedia(journalId, filename, file).onSuccess {
+                            val staged = File.createTempFile(".download-", ".tmp", file.absoluteFile.parentFile)
+                            val downloadResult = try {
+                                provider.downloadMedia(journalId, filename, staged).mapCatching { downloaded ->
+                                    com.denser.june.core.media.storage.MediaMutationLocks.withFile(file.path) {
+                                        check(filename.lowercase() !in journalRepo.getPendingMediaChanges()) {
+                                            "Media changed locally during download; retrying sync"
+                                        }
+                                        check(com.denser.june.core.media.compress.replaceMediaFile(downloaded, file, downloaded.lastModified())) {
+                                            "Could not publish downloaded media"
+                                        }
+                                        sha256Cache.remove(filename)
+                                        committedMediaBytes[filename.lowercase()] = MediaSyncMeta(downloaded.length(), downloaded.computeSHA256())
+                                    }
+                                }
+                            } finally { staged.delete() }
+                            downloadResult.onSuccess {
                                 updateProgress("Downloading media...", isDownload = true)
                             }.onFailure { err ->
+                                failedMediaNames.add(filename.lowercase())
                                 updateProgress("Downloading media...", isFailure = true)
                                 AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "FAILED to download media $filename", err)
                             }
@@ -996,6 +1167,30 @@ class SyncManager(
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Downloaded $downloadedSongCount song files.")
             }
 
+            val pendingAcknowledgments = mutableListOf<Triple<Journal, String, Long>>()
+            fun hasFailedAttachments(journal: Journal): Boolean =
+                journal.images.any { File(it).name.lowercase() in failedMediaNames }
+
+            toUpload.forEach { journal ->
+                // A failed remote note or attachment must not block unrelated backups.
+                if (hasFailedAttachments(journal)) return@forEach
+                _status.value = SyncStatus.Syncing(
+                    progress = (completedOperations.toFloat() / totalOperations).coerceIn(0f, 0.99f),
+                    uploadCount = uploadCount,
+                    downloadCount = downloadCount,
+                    totalOperations = totalOperations,
+                    currentOperation = "Pushing changes..."
+                )
+
+                val acknowledgedTime = journal.updatedAt ?: System.currentTimeMillis()
+                pushJournal(provider, journal).onSuccess { cloudId ->
+                    pendingAcknowledgments.add(Triple(journal, cloudId, acknowledgedTime))
+                    updateProgress("Pushing changes...", isUpload = true)
+                }.onFailure {
+                    updateProgress("Pushing changes...", isFailure = true)
+                }
+            }
+
             if (failedCount == 0) {
                 if (isFullRevalidation) {
                     _status.value = SyncStatus.Syncing(
@@ -1008,6 +1203,19 @@ class SyncManager(
                     cleanupCloudOrphanedMedia(provider, currentLocals)
                 }
 
+                allLocalJournals.forEach { local ->
+                    val remoteMetaEntry = remoteJournalMeta[local.id]
+                    if (remoteMetaEntry != null && local.computeContentHash() == remoteMetaEntry.contentHash) {
+                        val hasLocalChange = (local.syncedAt == null) ||
+                            ((local.updatedAt ?: 0L) > (local.syncedAt ?: 0L) + SYNC_THRESHOLD_MS)
+                        if (hasLocalChange && !hasFailedAttachments(local) && pendingAcknowledgments.none { it.first.id == local.id }) {
+                            val remoteTime = remoteStates[local.id]?.second ?: System.currentTimeMillis()
+                            val effectiveTime = maxOf(remoteTime, local.updatedAt ?: 0L, System.currentTimeMillis())
+                            pendingAcknowledgments.add(Triple(local, local.cloudId ?: local.id, effectiveTime))
+                        }
+                    }
+                }
+
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Updating remote manifest...")
                 remoteManifest?.folderData?.let { folderRepo.merge(it) }
                 val finalManifest = createCurrentManifest(
@@ -1017,14 +1225,28 @@ class SyncManager(
                     remoteDeletedIds = remoteDeletedIds,
                     existingJournalMeta = remoteJournalMeta,
                     confirmedCloudMedia = confirmedCloudMedia,
+                    committedMediaBytes = committedMediaBytes,
                     confirmedCloudSongMedia = confirmedCloudSongMedia,
                     sha256Cache = sha256Cache
                 )
                 provider.updateManifest(finalManifest).getOrThrow()
                 folderRepo.markSynced(finalManifest.folderData ?: com.denser.june.core.domain.folder.FolderSnapshot())
+                // Only generations whose bytes are represented by this committed manifest can clear.
+                val committedMedia = finalManifest.mediaMetadata.mapKeys { it.key.lowercase() }
+                journalRepo.acknowledgeMediaChanges(pendingMediaChanges.filterKeys { name ->
+                    val metadata = committedMedia[name]
+                    metadata != null && metadata.hash.isNotBlank() && name in confirmedCloudMedia
+                })
+                // A note stays dirty across failed media uploads or manifest writes, including retries.
+                var unacknowledgedChanges = false
+                pendingAcknowledgments.forEach { (journal, cloudId, acknowledgedTime) ->
+                    if (!journalRepo.acknowledgeSync(journal, cloudId, acknowledgedTime)) {
+                        unacknowledgedChanges = true
+                    }
+                }
                 syncPrefs.setLastSyncTime(System.currentTimeMillis())
 
-                _status.value = if (folderRepo.hasPendingSync()) SyncStatus.Dirty else SyncStatus.Success
+                _status.value = if (unacknowledgedChanges || folderRepo.hasPendingSync() || journalRepo.getPendingMediaChanges().isNotEmpty()) SyncStatus.Dirty else SyncStatus.Success
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Sync successfully completed.")
                 Result.success(Unit)
             } else {
@@ -1088,19 +1310,22 @@ class SyncManager(
             )
 
             val effectiveSyncedAt = maxOf(remoteTime, finalJournal.updatedAt ?: 0L)
+            val pendingMedia = journalRepo.getPendingMediaChanges()
+            val ownsLocalBytes = localizedImages.any { File(it).name.lowercase() in pendingMedia }
 
             journalRepo.insertJournal(
                 finalJournal.copy(
                     images = localizedImages,
                     songDetails = localizedSong,
                     updatedAt = finalJournal.updatedAt ?: remoteTime,
-                    syncedAt = effectiveSyncedAt
+                    syncedAt = if (ownsLocalBytes) null else effectiveSyncedAt,
+                    cloudId = filename
                 )
             )
         }.map { Unit }
     }
 
-    private suspend fun pushJournal(provider: CloudProvider, journal: Journal, currentRemoteRev: Int = 0): Result<Unit> {
+    private suspend fun pushJournal(provider: CloudProvider, journal: Journal): Result<String> {
         AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Pushing journal: ${journal.id}")
 
         val sanitizedImages = journal.images.map { File(it).name }
@@ -1110,11 +1335,7 @@ class SyncManager(
         )
         val sanitizedJournal = journal.copy(images = sanitizedImages, songDetails = sanitizedSong)
 
-        val now = System.currentTimeMillis()
-        return provider.uploadJournal(sanitizedJournal).onSuccess { cloudId ->
-            val effectiveTime = maxOf(now, journal.updatedAt ?: 0L)
-            journalRepo.updateSyncStatus(journal.id, cloudId, effectiveTime)
-        }.map { Unit }
+        return provider.uploadJournal(sanitizedJournal)
     }
 
     private suspend fun cleanupCloudOrphanedMedia(
@@ -1163,6 +1384,7 @@ class SyncManager(
         remoteDeletedIds: List<String>,
         existingJournalMeta: Map<String, JournalSyncMeta>,
         confirmedCloudMedia: Set<String>,
+        committedMediaBytes: Map<String, MediaSyncMeta>,
         confirmedCloudSongMedia: Set<String>,
         sha256Cache: ConcurrentHashMap<String, String>
     ): SyncManifest {
@@ -1181,11 +1403,9 @@ class SyncManager(
 
         val updatedMediaMeta = mutableMapOf<String, MediaSyncMeta>()
         journals.flatMap { it.images }.map { File(it).name }.distinct().forEach { filename ->
-            val file = File(mediaDir, filename)
-            val isConfirmedOnCloud = confirmedCloudMedia.contains(filename.lowercase())
-            if (file.exists() && file.length() > 0L && isConfirmedOnCloud) {
-                val hash = sha256Cache.getOrPut(filename) { file.computeSHA256() }
-                updatedMediaMeta[filename] = MediaSyncMeta(size = file.length(), hash = hash)
+            if (filename.lowercase() in confirmedCloudMedia) {
+                // Filename presence never proves that current local bytes were uploaded.
+                updatedMediaMeta[filename] = committedMediaBytes[filename.lowercase()] ?: MediaSyncMeta(size = 0L, hash = "")
             }
         }
 
@@ -1203,7 +1423,7 @@ class SyncManager(
         return SyncManifest(
             lastSyncTime = System.currentTimeMillis(),
             lastSyncDeviceId = devId,
-            databaseVersion = 5,
+            databaseVersion = JournalDatabase.VERSION,
             schemaVersion = SyncManifest.CURRENT_SCHEMA_VERSION,
             totalJournals = total,
             totalMedia = updatedMediaMeta.size,
@@ -1239,6 +1459,7 @@ class SyncManager(
         val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
         val oldDeleted = journalRepo.getOldDeletedJournals(thirtyDaysAgo)
 
+        var purgeFailed = false
         if (oldDeleted.isNotEmpty()) {
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Found ${oldDeleted.size} items in bin past 30 days. Purging...")
             oldDeleted.forEach { local ->
@@ -1247,12 +1468,17 @@ class SyncManager(
                 provider.deleteJournal(filename).onSuccess {
                     journalRepo.hardDeleteJournal(local.id)
                 }.onFailure { err ->
-                    AppLogger.w(AppLogger.Category.SYNC, "SyncManager", "Remote purge failed for ${local.id} (${err.message}). Hard deleting locally anyway.")
-                    journalRepo.hardDeleteJournal(local.id)
+                    purgeFailed = true
+                    AppLogger.w(AppLogger.Category.SYNC, "SyncManager", "Remote purge failed for ${local.id} (${err.message}). Retaining bin entry for retry.")
                 }
             }
         }
-        syncPrefs.setLastPurgeTime(now)
+        if (!purgeFailed) syncPrefs.setLastPurgeTime(now)
+    }
+
+    private fun mediaWithLocalChanges(journals: List<Journal>, pending: Map<String, String>): Set<String> {
+        val referenced = journals.flatMap { it.images }.map { File(it).name.lowercase() }.toSet()
+        return pending.keys.intersect(referenced)
     }
 
     private data class SyncPlan(
@@ -1303,7 +1529,7 @@ class SyncManager(
 
                     if (hasLocalChange && localTime > remoteTime + SYNC_THRESHOLD_MS) {
                         toUpload.add(local)
-                    } else {
+                    } else if (!hashMatch) {
                         toDownload.add(id to remoteTime)
                     }
                 } else {

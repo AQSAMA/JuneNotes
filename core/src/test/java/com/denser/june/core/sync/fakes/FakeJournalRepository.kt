@@ -50,6 +50,36 @@ class FakeJournalRepository : JournalRepository {
         return journal.id
     }
 
+    override suspend fun repairMediaPaths(id: String, expected: List<String>, repaired: List<String>, modifiedAt: Long): Boolean {
+        val current = db[id] ?: return false
+        if (current.images != expected) return false
+        seed(current.copy(images = repaired, updatedAt = maxOf(modifiedAt, current.updatedAt ?: 0L,
+            (current.syncedAt ?: 0L) + com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS + 1L)))
+        return true
+    }
+
+    private val mediaChanges = MutableStateFlow<Map<String, String>>(emptyMap())
+    override suspend fun getPendingMediaChanges(): Map<String, String> {
+        val referenced = db.values.flatMap { it.images }.map { java.io.File(it).name.lowercase() }.toSet()
+        mediaChanges.value = mediaChanges.value.filterKeys { it in referenced }
+        return mediaChanges.value
+    }
+    override fun observePendingMediaChanges(): Flow<Boolean> = mediaChanges.map { it.isNotEmpty() }
+    override suspend fun acknowledgeMediaChanges(expected: Map<String, String>) {
+        mediaChanges.value = mediaChanges.value.filter { (name, generation) -> expected[name] != generation }
+    }
+    override suspend fun markMediaModified(path: String, modifiedAt: Long) {
+        val name = java.io.File(path).name.lowercase()
+        if (db.values.any { j -> j.images.any { java.io.File(it).name.lowercase() == name } }) {
+            mediaChanges.value = mediaChanges.value + (name to java.util.UUID.randomUUID().toString())
+        }
+        val fileName = java.io.File(path).name
+        if (fileName.isEmpty()) return
+        db.values.toList().filter { j -> j.images.any { java.io.File(it).name == fileName } }.forEach {
+            seed(it.copy(updatedAt = maxOf(it.updatedAt ?: 0L, modifiedAt), syncedAt = null))
+        }
+    }
+
     override suspend fun updateJournal(journal: Journal) { insertJournal(journal) }
 
     override suspend fun softDeleteJournal(id: String) {
@@ -102,6 +132,17 @@ class FakeJournalRepository : JournalRepository {
 
     override suspend fun updateSyncStatus(id: String, cloudId: String, syncedAt: Long) {
         db[id]?.let { db[id] = it.copy(cloudId = cloudId, syncedAt = syncedAt) }
+    }
+
+    override suspend fun acknowledgeSync(expected: Journal, cloudId: String, syncedAt: Long): Boolean {
+        val current = db[expected.id] ?: return false
+        if (current != expected) {
+            db[expected.id] = current.copy(syncedAt = null, updatedAt = maxOf(current.updatedAt ?: 0L,
+                System.currentTimeMillis() + com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS + 1L))
+            return false
+        }
+        updateSyncStatus(expected.id, cloudId, syncedAt)
+        return true
     }
 
     override suspend fun resetAllSyncStatuses() {
