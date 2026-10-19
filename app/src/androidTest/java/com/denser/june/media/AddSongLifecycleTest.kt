@@ -8,7 +8,7 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.lifecycle.*
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
-import androidx.test.espresso.Espresso
+import android.view.KeyEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.denser.june.core.domain.model.SongDetails
@@ -55,7 +55,7 @@ class AddSongLifecycleTest {
 
     @Test fun cancelRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { ui.onNodeWithText("Cancel").performClick() }
     @Test fun toolbarBackRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { ui.onNodeWithContentDescription("Back").performClick() }
-    @Test fun systemBackRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { Espresso.pressBack() }
+    @Test fun systemBackRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK) }
 
     private fun cancelAndReopen(cancel: () -> Unit) = withEditor { vm, owner ->
         val song = SongDetails("Cancel artwork ${UUID.randomUUID()}", "Test")
