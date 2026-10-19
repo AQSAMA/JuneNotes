@@ -20,7 +20,17 @@ class JournalPreferencesImpl(
     private val dataStore: DataStore<Preferences>
 ) : JournalPreferences {
 
+    override fun compactNotesEnabled(): Flow<Boolean> = dataStore.data.map { it[COMPACT_NOTES] ?: false }
+    override suspend fun setCompactNotesEnabled(enabled: Boolean) { dataStore.edit { it[COMPACT_NOTES] = enabled } }
+    override fun notesGridEnabled(): Flow<Boolean> = dataStore.data.map { it[NOTES_GRID] ?: true }
+    override suspend fun setNotesGridEnabled(enabled: Boolean) { dataStore.edit { it[NOTES_GRID] = enabled } }
+    override fun notePreviewLines(): Flow<Int> = dataStore.data.map { (it[NOTE_PREVIEW_LINES] ?: 8).coerceIn(4, 14) }
+    override suspend fun setNotePreviewLines(lines: Int) { dataStore.edit { it[NOTE_PREVIEW_LINES] = lines.coerceIn(4, 14) } }
+
     private companion object {
+        val COMPACT_NOTES = booleanPreferencesKey("compact_notes")
+        val NOTES_GRID = booleanPreferencesKey("notes_grid")
+        val NOTE_PREVIEW_LINES = intPreferencesKey("note_preview_lines")
         val AUTO_TIME_ENABLED = booleanPreferencesKey("auto_time_enabled")
         val START_OF_WEEK = stringPreferencesKey("start_of_week")
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
