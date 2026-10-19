@@ -13,6 +13,27 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MediaRepairDatabaseTest {
+    @Test fun syncAcknowledgmentRequiresTheExactPersistedSnapshot() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(InstrumentationRegistry.getInstrumentation().targetContext, JournalDatabase::class.java).build()
+        try {
+            val dao = db.journalDao()
+            val expected = Journal("ack", "Title", "Content", createdAt = 1, updatedAt = 2,
+                dateTime = 1, isDraft = false).asEntity()
+            dao.insertJournal(expected)
+            val edited = expected.copy(content = "Concurrent edit")
+            dao.updateJournal(edited)
+            assertFalse(dao.acknowledgeSync(expected, "ack.json", 3))
+            val pending = dao.getJournalById(expected.id)!!
+            assertEquals(edited.copy(updatedAt = pending.updatedAt), pending)
+            assertTrue(pending.updatedAt!! > System.currentTimeMillis())
+            assertTrue(dao.acknowledgeSync(pending, "ack.json", pending.updatedAt!!))
+            assertEquals(pending.copy(cloudId = "ack.json", syncedAt = pending.updatedAt), dao.getJournalById(expected.id))
+            dao.markMediaModified("missing.jpg", 4)
+            dao.hardDeleteJournal(expected.id)
+            assertFalse(dao.acknowledgeSync(edited, "ack.json", 5))
+        } finally { db.close() }
+    }
+
     @Test fun attachmentRepairRetainsCurrentFieldsAndRejectsAChangedAttachmentList() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(InstrumentationRegistry.getInstrumentation().targetContext, JournalDatabase::class.java).build()
         try {

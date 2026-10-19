@@ -46,12 +46,12 @@ fun EditSongView(
     onArtPathChange: (String) -> Unit,
     onRemoveArt: () -> Unit,
     onArtImportBusyChange: (Boolean) -> Unit = {},
-    enabled: Boolean = true
-) {
-    val context = LocalContext.current
-    val importer: SongArtImportVM = androidx.lifecycle.viewmodel.compose.viewModel(
+    enabled: Boolean = true,
+    importer: SongArtImportVM = androidx.lifecycle.viewmodel.compose.viewModel(
         key = "song-art-$editScope-${song.localPreviewPath}-${song.previewUrl}-${song.title}-${song.artistName}"
     )
+) {
+    val context = LocalContext.current
     val currentOnArtPathChange by rememberUpdatedState(onArtPathChange)
     DisposableEffect(importer.busy) {
         onArtImportBusyChange(importer.busy)

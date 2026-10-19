@@ -665,6 +665,10 @@ class SyncManager(
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Processed ${remoteDeletedIds.size} remote deletions locally.")
             }
 
+            // Purge before taking either planning snapshot: deleted notes must never
+            // be republished by the delayed journal upload phase.
+            purgeOldBin(provider)
+
             val remoteMetaList = provider.listJournals().getOrThrow()
             val expectedRemoteTotal = remoteManifest?.totalJournals ?: -1
             val isListingTruncated = expectedRemoteTotal > 0 && remoteMetaList.size < (expectedRemoteTotal * 0.8).toInt()
@@ -887,6 +891,7 @@ class SyncManager(
             val remoteMediaList = remoteMediaResult.getOrDefault(emptyList()).map { it.lowercase() }.toSet()
             val confirmedCloudMedia = Collections.synchronizedSet((remoteMediaList + remoteMediaMeta.keys.map { it.lowercase() }).toMutableSet())
 
+            val failedMediaNames = Collections.synchronizedSet(mutableSetOf<String>())
             val mediaFilesToUpload = mutableListOf<Pair<String, File>>()
             currentLocalsForUpload.filter { it.deletedAt == null }.forEach { journal ->
                 journal.images.forEach { imgPath ->
@@ -921,6 +926,7 @@ class SyncManager(
                                 confirmedCloudMedia.add(file.name.lowercase())
                                 updateProgress("Uploading media...", isUpload = true)
                             }.onFailure { err ->
+                                failedMediaNames.add(file.name.lowercase())
                                 updateProgress("Uploading media...", isFailure = true)
                                 AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "FAILED to upload media ${file.name}", err)
                             }
@@ -985,9 +991,6 @@ class SyncManager(
                 }
             }
 
-            AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Purging old bin items from remote...")
-            purgeOldBin(provider)
-
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Verifying local media attachments are downloaded...")
             val currentLocals = allLocalJournals
             val uploadedMediaNames = mediaFilesToUpload.map { it.second.name.lowercase() }.toSet()
@@ -1029,6 +1032,7 @@ class SyncManager(
                                 sha256Cache.remove(filename)
                                 updateProgress("Downloading media...", isDownload = true)
                             }.onFailure { err ->
+                                failedMediaNames.add(filename.lowercase())
                                 updateProgress("Downloading media...", isFailure = true)
                                 AppLogger.e(AppLogger.Category.SYNC, "SyncManager", "FAILED to download media $filename", err)
                             }
@@ -1146,8 +1150,13 @@ class SyncManager(
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Downloaded $downloadedSongCount song files.")
             }
 
-            val uploadedJournals = mutableListOf<Triple<Journal, String, Long>>()
-            if (failedCount == 0) toUpload.forEach { journal ->
+            val pendingAcknowledgments = mutableListOf<Triple<Journal, String, Long>>()
+            fun hasFailedAttachments(journal: Journal): Boolean =
+                journal.images.any { File(it).name.lowercase() in failedMediaNames }
+
+            toUpload.forEach { journal ->
+                // A failed remote note or attachment must not block unrelated backups.
+                if (hasFailedAttachments(journal)) return@forEach
                 _status.value = SyncStatus.Syncing(
                     progress = (completedOperations.toFloat() / totalOperations).coerceIn(0f, 0.99f),
                     uploadCount = uploadCount,
@@ -1158,7 +1167,7 @@ class SyncManager(
 
                 val acknowledgedTime = journal.updatedAt ?: System.currentTimeMillis()
                 pushJournal(provider, journal).onSuccess { cloudId ->
-                    uploadedJournals.add(Triple(journal, cloudId, acknowledgedTime))
+                    pendingAcknowledgments.add(Triple(journal, cloudId, acknowledgedTime))
                     updateProgress("Pushing changes...", isUpload = true)
                 }.onFailure {
                     updateProgress("Pushing changes...", isFailure = true)
@@ -1182,10 +1191,10 @@ class SyncManager(
                     if (remoteMetaEntry != null && local.computeContentHash() == remoteMetaEntry.contentHash) {
                         val hasLocalChange = (local.syncedAt == null) ||
                             ((local.updatedAt ?: 0L) > (local.syncedAt ?: 0L) + SYNC_THRESHOLD_MS)
-                        if (hasLocalChange) {
+                        if (hasLocalChange && !hasFailedAttachments(local) && pendingAcknowledgments.none { it.first.id == local.id }) {
                             val remoteTime = remoteStates[local.id]?.second ?: System.currentTimeMillis()
                             val effectiveTime = maxOf(remoteTime, local.updatedAt ?: 0L, System.currentTimeMillis())
-                            journalRepo.updateSyncStatus(local.id, local.cloudId ?: local.id, effectiveTime)
+                            pendingAcknowledgments.add(Triple(local, local.cloudId ?: local.id, effectiveTime))
                         }
                     }
                 }
@@ -1205,12 +1214,15 @@ class SyncManager(
                 provider.updateManifest(finalManifest).getOrThrow()
                 folderRepo.markSynced(finalManifest.folderData ?: com.denser.june.core.domain.folder.FolderSnapshot())
                 // A note stays dirty across failed media uploads or manifest writes, including retries.
-                uploadedJournals.forEach { (journal, cloudId, acknowledgedTime) ->
-                    journalRepo.updateSyncStatus(journal.id, cloudId, acknowledgedTime)
+                var unacknowledgedChanges = false
+                pendingAcknowledgments.forEach { (journal, cloudId, acknowledgedTime) ->
+                    if (!journalRepo.acknowledgeSync(journal, cloudId, acknowledgedTime)) {
+                        unacknowledgedChanges = true
+                    }
                 }
                 syncPrefs.setLastSyncTime(System.currentTimeMillis())
 
-                _status.value = if (folderRepo.hasPendingSync()) SyncStatus.Dirty else SyncStatus.Success
+                _status.value = if (unacknowledgedChanges || folderRepo.hasPendingSync()) SyncStatus.Dirty else SyncStatus.Success
                 AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Sync successfully completed.")
                 Result.success(Unit)
             } else {
@@ -1422,6 +1434,7 @@ class SyncManager(
         val thirtyDaysAgo = now - (30L * 24 * 60 * 60 * 1000)
         val oldDeleted = journalRepo.getOldDeletedJournals(thirtyDaysAgo)
 
+        var purgeFailed = false
         if (oldDeleted.isNotEmpty()) {
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Found ${oldDeleted.size} items in bin past 30 days. Purging...")
             oldDeleted.forEach { local ->
@@ -1430,12 +1443,12 @@ class SyncManager(
                 provider.deleteJournal(filename).onSuccess {
                     journalRepo.hardDeleteJournal(local.id)
                 }.onFailure { err ->
-                    AppLogger.w(AppLogger.Category.SYNC, "SyncManager", "Remote purge failed for ${local.id} (${err.message}). Hard deleting locally anyway.")
-                    journalRepo.hardDeleteJournal(local.id)
+                    purgeFailed = true
+                    AppLogger.w(AppLogger.Category.SYNC, "SyncManager", "Remote purge failed for ${local.id} (${err.message}). Retaining bin entry for retry.")
                 }
             }
         }
-        syncPrefs.setLastPurgeTime(now)
+        if (!purgeFailed) syncPrefs.setLastPurgeTime(now)
     }
 
     private fun mediaWithLocalChanges(journals: List<Journal>, remoteOwnedIds: Set<String>): Set<String> {

@@ -23,19 +23,25 @@ class SongArtImportVM : ViewModel() {
     var importedPath by mutableStateOf<String?>(null)
         private set
 
+    private var generation = 0L
+    private val ownedPaths = mutableSetOf<String>()
+
     fun importArtwork(context: Context, uri: Uri) {
         importArtwork { SongMediaStorage.persistSongArt(context.applicationContext, uri) }
     }
 
     internal fun importArtwork(persist: () -> String?) {
         if (busy) return
+        val requestGeneration = generation
         busy = true
         viewModelScope.launch {
             var ownedPath: String? = null
             try {
                 withContext(NonCancellable + Dispatchers.IO) { ownedPath = persist() }
                 ensureActive()
-                importedPath?.let { File(it).delete() }
+                if (requestGeneration != generation) return@launch
+                importedPath?.let { ownedPaths.remove(it); File(it).delete() }
+                ownedPath?.let { ownedPaths.add(it) }
                 importedPath = ownedPath
                 ownedPath = null
             } catch (e: CancellationException) {
@@ -44,7 +50,7 @@ class SongArtImportVM : ViewModel() {
                 // Keep the current artwork when the import cannot be completed.
             } finally {
                 ownedPath?.let { File(it).delete() }
-                busy = false
+                if (requestGeneration == generation) busy = false
             }
         }
     }
@@ -53,8 +59,20 @@ class SongArtImportVM : ViewModel() {
         if (importedPath == path) importedPath = null
     }
 
-    override fun onCleared() {
-        importedPath?.let { File(it).delete() }
+    /** Explicit Cancel/Back ends an edit; recreation deliberately does not call this. */
+    fun discard() {
+        generation++
+        busy = false
         importedPath = null
+        ownedPaths.forEach { File(it).delete() }
+        ownedPaths.clear()
     }
+
+    /** Transfer only the selected artwork to the saved song; remove superseded imports. */
+    fun commit(selectedPath: String?) {
+        selectedPath?.let { ownedPaths.remove(it) }
+        discard()
+    }
+
+    override fun onCleared() = discard()
 }

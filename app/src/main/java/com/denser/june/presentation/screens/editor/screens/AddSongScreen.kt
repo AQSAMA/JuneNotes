@@ -42,6 +42,7 @@ import com.denser.june.presentation.screens.editor.components.ActiveJournalSongB
 import com.denser.june.presentation.screens.editor.components.EditSongScope
 import com.denser.june.presentation.screens.editor.components.EditSongView
 import com.denser.june.presentation.screens.editor.components.LibrarySongRow
+import com.denser.june.presentation.screens.editor.components.SongArtImportVM
 import com.denser.june.presentation.screens.editor.components.SongInputCard
 import com.denser.june.presentation.screens.editor.components.TrimmerStepView
 import com.denser.june.presentation.screens.editor.components.UnimportedSongRow
@@ -75,15 +76,21 @@ fun AddSongScreen(
     val context = LocalContext.current
 
     var currentStep by rememberSaveable { mutableStateOf(AddSongStep.Library) }
-    var activeTrimmerSong by remember { mutableStateOf<SongDetails?>(null) }
     val songSaver = remember {
         Saver<SongDetails?, String>(
             save = { it?.let { song -> Json.encodeToString(SongDetails.serializer(), song) } },
             restore = { Json.decodeFromString(SongDetails.serializer(), it) }
         )
     }
+    var activeTrimmerSong by rememberSaveable(stateSaver = songSaver) { mutableStateOf<SongDetails?>(null) }
     var activeEditingSong by rememberSaveable(stateSaver = songSaver) { mutableStateOf<SongDetails?>(null) }
-    var isArtImportBusy by remember { mutableStateOf(false) }
+    val artImporter: SongArtImportVM = androidx.lifecycle.viewmodel.compose.viewModel(key = "add-song-art-import")
+    val isArtImportBusy = artImporter.busy || artImporter.importedPath != null
+    val cancelEdit: () -> Unit = {
+        artImporter.discard()
+        activeEditingSong = null
+        currentStep = AddSongStep.Library
+    }
 
     var showLinkInput by remember { mutableStateOf(false) }
     var songLink by remember { mutableStateOf("") }
@@ -132,8 +139,7 @@ fun AddSongScreen(
         when (currentStep) {
             AddSongStep.Trimmer -> trimmerDismiss()
             AddSongStep.Edit, AddSongStep.EditJournal -> {
-                activeEditingSong = null
-                currentStep = AddSongStep.Library
+                cancelEdit()
             }
             AddSongStep.Library -> onNavigateBack()
         }
@@ -177,8 +183,7 @@ fun AddSongScreen(
                             when (currentStep) {
                                 AddSongStep.Trimmer -> trimmerDismiss()
                                 AddSongStep.Edit, AddSongStep.EditJournal -> {
-                                    activeEditingSong = null
-                                    currentStep = AddSongStep.Library
+                                    cancelEdit()
                                 }
                                 AddSongStep.Library -> onNavigateBack()
                             }
@@ -285,10 +290,7 @@ fun AddSongScreen(
                 AddSongStep.Edit -> {
                     JuneFloatingActionBar {
                         JuneFloatingAction(
-                            onClick = {
-                                activeEditingSong = null
-                                currentStep = AddSongStep.Library
-                            },
+                            onClick = cancelEdit,
                             label = "Cancel",
                             icon = {
                                 Icon(
@@ -313,6 +315,7 @@ fun AddSongScreen(
                                     isArtRemoved = isArtRemoved
                                 )
                                 viewModel.onAction(EditorAction.SaveLibrarySongMeta(orig, updated))
+                                artImporter.commit(updated.localThumbnailPath)
                                 activeEditingSong = null
                                 currentStep = AddSongStep.Library
                             },
@@ -331,10 +334,7 @@ fun AddSongScreen(
                 AddSongStep.EditJournal -> {
                     JuneFloatingActionBar {
                         JuneFloatingAction(
-                            onClick = {
-                                activeEditingSong = null
-                                currentStep = AddSongStep.Library
-                            },
+                            onClick = cancelEdit,
                             label = "Cancel",
                             icon = {
                                 Icon(
@@ -359,6 +359,7 @@ fun AddSongScreen(
                                     isArtRemoved = isArtRemoved
                                 )
                                 viewModel.onAction(EditorAction.SaveJournalSongMeta(updated))
+                                artImporter.commit(updated.localThumbnailPath)
                                 activeEditingSong = null
                                 currentStep = AddSongStep.Library
                             },
@@ -415,8 +416,7 @@ fun AddSongScreen(
                             activeEditingSong?.let {
                                 viewModel.onAction(EditorAction.RemoveLibrarySong(it))
                             }
-                            activeEditingSong = null
-                            currentStep = AddSongStep.Library
+                            cancelEdit()
                         }
                     ) {
                         Text("Remove")
@@ -611,7 +611,7 @@ fun AddSongScreen(
                         onGenreChange = { editGenre = it },
                         artPath = editArtPath,
                         isArtRemoved = isArtRemoved,
-                        onArtImportBusyChange = { isArtImportBusy = it },
+                        importer = artImporter,
                         onArtPathChange = {
                             editArtPath = it
                             isArtRemoved = false
@@ -642,7 +642,7 @@ fun AddSongScreen(
                         onGenreChange = { editGenre = it },
                         artPath = editArtPath,
                         isArtRemoved = isArtRemoved,
-                        onArtImportBusyChange = { isArtImportBusy = it },
+                        importer = artImporter,
                         onArtPathChange = {
                             editArtPath = it
                             isArtRemoved = false

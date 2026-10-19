@@ -26,6 +26,7 @@ class FakeCloudProvider : CloudProvider {
     var failNextDeleteMedia = false
     var failNextManifestRead = false
     var failNextManifestWrite = false
+    var beforeManifestWrite: (suspend () -> Unit)? = null
 
     var partialListingSize: Int = -1
 
@@ -125,6 +126,7 @@ class FakeCloudProvider : CloudProvider {
     }
 
     override suspend fun updateManifest(manifest: SyncManifest): Result<Unit> {
+        beforeManifestWrite?.invoke()
         if (failNextManifestWrite) { failNextManifestWrite = false; return Result.failure(Exception("Manifest write failed")) }
         this.manifest = manifest
         return Result.success(Unit)

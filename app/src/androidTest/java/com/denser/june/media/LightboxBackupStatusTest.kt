@@ -31,7 +31,7 @@ class LightboxBackupStatusTest {
         }
         val id = UUID.randomUUID().toString()
         val file = File(context.cacheDir, "backup-status-$id.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
-        val note = Journal(id, "Backup status", "", images = listOf(file.path), createdAt = 1, updatedAt = 2000, dateTime = 1, syncedAt = null)
+        val note = Journal(id, "Backup status", "", images = listOf(file.path), createdAt = 1, updatedAt = 2000, dateTime = 1, syncedAt = null, isDraft = false)
         val markers = setOf(file.path)
         var observed: LightboxMediaMetadataState? = null
         try {

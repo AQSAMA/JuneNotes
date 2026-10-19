@@ -191,6 +191,9 @@ class JournalRepositoryImpl(
         journalDao.updateSyncStatus(id, cloudId, syncedAt)
     }
 
+    override suspend fun acknowledgeSync(expected: Journal, cloudId: String, syncedAt: Long): Boolean =
+        journalDao.acknowledgeSync(expected.asEntity(), cloudId, syncedAt)
+
     override suspend fun resetAllSyncStatuses() {
         journalDao.resetAllSyncStatuses()
     }

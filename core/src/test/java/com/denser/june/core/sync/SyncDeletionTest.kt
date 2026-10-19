@@ -14,6 +14,30 @@ import org.junit.Test
 
 class SyncDeletionTest : BaseSyncTest() {
 
+    @Test fun `failed purge retains bin note and retries on the next sync`() = runTest {
+        val expired = harness.givenSyncedJournal("purge-retry").copy(deletedAt = 1L)
+        harness.repo.seed(expired)
+        harness.cloud.putJournal(expired)
+        harness.cloud.failNextDeleteJournal = true
+        assertTrue(harness.sync().isSuccess)
+        harness.assertLocalJournalSoftDeleted(expired.id)
+        assertTrue(harness.sync().isSuccess)
+        harness.assertLocalJournalHardDeleted(expired.id)
+        harness.assertCloudJournalDeleted(expired.id)
+    }
+
+    @Test fun `expired unsynced bin entry is purged before delayed uploads and stays gone`() = runTest {
+        val expired = harness.givenLocalOnlyJournal("expired").copy(deletedAt = 1L)
+        harness.repo.seed(expired)
+        assertTrue(harness.sync().isSuccess)
+        harness.assertLocalJournalHardDeleted(expired.id)
+        harness.assertCloudJournalDeleted(expired.id)
+        assertFalse(harness.cloud.manifest!!.journalMetadata.containsKey(expired.id))
+        assertEquals(0, harness.cloud.uploadJournalCallCount)
+        assertTrue(harness.sync().isSuccess)
+        harness.assertLocalJournalHardDeleted(expired.id)
+    }
+
     @Test
     fun `when journal is permanently deleted locally, sync deletes remote file and clears tombstone`() = runTest {
         harness.cloud.putJournal(SyncFixtures.syncedJournal("j1"), modifiedAt = T1)

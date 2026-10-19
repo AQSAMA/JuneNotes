@@ -232,6 +232,19 @@ interface JournalDao {
     @Query("UPDATE journals SET cloudId = :cloudId, syncedAt = :syncedAt WHERE id = :id")
     suspend fun updateSyncStatus(id: String, cloudId: String, syncedAt: Long)
 
+    @Transaction
+    suspend fun acknowledgeSync(expected: JournalEntity, cloudId: String, syncedAt: Long): Boolean {
+        val current = getJournalById(expected.id) ?: return false
+        if (current != expected) {
+            // Our older snapshot is now on the cloud. Keep the current edit newer
+            // than that upload so the next timestamp-based plan cannot pull it back.
+            markJournalMediaModified(expected.id, System.currentTimeMillis() + com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS + 1L)
+            return false
+        }
+        updateSyncStatus(expected.id, cloudId, syncedAt)
+        return true
+    }
+
     @Query("UPDATE journals SET cloudId = NULL, syncedAt = NULL")
     suspend fun resetAllSyncStatuses()
 

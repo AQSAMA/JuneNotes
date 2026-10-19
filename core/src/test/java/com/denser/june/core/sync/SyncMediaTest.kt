@@ -14,6 +14,60 @@ import java.io.File
 
 class SyncMediaTest : BaseSyncTest() {
 
+    @Test fun `media-only change remains dirty if manifest commit fails and retries`() = runTest {
+        val file = harness.givenMediaFileOnDisk("media-only.jpg")
+        val original = harness.givenSyncedJournal("media-only", images = listOf(file.path))
+        harness.givenCloudMedia(original.id, file.name, file.readBytes())
+        val previousManifest = harness.cloud.manifest
+        file.writeBytes(byteArrayOf(8, 9))
+        harness.repo.markMediaModified(file.path, T2)
+        harness.cloud.failNextManifestWrite = true
+
+        assertTrue(harness.sync().isFailure)
+        org.junit.Assert.assertNull(harness.repo.getJournalById(original.id)!!.syncedAt)
+        assertEquals(previousManifest, harness.cloud.manifest)
+        assertEquals(0, harness.cloud.uploadJournalCallCount)
+        assertTrue(harness.sync().isSuccess)
+        assertNotNull(harness.repo.getJournalById(original.id)!!.syncedAt)
+        assertEquals(com.denser.june.core.utils.FileUtils.computeSHA256(file),
+            harness.cloud.manifest!!.mediaMetadata[file.name]!!.hash)
+    }
+
+    @Test fun `manifest success cannot acknowledge a concurrent same-timestamp note edit`() = runTest {
+        val file = harness.givenMediaFileOnDisk("concurrent.jpg")
+        val original = harness.givenSyncedJournal("concurrent", images = listOf(file.path))
+        harness.givenCloudMedia(original.id, file.name, file.readBytes())
+        file.writeBytes(byteArrayOf(9))
+        harness.repo.markMediaModified(file.path, T2)
+        harness.cloud.beforeManifestWrite = {
+            val current = harness.repo.getJournalById(original.id)!!
+            harness.repo.seed(current.copy(content = "Written during manifest commit"))
+        }
+
+        assertTrue(harness.sync().isSuccess)
+        val current = harness.repo.getJournalById(original.id)!!
+        org.junit.Assert.assertNull(current.syncedAt)
+        assertEquals("Written during manifest commit", current.content)
+        assertTrue(harness.syncManager.status.value is com.denser.june.core.domain.sync.SyncStatus.Dirty)
+        harness.cloud.beforeManifestWrite = null
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(current.content, harness.cloud.getJournal(original.id)!!.content)
+    }
+
+    @Test fun `failed shared attachment blocks its notes while unrelated text still uploads`() = runTest {
+        val file = harness.givenMediaFileOnDisk("failed-shared.jpg")
+        harness.givenLocalOnlyJournal("dependent", images = listOf(file.path))
+        harness.givenLocalOnlyJournal("unrelated")
+        harness.cloud.failNextUploadMedia = true
+
+        assertTrue(harness.sync().isFailure)
+        org.junit.Assert.assertNull(harness.cloud.getJournal("dependent"))
+        assertNotNull(harness.cloud.getJournal("unrelated"))
+        org.junit.Assert.assertNull(harness.repo.getJournalById("unrelated")!!.syncedAt)
+        assertTrue(harness.sync().isSuccess)
+        assertNotNull(harness.cloud.getJournal("dependent"))
+    }
+
     @Test fun `failed attachment upload retains text and media dirtiness for retry`() = runTest {
         val file = harness.givenMediaFileOnDisk("edited.jpg", byteArrayOf(1, 2, 3))
         val original = harness.givenSyncedJournal("retry", images = listOf(file.path))

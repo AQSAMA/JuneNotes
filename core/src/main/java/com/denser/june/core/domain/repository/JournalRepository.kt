@@ -39,6 +39,8 @@ interface JournalRepository {
     suspend fun getOldDeletedJournals(threshold: Long): List<Journal>
     
     suspend fun updateSyncStatus(id: String, cloudId: String, syncedAt: Long)
+    /** Acknowledge only the exact snapshot committed to the cloud, atomically with the revision check. */
+    suspend fun acknowledgeSync(expected: Journal, cloudId: String, syncedAt: Long): Boolean
     suspend fun resetAllSyncStatuses()
 
     suspend fun getAllTombstones(): List<String>

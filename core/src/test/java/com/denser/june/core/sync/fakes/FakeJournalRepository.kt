@@ -120,6 +120,17 @@ class FakeJournalRepository : JournalRepository {
         db[id]?.let { db[id] = it.copy(cloudId = cloudId, syncedAt = syncedAt) }
     }
 
+    override suspend fun acknowledgeSync(expected: Journal, cloudId: String, syncedAt: Long): Boolean {
+        val current = db[expected.id] ?: return false
+        if (current != expected) {
+            db[expected.id] = current.copy(syncedAt = null, updatedAt = maxOf(current.updatedAt ?: 0L,
+                System.currentTimeMillis() + com.denser.june.core.domain.sync.SyncManager.SYNC_THRESHOLD_MS + 1L))
+            return false
+        }
+        updateSyncStatus(expected.id, cloudId, syncedAt)
+        return true
+    }
+
     override suspend fun resetAllSyncStatuses() {
         db.keys.forEach { id -> db[id] = db[id]!!.copy(cloudId = null, syncedAt = null) }
     }
