@@ -14,6 +14,23 @@ import org.junit.Test
 
 class SyncDeletionTest : BaseSyncTest() {
 
+    @Test fun `purging a published media-dirty note leaves a cloud tombstone for other devices`() = runTest {
+        val file = harness.givenMediaFileOnDisk("purged-media.jpg")
+        val original = harness.givenSyncedJournal("dirty-purge", images = listOf(file.path))
+        harness.repo.seed(original.copy(deletedAt = 1L))
+        harness.repo.markMediaModified(file.path, T2)
+        assertNull(harness.repo.getJournalById(original.id)!!.syncedAt)
+        assertTrue(harness.sync().isSuccess)
+        harness.assertLocalJournalHardDeleted(original.id)
+        harness.assertCloudJournalDeleted(original.id)
+        harness.assertManifestDeletedIdsContains(original.id)
+        // Another device's stale copy is removed before it can republish the note.
+        harness.repo.seed(original)
+        assertTrue(harness.sync().isSuccess)
+        harness.assertLocalJournalHardDeleted(original.id)
+        harness.assertCloudJournalDeleted(original.id)
+    }
+
     @Test fun `failed purge retains bin note and retries on the next sync`() = runTest {
         val expired = harness.givenSyncedJournal("purge-retry").copy(deletedAt = 1L)
         harness.repo.seed(expired)

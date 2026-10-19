@@ -13,6 +13,28 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MediaRepairDatabaseTest {
+    @Test fun deletingPublishedNotesWithDirtyMediaRetainsDeletionTombstones() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(InstrumentationRegistry.getInstrumentation().targetContext, JournalDatabase::class.java).build()
+        try {
+            val dao = db.journalDao()
+            val note = Journal("single", "Published", "Content", images = listOf("photo.jpg"),
+                createdAt = 1, updatedAt = 2, dateTime = 1, syncedAt = 2, isDraft = false).asEntity()
+            dao.insertJournal(note)
+            dao.insertJournal(note.copy(id = "bin", deletedAt = 3))
+            dao.insertJournal(note.copy(id = "active"))
+            dao.markMediaModified("photo.jpg", 4)
+            assertNull(dao.getJournalById("single")!!.syncedAt)
+            dao.hardDeleteWithTombstone("single")
+            dao.emptyBinWithTombstones()
+            assertNull(dao.getJournalById("single"))
+            assertNull(dao.getJournalById("bin"))
+            assertNotNull(dao.getJournalById("active"))
+            assertEquals(setOf("single", "bin"), dao.getAllTombstones().map { it.id }.toSet())
+            dao.hardDeleteWithTombstone("missing")
+            assertEquals(2, dao.getAllTombstones().size)
+        } finally { db.close() }
+    }
+
     @Test fun syncAcknowledgmentRequiresTheExactPersistedSnapshot() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(InstrumentationRegistry.getInstrumentation().targetContext, JournalDatabase::class.java).build()
         try {

@@ -4,7 +4,6 @@ import android.content.Context
 import com.denser.june.core.data.database.journal.JournalDao
 import com.denser.june.core.data.database.journal.TagEntity
 import com.denser.june.core.data.database.journal.JournalTagCrossRef
-import com.denser.june.core.data.database.journal.DeletedJournalTombstone
 import com.denser.june.core.data.mappers.asDomain
 import com.denser.june.core.data.mappers.asEntity
 import com.denser.june.core.data.sync.SyncWorker
@@ -90,11 +89,7 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun hardDeleteJournal(id: String) {
-        val journal = journalDao.getJournalById(id)
-        if (journal?.syncedAt != null) {
-            journalDao.insertTombstone(DeletedJournalTombstone(id))
-        }
-        journalDao.hardDeleteJournal(id)
+        journalDao.hardDeleteWithTombstone(id)
     }
 
     override suspend fun deleteAllJournals() {
@@ -102,12 +97,7 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun emptyBin() {
-        val deleted = journalDao.getDeletedJournalsSync()
-        val syncedDeletedIds = deleted.filter { it.syncedAt != null }.map { it.id }
-        if (syncedDeletedIds.isNotEmpty()) {
-            journalDao.insertTombstones(syncedDeletedIds.map { DeletedJournalTombstone(it) })
-        }
-        journalDao.emptyBin()
+        journalDao.emptyBinWithTombstones()
     }
 
     override suspend fun restoreAllJournals() {

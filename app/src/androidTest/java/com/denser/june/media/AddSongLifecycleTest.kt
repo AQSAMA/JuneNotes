@@ -12,6 +12,8 @@ import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.denser.june.core.domain.model.SongDetails
+import com.denser.june.core.domain.repository.JournalRepository
+import kotlinx.coroutines.runBlocking
 import com.denser.june.presentation.navigation.JuneNavigator
 import com.denser.june.presentation.screens.editor.*
 import com.denser.june.presentation.screens.editor.components.SongArtImportVM
@@ -44,7 +46,11 @@ class AddSongLifecycleTest {
             })[EditorVM::class.java]
         }
         try { test(vm, owner) }
-        finally { ui.runOnIdle { owner.viewModelStore.clear() } }
+        finally {
+            val draftId = vm.state.value.journalId
+            ui.runOnIdle { owner.viewModelStore.clear() }
+            if (draftId != null) runBlocking { GlobalContext.get().get<JournalRepository>().hardDeleteJournal(draftId) }
+        }
     }
 
     @Test fun cancelRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { ui.onNodeWithText("Cancel").performClick() }

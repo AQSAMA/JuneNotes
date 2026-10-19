@@ -217,6 +217,21 @@ interface JournalDao {
     @Query("DELETE FROM journals WHERE id = :id")
     suspend fun hardDeleteJournal(id: String)
 
+    @Transaction
+    suspend fun hardDeleteWithTombstone(id: String) {
+        if (getJournalById(id) == null) return
+        // syncedAt can be cleared by an in-place media edit after publication.
+        insertTombstone(DeletedJournalTombstone(id))
+        hardDeleteJournal(id)
+    }
+
+    @Transaction
+    suspend fun emptyBinWithTombstones() {
+        val deleted = getDeletedJournalsSync()
+        if (deleted.isNotEmpty()) insertTombstones(deleted.map { DeletedJournalTombstone(it.id) })
+        emptyBin()
+    }
+
     @Query("UPDATE journals SET deletedAt = :timestamp, updatedAt = :timestamp WHERE deletedAt IS NULL")
     suspend fun softDeleteAllJournals(timestamp: Long)
 
