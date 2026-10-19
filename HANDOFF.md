@@ -1,4 +1,69 @@
-# JuneNotes: Codex Cloud handoff
+# JuneNotes: completed PR #5 continuation
+
+Updated 2026-10-19. This section supersedes the historical handoff below.
+
+## Current result and instructions
+
+- Repository: https://github.com/AQSAMA/JuneNotes
+- PR #5: https://github.com/AQSAMA/JuneNotes/pull/5 — open, unmerged; left as a draft.
+- Verified PR implementation head: `6cd0bc864e66e3965ab4ed7f32c0ccba0cf6adf3`.
+- `main` remains `2e8e62a5d7ef06cd3cc1fac1b84277de56a6bd79`. No direct main push, merge, release tag or permanent Preview publication was performed.
+- This handoff branch carries this documentation update on top of the verified implementation. PR #5 retains the exact tested code head; its older HANDOFF.md is historical.
+- Latest explicit user instruction: **Stop requesting GitHub bot reviews. Use an independent internal reviewer.** Do not post further review invocations or mark the draft ready merely to trigger automated review.
+- All six original remaining findings and the later genuine findings were addressed. No known actionable finding remains from the final independent internal review.
+- Preserve the fork signing configuration. Do not merge or push to main.
+
+## Implemented fixes
+
+1. Media-only and uploaded-note acknowledgments wait for successful manifest commit. Room atomically checks the exact persisted snapshot; a newer edit remains dirty and gets a timestamp fence so the following sync cannot pull the older upload over it.
+2. Upload gating follows each note's failed attachments, allowing unrelated text backups to upload despite another download failure.
+3. Bin purging precedes planning. Failed remote deletion retains the bin item for immediate retry. Single permanent deletion and empty-bin operations atomically create tombstones for every existing deleted row, including previously published notes whose media changes cleared syncedAt.
+4. Artwork Cancel, toolbar Back, system Back and confirmed song removal invalidate retained work. Generation checks delete late abandoned results, retain imports through recreation, and transfer only saved artwork ownership. Trimmer navigation saves the matching song. The backup-status fixture is a published note.
+5. Durable per-file UUID generation markers establish byte ownership independently of text edits. Mixed local/remote attachment edits, shared references, failed transfers, failed manifests, same-millisecond mutations and restarts are covered.
+6. Sync uploads hash protected byte snapshots. Downloads stage before publication and coordinate with compression/restoration through bounded filename mutex stripes; a new local marker rejects stale downloaded bytes. Manifest media metadata comes from prior remote evidence or verified transfers, never arbitrary current local bytes based only on filename presence.
+7. Concurrent media imports atomically reserve destinations using File.createTempFile, close streams, and remove failed partial imports. A 128-import regression verifies distinct destinations and payload preservation.
+8. The four new UI regressions locate floating action labels in the unmerged semantics tree. Their earlier failures were real test-selector failures, now passing.
+
+## Schema and compatibility
+
+- Room version **7**, with registered migration **6→7** creating local-only `pending_media_changes(fileName, generation)`.
+- Compiler-exported `core/schemas/com.denser.june.core.data.database.journal.JournalDatabase/7.json` is committed. Identity hash: `fe9e8e356f5111bed8bbb04b811f84af`.
+- Migration preserves all existing entity definitions and does not infer media ownership from old note timestamps.
+- Cloud manifest schema remains **5**, backup format is unchanged, and startup repair marker remains **6** because this change does not alter startup repair behavior.
+
+## Verified final validation
+
+Exact-head run: https://github.com/AQSAMA/JuneNotes/actions/runs/39250817183
+
+| Job | Result |
+| --- | --- |
+| preview | SUCCESS — core/app unit suites, optimized Preview/FOSS Debug/Play Debug APK builds, upstream defaults and fork APK identities |
+| folder-database-tests | SUCCESS — all 21 Android tests, including migration 6→7 and durable generation state |
+| folder-ui-tests | SUCCESS — all 51 Android UI tests |
+| publish-preview | SKIPPED — expected for PR code |
+
+- Built Preview ID: `com.aqsama.junenotes.preview`; FOSS Debug: `com.aqsama.junenotes.debug`; Play Debug: `com.aqsama.junenotes.play.debug`.
+- VersionCode: `100007201`.
+- Permanent key restoration was skipped. These are temporary-signed PR artifacts, not updates for permanently signed Preview installations.
+- Preview artifact: https://github.com/AQSAMA/JuneNotes/actions/runs/39250817183/artifacts/12185014326
+- Debug arm64 artifact: https://github.com/AQSAMA/JuneNotes/actions/runs/39250817183/artifacts/12185977297
+- Independent internal review examined exact head `6cd0bc8`, with no remaining actionable findings. The reviewer independently compared migrated/fresh schema 7 tables, indexes and foreign keys. It did not claim to execute Gradle.
+- Local whitespace checks pass. Full local Gradle was blocked by unavailable distribution access, Java 17 and no Android SDK; actual builds/emulators ran in Actions.
+
+## Signing and operational continuity
+
+No signing files, Gradle identity inputs, secrets, public variables, environment restrictions, workflow counters, Play settings or signing credentials were changed during this continuation. The original public Production/Preview certificate fingerprints and recovery details below remain applicable. Permanent signing remains restricted to trusted refs.
+
+Cloud shell had read-only Git fetch access but no authenticated push or gh binary. Repository writes used the linked AQSAMA GitHub connector with explicit branches and normal reference updates. No force push or history reset was used.
+
+The preceding failed/cancelled runs are historical evidence, not final validation: e5d53f2 passed unit/APK/database but had four UI selector failures; c2bff2d had one over-specific transfer-count assertion and a missing generated schema test asset. Both causes are fixed in the final green head.
+
+No additional coding task is pending. For future work, fetch and inspect current repository state, read .agents/AGENTS.md and FORK.md, preserve all later user changes, use PRs, and honor the prohibition on further bot review requests.
+
+---
+
+## Historical handoff
+
 
 Prepared 2026-10-19. Read this file, `.agents/AGENTS.md`, and `FORK.md` before editing.
 
