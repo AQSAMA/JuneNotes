@@ -79,6 +79,12 @@ class JournalRepositoryImpl(
         journalDao.markMediaModified(path, modifiedAt)
     }
 
+    override suspend fun getPendingMediaChanges(): Map<String, String> = journalDao.getPendingMediaChanges()
+    override fun observePendingMediaChanges(): Flow<Boolean> = journalDao.observePendingMediaChanges()
+    override suspend fun acknowledgeMediaChanges(expected: Map<String, String>) {
+        expected.forEach { (name, generation) -> journalDao.acknowledgeMediaChange(name, generation) }
+    }
+
     override suspend fun softDeleteJournal(id: String) {
         journalDao.softDeleteJournal(id, System.currentTimeMillis())
     }

@@ -207,8 +207,32 @@ interface JournalDao {
         val referencing = getAllJournalsIncludeDeletedSync().filter { journal ->
             journal.images.any { java.io.File(it).name == fileName }
         }
-        referencing.forEach { markJournalMediaModified(it.id, modifiedAt) }
+        if (referencing.isNotEmpty()) {
+            putPendingMediaChange(PendingMediaChangeEntity(fileName.lowercase(), java.util.UUID.randomUUID().toString()))
+            referencing.forEach { markJournalMediaModified(it.id, modifiedAt) }
+        }
         return referencing.size
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putPendingMediaChange(change: PendingMediaChangeEntity)
+
+    @Query("SELECT * FROM pending_media_changes")
+    suspend fun getMediaChanges(): List<PendingMediaChangeEntity>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM pending_media_changes)")
+    fun observePendingMediaChanges(): Flow<Boolean>
+
+    @Query("DELETE FROM pending_media_changes WHERE fileName = :fileName AND generation = :generation")
+    suspend fun acknowledgeMediaChange(fileName: String, generation: String)
+
+    @Transaction
+    suspend fun getPendingMediaChanges(): Map<String, String> {
+        val referenced = getAllJournalsIncludeDeletedSync().flatMap { it.images }
+            .map { java.io.File(it).name.lowercase() }.toSet()
+        val pending = getMediaChanges()
+        pending.filter { it.fileName !in referenced }.forEach { acknowledgeMediaChange(it.fileName, it.generation) }
+        return pending.filter { it.fileName in referenced }.associate { it.fileName to it.generation }
     }
 
     @Query("UPDATE journals SET updatedAt = MAX(COALESCE(updatedAt, 0), :modifiedAt), syncedAt = NULL WHERE id = :id")

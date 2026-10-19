@@ -32,7 +32,9 @@ class MediaCompressionSaveVM : ViewModel() {
         viewModelScope.launch {
             var succeeded = false
             try {
-                succeeded = persistMediaCompression(compress, markModified, cleanup)
+                succeeded = com.denser.june.core.media.storage.MediaMutationLocks.withFile(path) {
+                    persistMediaCompression(compress, markModified, cleanup)
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

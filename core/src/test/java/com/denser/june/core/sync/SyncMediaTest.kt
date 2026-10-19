@@ -14,6 +14,124 @@ import java.io.File
 
 class SyncMediaTest : BaseSyncTest() {
 
+    @Test fun `late byte edit cannot be advertised as uploaded by a size-only manifest`() = runTest {
+        val file = harness.givenMediaFileOnDisk("legacy-metadata.jpg", byteArrayOf(1))
+        val note = harness.givenSyncedJournal("legacy-metadata", images = listOf(file.path))
+        harness.givenCloudMedia(note.id, file.name, file.readBytes())
+        harness.cloud.manifest = harness.cloud.manifest!!.copy(mediaMetadata = mapOf(file.name to MediaSyncMeta(1, "")))
+        harness.givenLocalOnlyJournal("unrelated-upload")
+        harness.cloud.beforeJournalUpload = {
+            com.denser.june.core.media.storage.MediaMutationLocks.withFile(file.path) {
+                file.writeBytes(byteArrayOf(2))
+                harness.repo.markMediaModified(file.path, T2)
+            }
+        }
+        assertTrue(harness.sync().isSuccess)
+        assertTrue(harness.repo.getPendingMediaChanges().containsKey(file.name))
+        assertEquals("", harness.cloud.manifest!!.mediaMetadata.getValue(file.name).hash)
+        harness.cloud.beforeJournalUpload = null
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(1, harness.cloud.uploadMediaCallCount)
+        val verify = File(harness.mediaDir, "verify-legacy")
+        harness.cloud.downloadMedia(note.id, file.name, verify).getOrThrow()
+        org.junit.Assert.assertArrayEquals(byteArrayOf(2), verify.readBytes())
+        assertTrue(harness.repo.getPendingMediaChanges().isEmpty())
+    }
+
+    @Test fun `remote note text can win without discarding an explicit local attachment edit`() = runTest {
+        val file = harness.givenMediaFileOnDisk("independent-edit.jpg", byteArrayOf(1))
+        val note = harness.givenSyncedJournal("independent-edit", images = listOf(file.path))
+        harness.givenCloudMedia(note.id, file.name, file.readBytes())
+        file.writeBytes(byteArrayOf(2))
+        harness.repo.markMediaModified(file.path, T2)
+        harness.remoteJournalUpdated(note.id, T2 + 10000) { it.copy(title = "Remote title", updatedAt = T2 + 10000) }
+        assertTrue(harness.sync().isSuccess)
+        assertEquals("Remote title", harness.repo.getJournalById(note.id)!!.title)
+        assertEquals(1, harness.cloud.uploadMediaCallCount)
+        org.junit.Assert.assertArrayEquals(byteArrayOf(2), file.readBytes())
+        assertTrue(harness.repo.getPendingMediaChanges().isEmpty())
+    }
+
+    @Test fun `text edit downloads remote media while only explicitly changed attachment uploads`() = runTest {
+        val a = harness.givenMediaFileOnDisk("a.jpg", byteArrayOf(1))
+        val b = harness.givenMediaFileOnDisk("b.jpg", byteArrayOf(2))
+        val note = harness.givenSyncedJournal("mixed", images = listOf(a.path, b.path))
+        harness.givenCloudMedia(note.id, a.name, a.readBytes())
+        harness.givenCloudMedia(note.id, b.name, b.readBytes())
+        harness.repo.seed(note.copy(content = "Local text edit", updatedAt = T2))
+        a.writeBytes(byteArrayOf(3))
+        harness.repo.markMediaModified(a.path, T2)
+        harness.givenCloudMedia(note.id, b.name, byteArrayOf(4))
+        val analysis = harness.performAnalysis().getOrThrow()
+        assertEquals(1, analysis.pendingMediaUploadsCount)
+        assertEquals(1, analysis.pendingMediaDownloadsCount)
+        assertTrue(harness.sync().isSuccess)
+        org.junit.Assert.assertArrayEquals(byteArrayOf(3), a.readBytes())
+        org.junit.Assert.assertArrayEquals(byteArrayOf(4), b.readBytes())
+        assertEquals(1, harness.cloud.uploadMediaCallCount)
+        assertEquals("Local text edit", harness.cloud.getJournal(note.id)!!.content)
+        assertTrue(harness.repo.getPendingMediaChanges().isEmpty())
+    }
+
+    @Test fun `text-only edit never uploads stale cached attachments`() = runTest {
+        val file = harness.givenMediaFileOnDisk("text-only.jpg", byteArrayOf(1))
+        val note = harness.givenSyncedJournal("text-only", images = listOf(file.path))
+        harness.givenCloudMedia(note.id, file.name, byteArrayOf(2))
+        harness.repo.seed(note.copy(content = "Local text edit", updatedAt = T2))
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(0, harness.cloud.uploadMediaCallCount)
+        org.junit.Assert.assertArrayEquals(byteArrayOf(2), file.readBytes())
+        assertEquals("Local text edit", harness.cloud.getJournal(note.id)!!.content)
+    }
+
+    @Test fun `manifest acknowledgment never clears a newer media generation`() = runTest {
+        val file = harness.givenMediaFileOnDisk("generation.jpg", byteArrayOf(1))
+        val note = harness.givenSyncedJournal("generation", images = listOf(file.path))
+        harness.givenCloudMedia(note.id, file.name, file.readBytes())
+        file.writeBytes(byteArrayOf(2))
+        harness.repo.markMediaModified(file.path, T2)
+        harness.cloud.beforeManifestWrite = {
+            file.writeBytes(byteArrayOf(3))
+            harness.repo.markMediaModified(file.path, T2 + 1)
+        }
+        assertTrue(harness.sync().isSuccess)
+        assertTrue(harness.repo.getPendingMediaChanges().containsKey(file.name))
+        assertTrue(harness.syncManager.status.value is com.denser.june.core.domain.sync.SyncStatus.Dirty)
+        harness.cloud.beforeManifestWrite = null
+        assertTrue(harness.sync().isSuccess)
+        assertTrue(harness.repo.getPendingMediaChanges().isEmpty())
+        val verify = File(harness.mediaDir, "verify")
+        harness.cloud.downloadMedia(note.id, file.name, verify).getOrThrow()
+        org.junit.Assert.assertArrayEquals(byteArrayOf(3), verify.readBytes())
+    }
+
+    @Test fun `remote download cannot overwrite a newly marked local edit`() = runTest {
+        val file = harness.givenMediaFileOnDisk("during-download.jpg", byteArrayOf(1))
+        val note = harness.givenSyncedJournal("during-download", images = listOf(file.path))
+        harness.givenCloudMedia(note.id, file.name, byteArrayOf(2))
+        harness.cloud.beforeMediaDownload = {
+            com.denser.june.core.media.storage.MediaMutationLocks.withFile(file.path) {
+                file.writeBytes(byteArrayOf(3))
+                harness.repo.markMediaModified(file.path, T2)
+            }
+        }
+        assertTrue(harness.sync().isFailure)
+        org.junit.Assert.assertArrayEquals(byteArrayOf(3), file.readBytes())
+        harness.cloud.beforeMediaDownload = null
+        assertTrue(harness.sync().isSuccess)
+        org.junit.Assert.assertArrayEquals(byteArrayOf(3), file.readBytes())
+    }
+
+    @Test fun `unchanged marked bytes clear only after manifest verification`() = runTest {
+        val file = harness.givenMediaFileOnDisk("restored.jpg")
+        val note = harness.givenSyncedJournal("restored", images = listOf(file.path))
+        harness.givenCloudMedia(note.id, file.name, file.readBytes())
+        harness.repo.markMediaModified(file.path, T2)
+        assertTrue(harness.sync().isSuccess)
+        assertEquals(0, harness.cloud.uploadMediaCallCount)
+        assertTrue(harness.repo.getPendingMediaChanges().isEmpty())
+    }
+
     @Test fun `media-only change remains dirty if manifest commit fails and retries`() = runTest {
         val file = harness.givenMediaFileOnDisk("media-only.jpg")
         val original = harness.givenSyncedJournal("media-only", images = listOf(file.path))
@@ -75,10 +193,11 @@ class SyncMediaTest : BaseSyncTest() {
         val editedBytes = byteArrayOf(8, 9)
         file.writeBytes(editedBytes)
         harness.repo.seed(original.copy(content = "New text", updatedAt = T2))
+        harness.repo.markMediaModified(file.path, T2)
         harness.cloud.failNextUploadMedia = true
 
         assertTrue(harness.sync().isFailure)
-        assertEquals(original.syncedAt, harness.repo.getJournalById(original.id)!!.syncedAt)
+        org.junit.Assert.assertNull(harness.repo.getJournalById(original.id)!!.syncedAt)
         assertEquals(original.content, harness.cloud.getJournal(original.id)!!.content)
         org.junit.Assert.assertArrayEquals(editedBytes, file.readBytes())
 
@@ -143,6 +262,7 @@ class SyncMediaTest : BaseSyncTest() {
             totalJournals = 1,
             mediaMetadata = mapOf("photo.jpg" to MediaSyncMeta(size = 3L, hash = "old_stale_hash"))
         )
+        harness.repo.markMediaModified(localMedia.path, T2)
 
         val result = harness.sync()
 
@@ -162,6 +282,7 @@ class SyncMediaTest : BaseSyncTest() {
             mediaMetadata = mapOf("photo.jpg" to MediaSyncMeta(size = 5L, hash = "old_uncompressed_hash"))
         )
 
+        harness.repo.markMediaModified(compressedFile.path, T2)
         val analysis = harness.performAnalysis().getOrThrow()
         assertEquals("Analysis should report 1 modified media file to upload", 1, analysis.pendingMediaUploadsCount)
 

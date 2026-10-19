@@ -13,6 +13,33 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MediaRepairDatabaseTest {
+    @Test fun mediaOwnershipPersistsAndOldAcknowledgmentCannotClearANewerGeneration() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val name = "media-ownership-${java.util.UUID.randomUUID()}"
+        var db = Room.databaseBuilder(context, JournalDatabase::class.java, name).build()
+        try {
+            var dao = db.journalDao()
+            val note = Journal("owner", "Title", "Content", images = listOf("shared.jpg"),
+                createdAt = 1, updatedAt = 2, dateTime = 1, syncedAt = 2).asEntity()
+            dao.insertJournal(note)
+            dao.insertJournal(note.copy(id = "shared", deletedAt = 3))
+            dao.markMediaModified("shared.jpg", 4)
+            val first = dao.getPendingMediaChanges()
+            assertEquals(setOf("shared.jpg"), first.keys)
+            db.close()
+            db = Room.databaseBuilder(context, JournalDatabase::class.java, name).build()
+            dao = db.journalDao()
+            assertEquals(first, dao.getPendingMediaChanges())
+            dao.markMediaModified("shared.jpg", 4) // same millisecond, distinct generation
+            dao.acknowledgeMediaChange("shared.jpg", first.getValue("shared.jpg"))
+            assertNotEquals(first, dao.getPendingMediaChanges())
+            dao.hardDeleteWithTombstone("owner")
+            assertEquals(setOf("shared.jpg"), dao.getPendingMediaChanges().keys)
+            dao.hardDeleteWithTombstone("shared")
+            assertTrue(dao.getPendingMediaChanges().isEmpty())
+        } finally { db.close(); context.deleteDatabase(name) }
+    }
+
     @Test fun deletingPublishedNotesWithDirtyMediaRetainsDeletionTombstones() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(InstrumentationRegistry.getInstrumentation().targetContext, JournalDatabase::class.java).build()
         try {

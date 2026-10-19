@@ -58,7 +58,21 @@ class FakeJournalRepository : JournalRepository {
         return true
     }
 
+    private val mediaChanges = MutableStateFlow<Map<String, String>>(emptyMap())
+    override suspend fun getPendingMediaChanges(): Map<String, String> {
+        val referenced = db.values.flatMap { it.images }.map { java.io.File(it).name.lowercase() }.toSet()
+        mediaChanges.value = mediaChanges.value.filterKeys { it in referenced }
+        return mediaChanges.value
+    }
+    override fun observePendingMediaChanges(): Flow<Boolean> = mediaChanges.map { it.isNotEmpty() }
+    override suspend fun acknowledgeMediaChanges(expected: Map<String, String>) {
+        mediaChanges.value = mediaChanges.value.filter { (name, generation) -> expected[name] != generation }
+    }
     override suspend fun markMediaModified(path: String, modifiedAt: Long) {
+        val name = java.io.File(path).name.lowercase()
+        if (db.values.any { j -> j.images.any { java.io.File(it).name.lowercase() == name } }) {
+            mediaChanges.value = mediaChanges.value + (name to java.util.UUID.randomUUID().toString())
+        }
         val fileName = java.io.File(path).name
         if (fileName.isEmpty()) return
         db.values.toList().filter { j -> j.images.any { java.io.File(it).name == fileName } }.forEach {

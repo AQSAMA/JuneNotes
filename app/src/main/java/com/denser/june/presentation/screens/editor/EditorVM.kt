@@ -532,11 +532,15 @@ class EditorVM(
                     val restored = withContext(Dispatchers.IO) {
                         var complete = true
                         for (path in paths) {
-                            if (CompressUtils.getUncompressedOriginalFile(context, path) != null) {
-                                if (CompressUtils.restoreUncompressedOriginalFile(context, path, keepBackup = true)) {
-                                    journalRepo.markMediaModified(path, System.currentTimeMillis())
-                                    CompressUtils.cleanUncompressedOriginalFile(context, path)
-                                } else complete = false
+                            com.denser.june.core.media.storage.MediaMutationLocks.withFile(path) {
+                                withContext(kotlinx.coroutines.NonCancellable) {
+                                    if (CompressUtils.getUncompressedOriginalFile(context, path) != null) {
+                                        if (CompressUtils.restoreUncompressedOriginalFile(context, path, keepBackup = true)) {
+                                            journalRepo.markMediaModified(path, System.currentTimeMillis())
+                                            CompressUtils.cleanUncompressedOriginalFile(context, path)
+                                        } else complete = false
+                                    }
+                                }
                             }
                         }
                         complete

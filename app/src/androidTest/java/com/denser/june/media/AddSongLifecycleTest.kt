@@ -53,7 +53,7 @@ class AddSongLifecycleTest {
         }
     }
 
-    @Test fun cancelRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { ui.onNodeWithText("Cancel").performClick() }
+    @Test fun cancelRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { ui.onNodeWithText("Cancel", useUnmergedTree = true).performClick() }
     @Test fun toolbarBackRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { ui.onNodeWithContentDescription("Back").performClick() }
     @Test fun systemBackRejectsArtworkFromTheAbandonedEdit() = cancelAndReopen { InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK) }
 
@@ -94,7 +94,7 @@ class AddSongLifecycleTest {
             assertTrue(completed.await(10, TimeUnit.SECONDS))
             ui.waitUntil(10000) { !output.exists() }
             ui.runOnIdle { assertNull(importer.importedPath); assertFalse(importer.busy) }
-            ui.onNodeWithText("Save").performClick()
+            ui.onNodeWithText("Save", useUnmergedTree = true).performClick()
             ui.runOnIdle { assertNull(vm.state.value.songDetails!!.localThumbnailPath) }
         } finally { finish.countDown(); output.delete() }
     }
@@ -115,7 +115,7 @@ class AddSongLifecycleTest {
         restoration.emulateSavedInstanceStateRestore()
         ui.onNodeWithText("Trim Song").assertIsDisplayed()
         ui.onNodeWithText(song.title).assertIsDisplayed()
-        ui.onNodeWithText("Done").performClick()
+        ui.onNodeWithText("Done", useUnmergedTree = true).performClick()
         ui.runOnIdle { assertEquals(song.title, vm.state.value.songDetails!!.title) }
     }
 }

@@ -194,4 +194,10 @@ object DatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_folder_journals_folderId` ON `folder_journals` (`folderId`)")
         }
     }
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `pending_media_changes` (`fileName` TEXT NOT NULL, `generation` TEXT NOT NULL, PRIMARY KEY(`fileName`))")
+        }
+    }
+
 }

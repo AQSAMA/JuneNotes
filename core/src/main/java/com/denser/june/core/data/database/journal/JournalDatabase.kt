@@ -9,6 +9,7 @@ import com.denser.june.core.data.database.song.SongLibraryEntity
 @Database(
     entities = [
         JournalEntity::class,
+        PendingMediaChangeEntity::class,
         TagEntity::class,
         JournalTagCrossRef::class,
         DeletedJournalTombstone::class,
@@ -26,7 +27,7 @@ abstract class JournalDatabase : RoomDatabase() {
     abstract fun songLibraryDao(): SongLibraryDao
 
     companion object {
-        const val VERSION = 6
+        const val VERSION = 7
         const val DB_NAME = "journal_database"
     }
 }

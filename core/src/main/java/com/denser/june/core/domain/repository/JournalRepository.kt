@@ -33,6 +33,10 @@ interface JournalRepository {
     /** Mark every current reference to an in-place media change dirty without replacing note content. */
     suspend fun markMediaModified(path: String, modifiedAt: Long)
 
+    suspend fun getPendingMediaChanges(): Map<String, String>
+    fun observePendingMediaChanges(): Flow<Boolean>
+    suspend fun acknowledgeMediaChanges(expected: Map<String, String>)
+
     fun getDeletedJournals(): Flow<List<Journal>>
     suspend fun getJournalsToSync(threshold: Long): List<Journal>
     suspend fun getAllJournalsIncludeDeletedSync(): List<Journal>

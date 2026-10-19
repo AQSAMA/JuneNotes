@@ -30,6 +30,7 @@ class FakeCloudProvider : CloudProvider {
 
     var partialListingSize: Int = -1
 
+    var beforeJournalUpload: (suspend () -> Unit)? = null
     var uploadJournalCallCount = 0
     var downloadJournalCallCount = 0
     var uploadMediaCallCount = 0
@@ -54,6 +55,7 @@ class FakeCloudProvider : CloudProvider {
     fun allJournalIds(): Set<String> = _journals.keys.toSet()
 
     override suspend fun uploadJournal(journal: Journal): Result<String> {
+        beforeJournalUpload?.invoke()
         if (failNextUpload) { failNextUpload = false; return Result.failure(Exception("Upload failed: 500")) }
         uploadJournalCallCount++
         val now = System.currentTimeMillis()
@@ -92,6 +94,7 @@ class FakeCloudProvider : CloudProvider {
 
     var failNextUploadMedia = false
     var failNextDownloadMedia = false
+    var beforeMediaDownload: (suspend () -> Unit)? = null
 
     override suspend fun uploadMedia(journalId: String, file: File): Result<String> {
         if (failNextUploadMedia) { failNextUploadMedia = false; return Result.failure(Exception("Media upload failed")) }
@@ -102,6 +105,7 @@ class FakeCloudProvider : CloudProvider {
     }
 
     override suspend fun downloadMedia(journalId: String, cloudId: String, targetFile: File): Result<File> {
+        beforeMediaDownload?.invoke()
         if (failNextDownloadMedia) { failNextDownloadMedia = false; return Result.failure(Exception("Media download failed")) }
         if (failNextDownload) { failNextDownload = false; return Result.failure(Exception("Media download failed")) }
         val bytes = _media["$journalId/$cloudId"] ?: return Result.failure(Exception("Media not found"))

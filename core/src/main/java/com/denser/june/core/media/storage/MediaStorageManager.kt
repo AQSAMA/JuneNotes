@@ -21,15 +21,10 @@ object MediaStorageManager {
             }
 
             val inputStream = contentResolver.openInputStream(uri) ?: return null
-
-            val mediaDir = File(context.filesDir, "journal_media").apply { if (!exists()) mkdirs() }
-            val fileName = "media_${System.currentTimeMillis()}_${(0..999).random()}.$extension"
-            val file = File(mediaDir, fileName)
-
-            file.outputStream().use { output ->
-                inputStream.copyTo(output)
+            inputStream.use { input ->
+                val mediaDir = File(context.filesDir, "journal_media").apply { if (!exists()) mkdirs() }
+                copyMediaImport(mediaDir, extension, input).absolutePath
             }
-            file.absolutePath
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -111,5 +106,17 @@ object MediaStorageManager {
         if (internalMedia.exists() && internalMedia.length() > 0L) return internalMedia
 
         return direct
+    }
+}
+
+/** The destination is atomically reserved; concurrent jobs can never truncate each other. */
+internal fun copyMediaImport(directory: File, extension: String, input: java.io.InputStream): File {
+    val target = File.createTempFile("media_", ".$extension", directory)
+    try {
+        target.outputStream().use { output -> input.copyTo(output) }
+        return target
+    } catch (error: Throwable) {
+        target.delete()
+        throw error
     }
 }
