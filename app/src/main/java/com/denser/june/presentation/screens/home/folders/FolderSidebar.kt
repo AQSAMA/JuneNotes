@@ -146,7 +146,7 @@ internal fun FolderSidebar(
                                         val color by animateColorAsState(if (selectedFolder) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow, label = "selected_folder")
                                         Surface(color = color, shape = RoundedCornerShape(if (compact) 12.dp else 16.dp)) {
                                             Row(Modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 56.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                if (row.hasChildren) {
+                                                if (row.hasChildren && !compact) {
                                                     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "folder_expansion")
                                                     IconButton(onClick = { expandedIds = if (expanded) expandedIds - folder.id else expandedIds + folder.id }, enabled = query.isBlank(), modifier = Modifier.size(48.dp).testTag("sidebar-expand-${folder.id}")) {
                                                         Icon(painterResource(R.drawable.expand_more_24px), stringResource(if (expanded) R.string.folder_collapse else R.string.folder_expand), Modifier.size(20.dp).graphicsLayer { rotationZ = rotation })
@@ -166,6 +166,15 @@ internal fun FolderSidebar(
                                                             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                                         if (!managing && (!compact || (state.noteCounts[folder.id] ?: 0) > 0)) Text((state.noteCounts[folder.id] ?: 0).toString(), style = MaterialTheme.typography.labelMedium,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+                                                    }
+                                                }
+                                                if (compact && row.hasChildren) {
+                                                    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "compact_folder_expansion")
+                                                    IconButton(onClick = { expandedIds = if (expanded) expandedIds - folder.id else expandedIds + folder.id },
+                                                        enabled = query.isBlank(), modifier = Modifier.size(48.dp).testTag("sidebar-expand-${folder.id}")) {
+                                                        Icon(painterResource(R.drawable.expand_more_24px),
+                                                            stringResource(if (expanded) R.string.folder_collapse else R.string.folder_expand),
+                                                            Modifier.size(20.dp).graphicsLayer { rotationZ = rotation })
                                                     }
                                                 }
                                                 if (managing) FolderDragHandle(item) { moving = item }

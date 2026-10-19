@@ -83,6 +83,31 @@ class CompactNotesTest {
         ui.runOnIdle { assertTrue(opened) }
     }
 
+    @Test fun mediaPreviewDoesNotConsumeTheCardTap() {
+        val file = java.io.File(context.cacheDir, "compact-note-photo.png")
+        val bitmap = android.graphics.Bitmap.createBitmap(480, 300, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(android.graphics.Color.rgb(78, 114, 112))
+        val paint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(224, 234, 223); strokeWidth = 7f }
+        repeat(5) { canvas.drawLine(55f, 65f + it * 36, 380f - it * 18, 65f + it * 36, paint) }
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        var opened = false
+        try {
+            val item = note("photo", "Reference notebook", "A note with a photo, followed by readable text.").copy(images = listOf(file.absolutePath))
+            ui.setContent { Theme {
+                NoteCollection(listOf(item, note("text", "No photo needed", "Text uses the whole card.")), true, false) { _, entry ->
+                    NotePreviewCard(entry, 8, { opened = true }, {}, {})
+                }
+            } }
+            ui.onNodeWithTag("note-media-photo", useUnmergedTree = true).assertExists()
+            ui.onNodeWithTag("note-media-text", useUnmergedTree = true).assertDoesNotExist()
+            screenshot("compact-media-preview")
+            ui.onNodeWithTag("note-media-photo", useUnmergedTree = true).performTouchInput { click() }
+            ui.runOnIdle { assertTrue(opened) }
+        } finally { file.delete() }
+    }
+
     @Test fun largeArabicTextGetsAReadableSingleColumnInLightMode() {
         val notes = listOf(note("ar1", "ملاحظات العمل", "ملاحظة قصيرة قابلة للقراءة."),
             note("ar2", "أفكار للقراءة", "تجربة نص عربي طويل مع تفاصيل تساعد على التصفح.\nكل ملاحظة تأخذ المساحة المناسبة لمحتواها."))
