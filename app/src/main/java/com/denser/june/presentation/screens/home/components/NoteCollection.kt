@@ -47,7 +47,7 @@ internal fun NoteCollection(
     noteContent: @Composable (Int, Journal) -> Unit
 ) {
     // Large accessibility fonts receive fewer, wider columns rather than cramped text.
-    val minWidth = 156.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
+    val minWidth = 140.dp * LocalDensity.current.fontScale.coerceAtLeast(1f)
     LazyVerticalStaggeredGrid(
         columns = if (grid) StaggeredGridCells.Adaptive(minWidth) else StaggeredGridCells.Fixed(1),
         state = state,

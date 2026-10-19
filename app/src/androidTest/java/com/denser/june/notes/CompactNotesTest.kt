@@ -141,7 +141,7 @@ class CompactNotesTest {
             runBlocking {
                 preferences.setCompactNotesEnabled(false)
                 preferences.setNotesGridEnabled(true)
-                journals.insertJournal(note(id, "A readable note", "The note preview is visible directly in the collection."))
+                journals.insertJournal(note(id, "A readable note", "The note preview is visible directly in the collection.").copy(dateTime = System.currentTimeMillis() + 60_000))
             }
             ui.setContent { Theme {
                 when (page) {
@@ -155,6 +155,7 @@ class CompactNotesTest {
             screenshot("compact-appearance-settings")
             ui.runOnIdle { page = 1 }
             ui.waitUntil(5000) { ui.onAllNodesWithTag("notes-grid").fetchSemanticsNodes().isNotEmpty() }
+            ui.waitUntil(5000) { ui.onAllNodesWithTag("note-card-$id").fetchSemanticsNodes().isNotEmpty() }
             ui.onNodeWithTag("note-card-$id").assertExists()
             screenshot("compact-home")
             ui.onNodeWithTag("notes-layout-toggle").performClick()
