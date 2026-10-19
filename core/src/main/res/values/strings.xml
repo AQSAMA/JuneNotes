@@ -627,4 +627,21 @@
     <string name="compression_save_failed">Unable to save compressed media</string>
     <string name="compression_preview_failed">Unable to create preview</string>
     <string name="retry_preview">Retry</string>
+
+    <string name="notes_layout">Notes layout</string>
+    <string name="compact_notes">Compact notes (experimental)</string>
+    <string name="compact_notes_desc">Readable previews, a compact search bar and a simpler folder sidebar. Turn off to return to the original layout.</string>
+    <string name="notes_grid">Side-by-side cards</string>
+    <string name="notes_grid_desc">Turn off for a single column. You can also switch from the search bar.</string>
+    <string name="note_preview_length">Preview length</string>
+    <string name="note_preview_short">Short</string>
+    <string name="note_preview_balanced">Balanced</string>
+    <string name="note_preview_long">Long</string>
+    <string name="notes_show_list">Show notes in a list</string>
+    <string name="notes_show_grid">Show notes side by side</string>
+    <string name="notes_search">Search notes</string>
+    <string name="notes_my_folders">My folders</string>
+    <string name="notes_empty_title">No notes yet</string>
+    <string name="notes_empty_desc">Tap + to write your first note.</string>
+    <string name="notes_preview_media">Note media preview</string>
 </resources>

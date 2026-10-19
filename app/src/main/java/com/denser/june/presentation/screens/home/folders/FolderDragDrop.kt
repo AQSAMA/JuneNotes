@@ -9,7 +9,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -254,7 +254,7 @@ internal fun FolderDragItem(item: FolderDrag, modifier: Modifier = Modifier, con
 
 /** Scrolling and target selection are independent. Speed follows edge penetration in dp/second. */
 @Composable
-internal fun FolderDragAutoScroll(listState: LazyListState, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun FolderDragAutoScroll(listState: ScrollableState, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val controller = LocalFolderDragController.current
     var bounds by remember { mutableStateOf(Rect.Zero) }
     val density = LocalDensity.current

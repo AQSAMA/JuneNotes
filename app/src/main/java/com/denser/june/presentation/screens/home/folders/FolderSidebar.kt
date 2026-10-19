@@ -38,7 +38,8 @@ internal fun FolderSidebar(
     onAllNotes: () -> Unit,
     onFolder: (String?) -> Unit,
     onClose: () -> Unit,
-    allNotesSelected: Boolean = !folderSelected
+    allNotesSelected: Boolean = !folderSelected,
+    compact: Boolean = false
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var expandedIds by rememberSaveable { mutableStateOf(emptyList<String>()) }
@@ -81,31 +82,37 @@ internal fun FolderSidebar(
 
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth().padding(start = if (compact) 20.dp else 24.dp, end = 8.dp, top = 8.dp, bottom = if (compact) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(if (compact) R.string.folders else R.string.app_name),
+                    style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                if (compact) IconButton(onClick = { managing = !managing }, modifier = Modifier.testTag("sidebar-manage")) {
+                    Icon(painterResource(if (managing) R.drawable.check_24px else R.drawable.edit_24px),
+                        stringResource(if (managing) R.string.done else R.string.folder_organize))
+                }
                 IconButton(onClick = onClose) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.folder_close_sidebar)) }
             }
             Box(Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp)) {
-                FolderSearchField(query, { query = it }, stringResource(R.string.folder_search_folders))
+                FolderSearchField(query, { query = it }, stringResource(R.string.folder_search_folders), compact = compact)
             }
             FolderDragHost({ false }, {}, { dragging = it }, Modifier.weight(1f)) {
                 Box(Modifier.fillMaxSize()) {
                     LazyColumn(state = list, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), modifier = Modifier.fillMaxSize()) {
                         item(key = "all-notes") {
                             SidebarDestination(stringResource(R.string.folder_all_notes), R.drawable.edit_note_24px,
-                                state.notes.size, allNotesSelected, onAllNotes, Modifier.testTag("sidebar-all-notes"))
+                                state.notes.size, allNotesSelected, onAllNotes, Modifier.testTag("sidebar-all-notes"), compact)
                         }
                         item(key = "unfiled") {
                             FolderDropSurface({ accepts(it, null) }, { viewModel.move(it, null) }) {
                                 SidebarDestination(stringResource(R.string.folder_unfiled), R.drawable.folder_open_24px,
                                     state.noteCounts[null] ?: 0, folderSelected && state.currentId == null,
-                                    { onFolder(null) }, Modifier.testTag("sidebar-unfiled"))
+                                    { onFolder(null) }, Modifier.testTag("sidebar-unfiled"), compact)
                             }
                         }
                         item(key = "folder-heading") {
-                            HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            HorizontalDivider(Modifier.padding(horizontal = 12.dp, vertical = if (compact) 8.dp else 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.folders), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                                Text(stringResource(if (compact) R.string.notes_my_folders else R.string.folders), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                                 if (state.liveFolders.any { it.parentId != null }) {
                                     val expanded = expandedIds.isNotEmpty()
                                     IconButton(onClick = {
@@ -114,7 +121,7 @@ internal fun FolderSidebar(
                                         Icon(painterResource(if (expanded) R.drawable.expand_less_24px else R.drawable.expand_more_24px), stringResource(if (expanded) R.string.folder_collapse_all else R.string.folder_expand_all))
                                     }
                                 }
-                                IconButton(onClick = { createParent = null; creating = true }) {
+                                if (!compact) IconButton(onClick = { createParent = null; creating = true }) {
                                     Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder))
                                 }
                             }
@@ -124,7 +131,7 @@ internal fun FolderSidebar(
                             val item = FolderDrag(folder.id, true, folder.name)
                             val expanded = query.isNotBlank() || folder.id in expandedIds
                             val selectedFolder = folderSelected && folder.id == state.currentId
-                            val indent = (row.depth.coerceAtMost(5) * 16).dp
+                            val indent = (row.depth.coerceAtMost(5) * if (compact) 12 else 16).dp
                             FolderDragItem(item, Modifier.animateItem(
                                 placementSpec = if (dragging) null else spring(stiffness = Spring.StiffnessMediumLow)
                             ).testTag("sidebar-folder-${folder.id}")) {
@@ -137,28 +144,37 @@ internal fun FolderSidebar(
                                         onHoverOpen = if (row.hasChildren && !expanded) ({ expandedIds = (expandedIds + folder.id).distinct() }) else null
                                     ) {
                                         val color by animateColorAsState(if (selectedFolder) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow, label = "selected_folder")
-                                        Surface(color = color, shape = RoundedCornerShape(16.dp)) {
-                                            Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                if (row.hasChildren) {
+                                        Surface(color = color, shape = RoundedCornerShape(if (compact) 12.dp else 16.dp)) {
+                                            Row(Modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                if (row.hasChildren && !compact) {
                                                     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "folder_expansion")
                                                     IconButton(onClick = { expandedIds = if (expanded) expandedIds - folder.id else expandedIds + folder.id }, enabled = query.isBlank(), modifier = Modifier.size(48.dp).testTag("sidebar-expand-${folder.id}")) {
                                                         Icon(painterResource(R.drawable.expand_more_24px), stringResource(if (expanded) R.string.folder_collapse else R.string.folder_expand), Modifier.size(20.dp).graphicsLayer { rotationZ = rotation })
                                                     }
                                                 } else Spacer(Modifier.width(12.dp))
                                                 FolderDragSource(item, Modifier.weight(1f)) {
-                                                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { onFolder(folder.id) }.semantics {
+                                                    Row(Modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 56.dp).clickable { onFolder(folder.id) }.semantics {
                                                         selected = selectedFolder
                                                         customActions = listOf(
                                                             CustomAccessibilityAction(moveLabel) { moving = item; true },
                                                             CustomAccessibilityAction(optionsLabel) { options = folder; true }
                                                         )
-                                                    }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    }.padding(vertical = if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                                         Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(22.dp), tint = if (selectedFolder) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.primary)
                                                         Spacer(Modifier.width(12.dp))
                                                         Text(folder.name, style = MaterialTheme.typography.bodyLarge, fontWeight = if (selectedFolder) FontWeight.SemiBold else FontWeight.Normal,
                                                             maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                                        if (!managing) Text((state.noteCounts[folder.id] ?: 0).toString(), style = MaterialTheme.typography.labelMedium,
+                                                        if (!managing && (!compact || (state.noteCounts[folder.id] ?: 0) > 0)) Text((state.noteCounts[folder.id] ?: 0).toString(), style = MaterialTheme.typography.labelMedium,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+                                                    }
+                                                }
+                                                if (compact && row.hasChildren) {
+                                                    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "compact_folder_expansion")
+                                                    IconButton(onClick = { expandedIds = if (expanded) expandedIds - folder.id else expandedIds + folder.id },
+                                                        enabled = query.isBlank(), modifier = Modifier.size(48.dp).testTag("sidebar-expand-${folder.id}")) {
+                                                        Icon(painterResource(R.drawable.expand_more_24px),
+                                                            stringResource(if (expanded) R.string.folder_collapse else R.string.folder_expand),
+                                                            Modifier.size(20.dp).graphicsLayer { rotationZ = rotation })
                                                     }
                                                 }
                                                 if (managing) FolderDragHandle(item) { moving = item }
@@ -197,7 +213,14 @@ internal fun FolderSidebar(
                 }
             }
             // Management is optional. Whole labels can always be held to drag.
-            TextButton(onClick = { managing = !managing }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("sidebar-manage")) {
+            if (compact) {
+                FilledTonalButton(onClick = { createParent = null; creating = true },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Icon(painterResource(R.drawable.create_new_folder_24px), null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.new_folder))
+                }
+            } else TextButton(onClick = { managing = !managing }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("sidebar-manage")) {
                 Icon(painterResource(if (managing) R.drawable.check_24px else R.drawable.drag_indicator_24px), null, Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(if (managing) R.string.done else R.string.folder_organize))
@@ -230,13 +253,13 @@ internal fun FolderSidebar(
 }
 
 @Composable
-private fun SidebarDestination(label: String, icon: Int, count: Int, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(color = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(16.dp)) {
-        Row(modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).semantics { selected = active }.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SidebarDestination(label: String, icon: Int, count: Int, active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
+    Surface(color = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow, shape = RoundedCornerShape(if (compact) 12.dp else 16.dp)) {
+        Row(modifier.fillMaxWidth().heightIn(min = if (compact) 48.dp else 56.dp).clickable(onClick = onClick).semantics { selected = active }.padding(horizontal = 16.dp, vertical = if (compact) 8.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(painterResource(icon), null, Modifier.size(22.dp))
             Spacer(Modifier.width(16.dp))
             Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
-            Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!compact || count > 0) Text(count.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

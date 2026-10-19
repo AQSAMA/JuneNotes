@@ -15,6 +15,9 @@ import java.time.DayOfWeek
 @Stable
 @Immutable
 data class SettingsState(
+    val compactNotesEnabled: Boolean = false,
+    val notesGridEnabled: Boolean = true,
+    val notePreviewLines: Int = 8,
     val appTheme: AppTheme = AppTheme(),
     val deleteButtonEnabled: Boolean = true,
     val exportState: AsyncOp<File> = AsyncOp.Idle,
