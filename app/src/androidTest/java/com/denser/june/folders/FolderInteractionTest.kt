@@ -26,8 +26,8 @@ import com.denser.june.core.domain.model.enums.ThemeMode
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.domain.preferences.JournalPreferences
 import androidx.lifecycle.SavedStateHandle
-import com.denser.june.presentation.screens.home.components.JournalCard
-import com.denser.june.presentation.screens.home.components.JournalOptionsSheet
+import com.denser.june.presentation.components.journal.JournalCard
+import com.denser.june.presentation.components.journal.JournalOptionsSheet
 import com.denser.june.presentation.screens.home.folders.*
 import com.denser.june.presentation.theme.*
 import kotlinx.coroutines.runBlocking

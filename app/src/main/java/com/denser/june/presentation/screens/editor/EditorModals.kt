@@ -1,6 +1,7 @@
 package com.denser.june.presentation.screens.editor
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,18 +17,18 @@ import com.denser.june.presentation.components.JuneDateTimePicker
 import com.denser.june.presentation.components.JuneDateTimePickerMode
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
-import com.denser.june.presentation.screens.editor.components.AddItemSheet
-import com.denser.june.presentation.screens.editor.components.AddLocationDialog
+import com.denser.june.presentation.screens.editor.components.dialogs.AddItemSheet
+import com.denser.june.presentation.screens.editor.components.dialogs.AddLocationDialog
 import com.denser.june.presentation.screens.editor.components.emoji.JournalEmojiPickerSheet
 import com.denser.june.presentation.screens.editor.components.emoji.loadEmojiAssets
-import com.denser.june.presentation.screens.editor.components.JournalTagsDialog
-import com.denser.june.presentation.screens.home.components.DeleteConfirmationSheet
-import java.io.File
+import com.denser.june.presentation.screens.editor.components.dialogs.JournalTagsDialog
+import com.denser.june.presentation.plus.LocalIsPlus
+import com.denser.june.presentation.plus.LocalPlusSheetController
+import com.denser.june.presentation.screens.editor.components.dialogs.JunePlusSaveDialog
 import org.koin.compose.koinInject
 
 class EditorDialogState {
     var showExitDialog by mutableStateOf(false)
-    var showDeleteConfirmation by mutableStateOf(false)
     var showDatePicker by mutableStateOf(false)
     var datePickerInitialTab by mutableIntStateOf(0)
     var showAddItemSheet by mutableStateOf(false)
@@ -35,6 +36,8 @@ class EditorDialogState {
     var showCameraSelectionDialog by mutableStateOf(false)
     var showLocationDialog by mutableStateOf(false)
     var showTagsDialog by mutableStateOf(false)
+    var showPlusSaveDialog by mutableStateOf(false)
+    var onPlusSaveExitAfter by mutableStateOf(false)
 }
 
 @Composable
@@ -49,9 +52,14 @@ fun EditorModals(
 ) {
     val context = LocalContext.current
     val navigator = koinInject<AppNavigator>()
+    val isPlus = LocalIsPlus.current
+    val plusSheetController = LocalPlusSheetController.current
+
+    val appResources = remember(context) { context.applicationContext.resources }
+    val entrySavedMessage = stringResource(R.string.entry_saved_default_theme)
 
     LaunchedEffect(Unit) {
-        loadEmojiAssets(context.resources)
+        loadEmojiAssets(appResources)
     }
 
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -116,25 +124,49 @@ fun EditorModals(
             confirmButton = {
                 Button(onClick = {
                     dialogState.showExitDialog = false
-                    onAction(EditorAction.SaveJournalAndNavigateBack)
-                }) { Text(stringResource(R.string.save)) }
+                    val hasPlusStyling = (editorState.font != null || editorState.fontVariation != null || editorState.theme != null)
+                    if (!isPlus && hasPlusStyling) {
+                        dialogState.onPlusSaveExitAfter = true
+                        dialogState.showPlusSaveDialog = true
+                    } else {
+                        onAction(EditorAction.SaveJournalAndNavigateBack)
+                    }
+                }) { Text(stringResource(R.string.action_save)) }
             },
             dismissButton = {
                 OutlinedButton(onClick = {
                     dialogState.showExitDialog = false
                     onAction(EditorAction.DiscardChanges)
-                }) { Text(stringResource(R.string.discard)) }
+                }) { Text(stringResource(R.string.action_discard)) }
             },
             text = { Text(stringResource(R.string.save_progress_message)) }
         )
     }
 
-    if (dialogState.showDeleteConfirmation) {
-        DeleteConfirmationSheet(
-            onDismissRequest = { dialogState.showDeleteConfirmation = false },
-            onConfirm = {
-                dialogState.showDeleteConfirmation = false
-                onAction(EditorAction.DeleteJournal)
+    if (dialogState.showPlusSaveDialog) {
+        val saveAfterPlusDialog = if (dialogState.onPlusSaveExitAfter) {
+            EditorAction.SaveJournalAndNavigateBack
+        } else {
+            EditorAction.SaveJournal
+        }
+        JunePlusSaveDialog(
+            onDismissRequest = { dialogState.showPlusSaveDialog = false },
+            onUnlockPlus = {
+                dialogState.showPlusSaveDialog = false
+                plusSheetController.show {
+                    onAction(saveAfterPlusDialog)
+                }
+            },
+            onSaveWithoutPlusStyling = {
+                dialogState.showPlusSaveDialog = false
+                onAction(EditorAction.SetJournalFont(fontName = null, variation = null))
+                onAction(EditorAction.SetJournalTheme(theme = null))
+                onAction(saveAfterPlusDialog)
+                Toast.makeText(
+                    context,
+                    entrySavedMessage,
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         )
     }
@@ -157,6 +189,7 @@ fun EditorModals(
     if (dialogState.showLocationDialog) {
         AddLocationDialog(
             existingLocation = editorState.location,
+            journalTheme = editorState.theme,
             onLocationSelected = { loc -> onAction(EditorAction.SetLocation(loc)) },
             onRemoveLocation = { onAction(EditorAction.RemoveLocation) },
             onDismiss = { dialogState.showLocationDialog = false }
@@ -166,8 +199,12 @@ fun EditorModals(
     if (dialogState.showAddItemSheet) {
         AddItemSheet(
             onDismiss = { dialogState.showAddItemSheet = false },
-            onTakePhotoClick = { dialogState.showCameraSelectionDialog = true },
+            onTakePhotoClick = {
+                dialogState.showAddItemSheet = false
+                dialogState.showCameraSelectionDialog = true
+            },
             onAddPhotoClick = {
+                dialogState.showAddItemSheet = false
                 galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             },
             onAddSongClick = {

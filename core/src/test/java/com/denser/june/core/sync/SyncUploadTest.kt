@@ -8,6 +8,7 @@ import com.denser.june.core.sync.harness.BaseSyncTest
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,6 +30,18 @@ class SyncUploadTest : BaseSyncTest() {
         harness.assertJournalSyncedLocally("j2")
         harness.assertJournalSyncedLocally("j3")
         assertEquals(3, harness.cloud.manifest?.totalJournals)
+    }
+
+    @Test
+    fun `locked journal and its exclusive attachment stay local`() = runTest {
+        val photo = harness.givenMediaFileOnDisk("vault.jpg")
+        val journal = harness.givenLocalOnlyJournal("vault-note", images = listOf(photo.absolutePath))
+        harness.repo.seed(journal.copy(isLocked = true))
+
+        assertTrue(harness.sync(isFullRevalidation = true).isSuccess)
+        assertNull(harness.cloud.getJournal(journal.id))
+        assertTrue(harness.cloud.allMediaKeys().isEmpty())
+        assertEquals(emptySet<String>(), harness.cloud.manifest?.journalMetadata?.keys)
     }
 
     @Test
@@ -107,5 +120,31 @@ class SyncUploadTest : BaseSyncTest() {
         assertEquals(count, harness.cloud.uploadJournalCallCount)
         assertEquals(count, harness.cloud.manifest?.totalJournals)
         assertEquals(count, harness.cloud.manifest?.journalMetadata?.size)
+    }
+
+    @Test
+    fun `journal with tags uploads to cloud and retains tags`() = runTest {
+        harness.givenLocalOnlyJournal("j_tags", tags = listOf("travel", "japan"), updatedAt = T0)
+
+        val result = harness.sync()
+
+        assertTrue(result.isSuccess)
+        val cloudJournal = harness.cloud.getJournal("j_tags")
+        assertNotNull(cloudJournal)
+        assertEquals(listOf("travel", "japan"), cloudJournal?.tags)
+    }
+
+    @Test
+    fun `renaming tag marks journal as modified and uploads updated tags`() = runTest {
+        harness.givenSyncedJournal("j1", tags = listOf("trip"), updatedAt = T1)
+
+        harness.repo.renameTag("trip", "travel")
+
+        val result = harness.sync()
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, harness.cloud.uploadJournalCallCount)
+        val cloudJournal = harness.cloud.getJournal("j1")
+        assertEquals(listOf("travel"), cloudJournal?.tags)
     }
 }

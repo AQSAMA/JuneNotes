@@ -64,7 +64,7 @@ fun JournalEmojiPickerSheet(
 
     LaunchedEffect(Unit) {
         if (emojiAssets == null) {
-            emojiAssets = loadEmojiAssets(context.resources)
+            emojiAssets = loadEmojiAssets(context.applicationContext.resources)
         }
     }
 
@@ -361,7 +361,7 @@ fun JournalEmojiPickerSheet(
             ) {
                 JuneFloatingAction(
                     onClick = onDismiss,
-                    label = stringResource(R.string.cancel),
+                    label = stringResource(R.string.action_cancel),
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.close_24px),
@@ -369,8 +369,8 @@ fun JournalEmojiPickerSheet(
                             modifier = Modifier.size(18.dp),
                         )
                     },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 JuneFloatingAction(
                     onClick = {
@@ -378,7 +378,7 @@ fun JournalEmojiPickerSheet(
                         stagedEmoji?.let { emojiPreferences.addRecentEmoji(it) }
                         onDismiss()
                     },
-                    label = stringResource(R.string.done),
+                    label = stringResource(R.string.action_done),
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.check_24px),

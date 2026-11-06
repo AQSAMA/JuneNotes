@@ -1,7 +1,9 @@
 package com.denser.june.core.data.repository
 
 import android.content.Context
+import androidx.room.withTransaction
 import com.denser.june.core.data.database.journal.JournalDao
+import com.denser.june.core.data.database.journal.JournalDatabase
 import com.denser.june.core.data.database.journal.TagEntity
 import com.denser.june.core.data.database.journal.JournalTagCrossRef
 import com.denser.june.core.data.mappers.asDomain
@@ -13,13 +15,22 @@ import com.denser.june.core.domain.preferences.SyncPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 class JournalRepositoryImpl(
     private val journalDao: JournalDao,
-    private val syncPrefs: SyncPreferences,
-    private val context: Context
+    private val journalDatabase: JournalDatabase? = null,
+    private val syncPrefs: SyncPreferences? = null,
+    private val context: Context? = null
 ) : JournalRepository {
+
+    internal var transactionRunner: suspend (suspend () -> Unit) -> Unit = { block ->
+        val db = journalDatabase
+        if (db != null) {
+            db.withTransaction { block() }
+        } else {
+            block()
+        }
+    }
 
     override fun getJournals(
         query: String?,
@@ -66,9 +77,11 @@ class JournalRepositoryImpl(
         val journalToInsert = if (journal.id.isBlank()) {
             journal.copy(id = java.util.UUID.randomUUID().toString())
         } else journal
-        
-        journalDao.insertJournal(journalToInsert.asEntity())
-        updateJournalTags(journalToInsert)
+
+        transactionRunner {
+            journalDao.insertJournal(journalToInsert.asEntity())
+            replaceJournalTags(journalToInsert.id, journalToInsert.tags)
+        }
         return journalToInsert.id
     }
 
@@ -111,20 +124,26 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun updateJournal(journal: Journal) {
-        journalDao.updateJournal(journal.asEntity())
-        updateJournalTags(journal)
+        transactionRunner {
+            journalDao.updateJournal(journal.asEntity())
+            replaceJournalTags(journal.id, journal.tags)
+        }
     }
 
-    private suspend fun updateJournalTags(journal: Journal) {
-        journalDao.deleteTagsForJournal(journal.id)
-        journal.tags.forEach { tagName ->
-            val trimmed = tagName.trim()
-            if (trimmed.isNotBlank()) {
-                journalDao.insertTag(TagEntity(name = trimmed))
-                journalDao.insertJournalTagCrossRef(JournalTagCrossRef(id = journal.id, tagName = trimmed))
-            }
-        }
-        journalDao.deleteOrphanedTags()
+    /**
+     * Rewrites the tag rows for a single journal. Must run inside a transaction: the delete
+     * followed by the inserts used to be separate transactions, so a process death in between
+     * could leave a journal without any tag cross references.
+     *
+     * Orphaned tags are intentionally not pruned here. This runs on every autosave, and
+     * [JournalDao.deleteOrphanedTags] is a full scan of the cross reference table.
+     */
+    private suspend fun replaceJournalTags(journalId: String, tags: List<String>) {
+        journalDao.deleteTagsForJournal(journalId)
+        val normalized = tags.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (normalized.isEmpty()) return
+        journalDao.insertTags(normalized.map { TagEntity(name = it) })
+        journalDao.insertJournalTagCrossRefs(normalized.map { JournalTagCrossRef(id = journalId, tagName = it) })
     }
 
 
@@ -143,28 +162,58 @@ class JournalRepositoryImpl(
     }
 
     override suspend fun renameTag(oldName: String, newName: String) {
-        val timestamp = System.currentTimeMillis()
-        
-        journalDao.updateTagName(oldName, newName)
-        journalDao.updateTagCrossRefName(oldName, newName)
-        
-        val journalsToUpdate = journalDao.getJournalsByTagNameSync(newName)
-        journalsToUpdate.forEach { entity ->
-            val updatedTags = entity.tags.map { if (it == oldName) newName else it }
-            if (updatedTags != entity.tags) {
-                journalDao.updateJournal(entity.copy(
-                    tags = updatedTags, 
-                    updatedAt = timestamp
-                ))
+        val trimmedOld = oldName.trim()
+        val trimmedNew = newName.trim()
+        if (trimmedOld.isEmpty() || trimmedNew.isEmpty() || trimmedOld == trimmedNew) return
+
+        transactionRunner {
+            val timestamp = System.currentTimeMillis()
+            val affectedJournals = journalDao.getAllJournalsByTagNameSync(trimmedOld)
+
+            journalDao.insertTag(TagEntity(name = trimmedNew))
+            journalDao.copyTagCrossRefs(trimmedOld, trimmedNew)
+            journalDao.deleteTagCrossRefs(trimmedOld)
+            journalDao.deleteTag(trimmedOld)
+
+            val updatedEntities = affectedJournals.mapNotNull { entity ->
+                val updatedTags = entity.tags.map { if (it == trimmedOld) trimmedNew else it }.distinct()
+                if (updatedTags != entity.tags) {
+                    entity.copy(tags = updatedTags, updatedAt = timestamp)
+                } else {
+                    null
+                }
+            }
+
+            if (updatedEntities.isNotEmpty()) {
+                journalDao.updateJournals(updatedEntities)
             }
         }
-        
-        journalDao.bumpJournalTimestampsByTag(newName, timestamp)
     }
 
     override suspend fun deleteTag(tagName: String) {
-        journalDao.bumpJournalTimestampsByTag(tagName, System.currentTimeMillis())
-        journalDao.deleteTag(tagName)
+        val trimmed = tagName.trim()
+        if (trimmed.isEmpty()) return
+
+        transactionRunner {
+            val timestamp = System.currentTimeMillis()
+            val affectedJournals = journalDao.getAllJournalsByTagNameSync(trimmed)
+
+            journalDao.deleteTagCrossRefs(trimmed)
+            journalDao.deleteTag(trimmed)
+
+            val updatedEntities = affectedJournals.mapNotNull { entity ->
+                val updatedTags = entity.tags.filter { it != trimmed }
+                if (updatedTags != entity.tags) {
+                    entity.copy(tags = updatedTags, updatedAt = timestamp)
+                } else {
+                    null
+                }
+            }
+
+            if (updatedEntities.isNotEmpty()) {
+                journalDao.updateJournals(updatedEntities)
+            }
+        }
     }
 
     override suspend fun toggleBookmark(id: String) {
@@ -173,6 +222,25 @@ class JournalRepositoryImpl(
             isBookmarked = !journal.isBookmarked,
             updatedAt = System.currentTimeMillis()
         ))
+    }
+
+    override suspend fun toggleLock(id: String) {
+        val journal = journalDao.getJournalById(id) ?: return
+        val newLocked = !journal.isLocked
+        val updated = if (newLocked) {
+            journal.copy(
+                isLocked = true,
+                cloudId = null,
+                syncedAt = null,
+                updatedAt = System.currentTimeMillis()
+            )
+        } else {
+            journal.copy(
+                isLocked = false,
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+        journalDao.updateJournal(updated)
     }
 
     override fun getDeletedJournals(): Flow<List<Journal>> {
@@ -224,5 +292,13 @@ class JournalRepositoryImpl(
 
     override suspend fun hasTombstones(): Boolean {
         return journalDao.hasTombstones()
+    }
+
+    override fun getLockedJournals(): Flow<List<Journal>> {
+        return journalDao.getLockedJournals().map { it.asDomain() }
+    }
+
+    override fun getLockedJournalsCount(): Flow<Int> {
+        return journalDao.getLockedJournalsCount()
     }
 }

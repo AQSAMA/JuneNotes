@@ -36,17 +36,11 @@ import com.denser.june.presentation.components.JuneFloatingAction
 import com.denser.june.presentation.components.JuneFloatingActionBar
 import com.denser.june.presentation.components.JunePlaceholderPage
 import com.denser.june.presentation.components.JuneTopAppBar
+import com.denser.june.presentation.components.JuneBackButton
 import com.denser.june.presentation.screens.editor.EditorAction
 import com.denser.june.presentation.screens.editor.EditorVM
-import com.denser.june.presentation.screens.editor.components.ActiveJournalSongBar
-import com.denser.june.presentation.screens.editor.components.EditSongScope
-import com.denser.june.presentation.screens.editor.components.EditSongView
-import com.denser.june.presentation.screens.editor.components.LibrarySongRow
+import com.denser.june.presentation.screens.editor.components.audio.*
 import com.denser.june.presentation.screens.editor.components.SongArtImportVM
-import com.denser.june.presentation.screens.editor.components.SongInputCard
-import com.denser.june.presentation.screens.editor.components.TrimmerStepView
-import com.denser.june.presentation.screens.editor.components.UnimportedSongRow
-import com.denser.june.presentation.screens.editor.components.UnimportedSongsHeader
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
@@ -135,13 +129,13 @@ fun AddSongScreen(
         currentStep = AddSongStep.Library
     }
 
-    BackHandler {
+    BackHandler(enabled = currentStep != AddSongStep.Library) {
         when (currentStep) {
             AddSongStep.Trimmer -> trimmerDismiss()
             AddSongStep.Edit, AddSongStep.EditJournal -> {
                 cancelEdit()
             }
-            AddSongStep.Library -> onNavigateBack()
+            AddSongStep.Library -> Unit
         }
     }
 
@@ -178,7 +172,7 @@ fun AddSongScreen(
                     )
                 },
                 navigationIcon = {
-                    FilledIconButton(
+                    JuneBackButton(
                         onClick = {
                             when (currentStep) {
                                 AddSongStep.Trimmer -> trimmerDismiss()
@@ -187,17 +181,8 @@ fun AddSongScreen(
                                 }
                                 AddSongStep.Library -> onNavigateBack()
                             }
-                        },
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                        )
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back_24px),
-                            contentDescription = "Back"
-                        )
-                    }
+                        }
+                    )
                 },
                 actions = {
                     when (currentStep) {
@@ -262,7 +247,7 @@ fun AddSongScreen(
                     JuneFloatingActionBar {
                         JuneFloatingAction(
                             onClick = { trimmerDismiss() },
-                            label = "Cancel",
+                            label = stringResource(R.string.action_cancel),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.close_24px),
@@ -274,7 +259,7 @@ fun AddSongScreen(
                         )
                         JuneFloatingAction(
                             onClick = { pendingTrimmerSave?.invoke() },
-                            label = "Done",
+                            label = stringResource(R.string.action_done),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.check_24px),
@@ -291,7 +276,7 @@ fun AddSongScreen(
                     JuneFloatingActionBar {
                         JuneFloatingAction(
                             onClick = cancelEdit,
-                            label = "Cancel",
+                            label = stringResource(R.string.action_cancel),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.close_24px),
@@ -320,7 +305,7 @@ fun AddSongScreen(
                                 currentStep = AddSongStep.Library
                             },
                             enabled = !isArtImportBusy,
-                            label = "Save",
+                            label = stringResource(R.string.action_save),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.check_24px),
@@ -335,7 +320,7 @@ fun AddSongScreen(
                     JuneFloatingActionBar {
                         JuneFloatingAction(
                             onClick = cancelEdit,
-                            label = "Cancel",
+                            label = stringResource(R.string.action_cancel),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.close_24px),
@@ -364,7 +349,7 @@ fun AddSongScreen(
                                 currentStep = AddSongStep.Library
                             },
                             enabled = !isArtImportBusy,
-                            label = "Save",
+                            label = stringResource(R.string.action_save),
                             icon = {
                                 Icon(
                                     painter = painterResource(R.drawable.check_24px),
@@ -419,12 +404,12 @@ fun AddSongScreen(
                             cancelEdit()
                         }
                     ) {
-                        Text("Remove")
+                        Text(stringResource(R.string.action_remove))
                     }
                 },
                 dismissButton = {
                     OutlinedButton(onClick = { showDeleteConfirm = false }) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.action_cancel))
                     }
                 }
             )

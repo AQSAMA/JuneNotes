@@ -25,20 +25,16 @@ class DatabaseFactory(
                 DatabaseMigrations.MIGRATION_3_4,
                 DatabaseMigrations.MIGRATION_4_5,
                 DatabaseMigrations.MIGRATION_5_6,
-                DatabaseMigrations.MIGRATION_6_7
+                DatabaseMigrations.MIGRATION_6_7,
+                DatabaseMigrations.MIGRATION_7_8
             )
             setQueryCallback({ sqlQuery, _ ->
                 if (AppLogger.isCategoryEnabled(AppLogger.Category.DATABASE)) {
                     val cleanedQuery = sqlQuery.replace(Regex("\\s+"), " ").trim()
-                    val formattedQuery = if (cleanedQuery.length > 200) {
-                        cleanedQuery.take(200) + "..."
-                    } else {
-                        cleanedQuery
-                    }
                     AppLogger.d(
                         AppLogger.Category.DATABASE,
                         "RoomDatabase",
-                        "Query: $formattedQuery"
+                        "Query: $cleanedQuery"
                     )
                 }
             }, java.util.concurrent.Executor { it.run() })

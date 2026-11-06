@@ -42,7 +42,7 @@ internal fun CompactNotesBar(
             verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onNavigation) {
                 Icon(painterResource(if (searching) R.drawable.arrow_back_24px else R.drawable.menu_24px),
-                    stringResource(if (searching) R.string.back else R.string.folder_open_sidebar))
+                    stringResource(if (searching) R.string.action_back else R.string.folder_open_sidebar))
             }
             if (searching) {
                 TextField(value = query, onValueChange = onQuery, singleLine = true,
@@ -53,7 +53,7 @@ internal fun CompactNotesBar(
                     keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                     trailingIcon = if (query.isNotEmpty()) { {
                         IconButton(onClick = { onQuery("") }) {
-                            Icon(painterResource(R.drawable.close_24px), stringResource(R.string.clear))
+                            Icon(painterResource(R.drawable.close_24px), stringResource(R.string.action_clear))
                         }
                     } } else null)
             } else {
@@ -71,7 +71,7 @@ internal fun CompactNotesBar(
                 }
                 syncIndicator()
                 IconButton(onClick = onSettings) {
-                    Icon(painterResource(R.drawable.settings_24px), stringResource(R.string.settings))
+                    Icon(painterResource(R.drawable.settings_24px), stringResource(R.string.label_settings))
                 }
             }
         }

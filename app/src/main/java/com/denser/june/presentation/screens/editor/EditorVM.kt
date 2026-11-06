@@ -5,13 +5,14 @@ import android.util.Patterns
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.navigation.toRoute
+
 import com.denser.june.core.domain.repository.JournalRepository
 import com.denser.june.core.domain.repository.SongRepository
 import com.denser.june.core.domain.preferences.JournalPreferences
 import com.denser.june.core.domain.markdown.MarkdownInput
 import kotlinx.coroutines.CancellationException
 import com.denser.june.core.domain.model.Journal
+import com.denser.june.core.domain.model.JournalTheme
 import com.denser.june.core.domain.model.SongDetails
 import com.denser.june.core.domain.model.SongFetchEvent
 import com.denser.june.core.domain.model.SongFetchProgress
@@ -23,6 +24,7 @@ import android.content.Context
 import com.denser.june.core.media.compress.CompressUtils
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
+import com.denser.june.core.domain.billing.BillingHandler
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,21 +38,25 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
+import com.denser.june.presentation.screens.settings.screens.lock.LockSessionVM
 
 @OptIn(FlowPreview::class)
 class EditorVM(
-    savedStateHandle: SavedStateHandle,
+    initialRoute: Route.Editor? = null,
+    savedStateHandle: SavedStateHandle = SavedStateHandle(),
     private val context: Context,
     private val journalRepo: JournalRepository,
     private val journalPrefs: JournalPreferences,
     private val songRepo: SongRepository,
     private val navigator: AppNavigator,
-    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository
+    private val folderRepo: com.denser.june.core.domain.folder.FolderRepository,
+    private val billingHandler: BillingHandler,
+    private val lockSessionVM: LockSessionVM
 ) : ViewModel() {
-    private val editorRoute = savedStateHandle.tryRoute<Route.Editor>()
+    private val editorRoute = initialRoute
     private val journalId = editorRoute?.journalId
-        ?: savedStateHandle.tryRoute<Route.JournalMedia>()?.journalId
-        ?: savedStateHandle.tryRoute<Route.JournalMediaDetail>()?.journalId
+
+
 
     val hyphenState = HyphenTextState(
         initialText = (editorRoute?.initialContent ?: "").takeIf(MarkdownInput::supportsRichText) ?: "",
@@ -110,6 +116,30 @@ class EditorVM(
         }
 
         viewModelScope.launch {
+            journalPrefs.isMarkdownEnabled().collect { enabled ->
+                _state.update { it.copy(isMarkdownEnabled = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
+            journalPrefs.isKeyboardAutocorrectEnabled().collect { enabled ->
+                _state.update { it.copy(isKeyboardAutocorrectEnabled = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
+            journalPrefs.isKeyboardCapitalizationEnabled().collect { enabled ->
+                _state.update { it.copy(isKeyboardCapitalizationEnabled = enabled) }
+            }
+        }
+
+        viewModelScope.launch {
+            journalPrefs.editorLayoutDirection().collect { direction ->
+                _state.update { it.copy(editorLayoutDirection = direction) }
+            }
+        }
+
+        viewModelScope.launch {
             combine(
                 songRepo.getLibrarySongs(),
                 journalRepo.getJournals()
@@ -158,19 +188,15 @@ class EditorVM(
         }
     }
 
-
-    private inline fun <reified T : Any> SavedStateHandle.tryRoute(): T? {
-        return try {
-            toRoute<T>()
-        } catch (e: Exception) {
-            null
-        }
-    }
-
     fun onAction(action: EditorAction) {
         when (action) {
             is EditorAction.ChangeTitle -> updateState { it.copy(title = action.title) }
-            is EditorAction.ChangeContent -> updateState { it.copy(content = action.content) }
+            is EditorAction.ChangeContent -> {
+                if (!_state.value.isMarkdownEnabled) {
+                    hyphenState.setMarkdown(action.content)
+                }
+                updateState { it.copy(content = action.content) }
+            }
             is EditorAction.SnapContentBaseline -> {
                 _state.update { it.copy(content = action.content) }
                 existingJournal = existingJournal?.copy(content = action.content)
@@ -220,6 +246,12 @@ class EditorVM(
             is EditorAction.Refresh -> updateState { it }
 
             is EditorAction.UpdateTags -> updateState { it.copy(tags = action.tags) }
+            is EditorAction.SetJournalFont -> {
+                updateState { it.copy(font = action.fontName, fontVariation = action.variation) }
+            }
+            is EditorAction.SetJournalTheme -> {
+                updateState { it.copy(theme = action.theme) }
+            }
             is EditorAction.SearchTags -> {
                 searchTagsJob?.cancel()
                 searchTagsJob = viewModelScope.launch {
@@ -329,6 +361,7 @@ class EditorVM(
             is EditorAction.RemoveLocation -> updateState { it.copy(location = null) }
 
             is EditorAction.ToggleBookmark -> toggleBookmark()
+            is EditorAction.ToggleLock -> toggleLock()
             is EditorAction.ToggleArchive -> toggleArchive()
             is EditorAction.SaveJournal -> saveJournal()
             is EditorAction.SaveJournalAndNavigateBack -> saveJournal(navigateBack = true)
@@ -399,7 +432,10 @@ class EditorVM(
                 currentState.emoji != null ||
                 currentState.tags.isNotEmpty() ||
                 currentState.songDetails != null ||
-                currentState.location != null
+                currentState.location != null ||
+                currentState.font != null ||
+                currentState.fontVariation != null ||
+                currentState.theme != null
 
         return original.title.trim() != currentState.title.trim() ||
                 original.content.trim() != currentState.content.trim() ||
@@ -408,7 +444,10 @@ class EditorVM(
                 original.images != currentState.images ||
                 original.location != currentState.location ||
                 original.dateTime != currentState.dateTime ||
-                original.songDetails != currentState.songDetails
+                original.songDetails != currentState.songDetails ||
+                currentState.isFontDirty ||
+                currentState.isThemeDirty ||
+                original.isLocked != currentState.isLocked
     }
 
     private fun toggleBookmark() {
@@ -422,6 +461,32 @@ class EditorVM(
                     isBookmarked = newBookmarkState,
                     updatedAt = System.currentTimeMillis()
                 )
+                journalRepo.updateJournal(updatedJournal)
+                existingJournal = updatedJournal
+            }
+        }
+    }
+
+    private fun toggleLock() {
+        viewModelScope.launch {
+            val currentState = _state.value
+            val newLockState = !currentState.isLocked
+            _state.update { it.copy(isLocked = newLockState) }
+
+            existingJournal?.let {
+                val updatedJournal = if (newLockState) {
+                    it.copy(
+                        isLocked = true,
+                        cloudId = null,
+                        syncedAt = null,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                } else {
+                    it.copy(
+                        isLocked = false,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                }
                 journalRepo.updateJournal(updatedJournal)
                 existingJournal = updatedJournal
             }
@@ -450,6 +515,10 @@ class EditorVM(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             val journal = journalRepo.getJournalById(id)
+            if (journal?.isLocked == true && !lockSessionVM.isVaultUnlocked.value) {
+                navigator.navigateBack()
+                return@launch
+            }
 
             if (journal != null) {
                 var details = journal.songDetails
@@ -489,7 +558,17 @@ class EditorVM(
                 } else {
                     journal.content
                 }
-                existingJournal = existingJournal!!.copy(content = parsedContent)
+                val isPlus = billingHandler.isPlus.value
+                val loadedFont = if (isPlus) journal.font else null
+                val loadedFontVariation = if (isPlus) journal.fontVariation else null
+                val loadedTheme = if (isPlus) journal.theme else null
+
+                existingJournal = existingJournal!!.copy(
+                    content = parsedContent,
+                    font = loadedFont,
+                    fontVariation = loadedFontVariation,
+                    theme = loadedTheme
+                )
                 _state.update {
                     it.copy(
                         journalId = journal.id,
@@ -505,8 +584,15 @@ class EditorVM(
                         updatedAt = journal.updatedAt,
                         dateTime = journal.dateTime,
                         isBookmarked = journal.isBookmarked,
+                        isLocked = journal.isLocked,
                         isArchived = journal.isArchived,
                         isDraft = journal.isDraft,
+                        font = loadedFont,
+                        fontVariation = loadedFontVariation,
+                        initialFont = loadedFont,
+                        initialFontVariation = loadedFontVariation,
+                        theme = loadedTheme,
+                        initialTheme = loadedTheme,
                         deletedAt = journal.deletedAt,
                         syncedAt = journal.syncedAt,
                         cloudId = journal.cloudId,
@@ -607,8 +693,12 @@ class EditorVM(
                 updatedAt = currentTime,
                 dateTime = currentState.dateTime,
                 isBookmarked = currentState.isBookmarked,
+                isLocked = currentState.isLocked,
                 isArchived = currentState.isArchived,
-                isDraft = true
+                isDraft = true,
+                theme = currentState.theme,
+                font = currentState.font,
+                fontVariation = currentState.fontVariation
             )
 
             if (isNewEntry) {
@@ -652,6 +742,15 @@ class EditorVM(
                     val currentTime = System.currentTimeMillis()
                     val currentMarkdown = if (isMarkdownEnabled && !currentState.usePlainTextEditor && hyphenState.text.isNotEmpty()) hyphenState.toMarkdown() else currentState.content
 
+                    val existing = existingJournal
+                    if (existing != null && !existing.isDraft &&
+                        !isDirtyCheck(currentState.copy(content = currentMarkdown))
+                    ) {
+                        _state.update { it.copy(isDirty = false) }
+                        if (navigateBack) navigator.navigateBack()
+                        return@withLock
+                    }
+
                     val journalToSave = Journal(
                         id = existingJournal?.id ?: "",
                         title = currentState.title,
@@ -667,8 +766,12 @@ class EditorVM(
                         isBookmarked = currentState.isBookmarked,
                         isArchived = currentState.isArchived,
                         isDraft = false,
-                        syncedAt = existingJournal?.syncedAt,
-                        cloudId = existingJournal?.cloudId
+                        isLocked = currentState.isLocked,
+                        theme = currentState.theme,
+                        font = currentState.font,
+                        fontVariation = currentState.fontVariation,
+                        syncedAt = if (currentState.isLocked) null else existingJournal?.syncedAt,
+                        cloudId = if (currentState.isLocked) null else existingJournal?.cloudId
                     )
 
                     val previousImages = existingJournal?.images.orEmpty()
@@ -685,7 +788,15 @@ class EditorVM(
                     (previousImages + currentState.images).toSet().forEach {
                         CompressUtils.cleanUncompressedOriginalFile(context, it)
                     }
-                    _state.update { it.copy(isDirty = false, isDraft = false) }
+                    _state.update {
+                        it.copy(
+                            isDirty = false,
+                            isDraft = false,
+                            initialFont = it.font,
+                            initialFontVariation = it.fontVariation,
+                            initialTheme = it.theme
+                        )
+                    }
                     if (navigateBack) navigator.navigateBack()
                 }
             } finally {

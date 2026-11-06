@@ -23,8 +23,8 @@ import com.denser.june.core.R
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.utils.toFullDate
 import com.denser.june.presentation.components.JunePlaceholderPage
-import com.denser.june.presentation.screens.editor.components.JournalMosaicCard
-import com.denser.june.presentation.screens.editor.components.MediaOperations
+import com.denser.june.presentation.components.journal.JournalMosaicCard
+import com.denser.june.presentation.components.journal.MediaOperations
 import com.denser.june.presentation.utils.UiUtils
 
 /** One lazy layout for both modes, retaining the visible note when the column count changes. */

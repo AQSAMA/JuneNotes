@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
+import com.denser.june.R as AppR
 import com.denser.june.core.domain.folder.Folder
 import com.denser.june.presentation.components.JuneConfirmationDialog
 import kotlinx.coroutines.flow.first
@@ -83,12 +84,12 @@ internal fun FolderSidebar(
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = if (compact) 20.dp else 24.dp, end = 8.dp, top = 8.dp, bottom = if (compact) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(if (compact) R.string.folders else R.string.app_name),
+                Text(stringResource(if (compact) R.string.folders else AppR.string.app_name),
                     style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 if (compact) IconButton(onClick = { managing = !managing }, modifier = Modifier.testTag("sidebar-manage")) {
                     Icon(painterResource(if (managing) R.drawable.check_24px else R.drawable.edit_24px),
-                        stringResource(if (managing) R.string.done else R.string.folder_organize))
+                        stringResource(if (managing) R.string.action_done else R.string.folder_organize))
                 }
                 IconButton(onClick = onClose) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.folder_close_sidebar)) }
             }
@@ -223,7 +224,7 @@ internal fun FolderSidebar(
             } else TextButton(onClick = { managing = !managing }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("sidebar-manage")) {
                 Icon(painterResource(if (managing) R.drawable.check_24px else R.drawable.drag_indicator_24px), null, Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(if (managing) R.string.done else R.string.folder_organize))
+                Text(stringResource(if (managing) R.string.action_done else R.string.folder_organize))
             }
         }
     }
@@ -241,13 +242,13 @@ internal fun FolderSidebar(
                 SidebarAction(R.drawable.create_new_folder_24px, stringResource(R.string.folder_new_subfolder)) { createParent = folder.id; creating = true; options = null }
                 SidebarAction(R.drawable.edit_24px, stringResource(R.string.rename)) { renaming = folder; options = null }
                 SidebarAction(R.drawable.drive_folder_upload_24px, moveLabel) { moving = FolderDrag(folder.id, true, folder.name); options = null }
-                SidebarAction(R.drawable.delete_24px, stringResource(R.string.delete)) { deleting = folder; options = null }
+                SidebarAction(R.drawable.delete_24px, stringResource(R.string.action_delete)) { deleting = folder; options = null }
             }
         }
     }
     deleting?.let { folder ->
         JuneConfirmationDialog(onDismiss = { deleting = null }, onConfirm = { viewModel.delete(folder.id); deleting = null },
-            title = stringResource(R.string.folder_delete_title), description = stringResource(R.string.folder_delete_description), confirmButtonText = stringResource(R.string.delete))
+            title = stringResource(R.string.folder_delete_title), description = stringResource(R.string.folder_delete_description), confirmButtonText = stringResource(R.string.action_delete))
     }
     moving?.let { FolderDestinationSheet(it, onDismiss = { moving = null }) }
 }

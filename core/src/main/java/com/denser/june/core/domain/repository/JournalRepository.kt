@@ -19,6 +19,8 @@ interface JournalRepository {
     suspend fun getLatestJournal(): Journal?
     fun getJournalsByDateRange(startDate: Long, endDate: Long): Flow<List<Journal>>
     fun getJournalsByMultipleTags(tags: List<String>): Flow<List<Journal>>
+    fun getLockedJournals(): Flow<List<Journal>>
+    fun getLockedJournalsCount(): Flow<Int>
     
     suspend fun insertJournal(journal: Journal): String
     /** Atomically replace only the expected attachment list, retaining concurrent note edits. */
@@ -54,6 +56,7 @@ interface JournalRepository {
     fun getUniqueTags(): Flow<List<String>>
     fun getTagCounts(): Flow<Map<String, Int>>
     suspend fun toggleBookmark(id: String)
+    suspend fun toggleLock(id: String)
     suspend fun renameTag(oldName: String, newName: String)
     suspend fun deleteTag(tagName: String)
 

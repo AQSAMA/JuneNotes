@@ -21,6 +21,9 @@ import com.denser.june.core.utils.formatBytes
 import com.denser.june.core.utils.toMediumDate
 import com.denser.june.presentation.components.JuneDropdownMenu
 import com.denser.june.presentation.components.JuneDropdownMenuItem
+import com.denser.june.presentation.components.JuneBackButton
+import com.denser.june.presentation.components.JuneCloseButton
+import com.denser.june.presentation.components.JuneMoreOptionsButton
 
 @Composable
 fun LightboxTopBar(
@@ -65,17 +68,23 @@ fun LightboxTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            FilledIconButton(
-                onClick = onBackOrCancel,
-                enabled = !isCompressing,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                ),
-            ) {
-                Icon(
-                    painter = painterResource(if (isCompressMode) R.drawable.close_24px else R.drawable.arrow_back_24px),
-                    contentDescription = if (isCompressMode) "Cancel" else "Back",
+            val btnColors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+            )
+            if (isCompressMode) {
+                JuneCloseButton(
+                    onClick = onBackOrCancel,
+                    enabled = !isCompressing,
+                    colors = btnColors,
+                    contentDescription = stringResource(R.string.action_cancel)
+                )
+            } else {
+                JuneBackButton(
+                    onClick = onBackOrCancel,
+                    enabled = !isCompressing,
+                    colors = btnColors,
+                    contentDescription = stringResource(R.string.action_back)
                 )
             }
 
@@ -178,7 +187,7 @@ fun LightboxTopBar(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.check_24px),
-                        contentDescription = "Save",
+                        contentDescription = stringResource(R.string.action_save),
                     )
                 }
             } else {
@@ -196,25 +205,18 @@ fun LightboxTopBar(
                 var showMenu by remember { mutableStateOf(false) }
 
                 Box {
-                    FilledIconButton(
+                    JuneMoreOptionsButton(
                         onClick = { showMenu = true },
                         enabled = !isCompressing,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = if (showMenu) MaterialTheme.colorScheme.primaryContainer else if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = if (showMenu) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                        ),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.more_vert_24px),
-                            contentDescription = "More options",
-                        )
-                    }
+                        colors = btnColors
+                    )
 
                     val canCompressFurther = availablePresets.any { it != CompressionPreset.ORIGINAL } || hasUncompressedOriginal
 
                     JuneDropdownMenu(
                         expanded = showMenu && !isCompressing,
                         onDismissRequest = { showMenu = false },
+                        containerColor = if (isDarkTheme) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh,
                     ) {
                         JuneDropdownMenuItem(
                             text = { Text("Info") },
@@ -237,7 +239,7 @@ fun LightboxTopBar(
                         }
                         if (onDeleteMedia != null) {
                             JuneDropdownMenuItem(
-                                text = { Text(stringResource(R.string.delete)) },
+                                text = { Text(stringResource(R.string.action_delete)) },
                                 onClick = {
                                     showMenu = false
                                     if (!isCompressing) onDeleteMedia()

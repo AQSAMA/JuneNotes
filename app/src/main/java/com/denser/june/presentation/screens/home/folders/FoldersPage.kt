@@ -34,6 +34,9 @@ import com.denser.june.core.domain.folder.Folder
 import com.denser.june.core.domain.model.Journal
 import com.denser.june.core.domain.model.enums.TimeFormat
 import com.denser.june.presentation.components.*
+import com.denser.june.presentation.components.journal.ExportJournalSheet
+import com.denser.june.presentation.components.journal.JournalCard
+import com.denser.june.presentation.components.journal.JournalOptionsSheet
 import com.denser.june.presentation.navigation.*
 import com.denser.june.presentation.screens.home.components.*
 import com.denser.june.presentation.utils.UiUtils
@@ -57,7 +60,6 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
     var deleteFolder by remember { mutableStateOf<Folder?>(null) }
     var optionsFolder by remember { mutableStateOf<Folder?>(null) }
     var optionsNote by remember { mutableStateOf<Journal?>(null) }
-    var deleteNote by remember { mutableStateOf<Journal?>(null) }
     var exportNote by remember { mutableStateOf<Journal?>(null) }
     var moveItem by remember { mutableStateOf<FolderDrag?>(null) }
     var addExisting by remember { mutableStateOf(false) }
@@ -73,7 +75,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
     val addedMessage = stringResource(R.string.folder_note_added)
     val failureMessage = stringResource(R.string.folder_move_failed)
     val is24Hour = time == TimeFormat.TWENTY_FOUR_HOUR
-    ExportJournalBottomSheet(exportNote, onDismiss = { exportNote = null })
+    ExportJournalSheet(exportNote, onDismiss = { exportNote = null })
 
     fun accepts(item: FolderDrag, parent: String?): Boolean = if (item.folder) state.snapshot.canMove(item.id, parent) else true
 
@@ -282,27 +284,24 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
                 Text(folder.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(12.dp))
                 FolderAction(R.drawable.edit_24px, stringResource(R.string.rename)) { renameFolder = folder; optionsFolder = null }
                 FolderAction(R.drawable.drive_folder_upload_24px, stringResource(R.string.folder_move)) { moveItem = FolderDrag(folder.id, true); optionsFolder = null }
-                FolderAction(R.drawable.delete_24px, stringResource(R.string.delete)) { deleteFolder = folder; optionsFolder = null }
+                FolderAction(R.drawable.delete_24px, stringResource(R.string.action_delete)) { deleteFolder = folder; optionsFolder = null }
             }
         }
     }
     deleteFolder?.let { folder ->
         JuneConfirmationDialog(onDismiss = { deleteFolder = null }, onConfirm = { viewModel.delete(folder.id); deleteFolder = null },
-            title = stringResource(R.string.folder_delete_title), description = stringResource(R.string.folder_delete_description), confirmButtonText = stringResource(R.string.delete))
+            title = stringResource(R.string.folder_delete_title), description = stringResource(R.string.folder_delete_description), confirmButtonText = stringResource(R.string.action_delete))
     }
     optionsNote?.let { selected ->
         val note = state.notes.firstOrNull { it.id == selected.id }
         if (note != null) {
             ModalBottomSheet(onDismissRequest = { optionsNote = null }) {
                 JournalOptionsSheet(note, is24Hour, onToggleBookmark = { viewModel.bookmark(note.id) },
-                    onExportMarkdown = { exportNote = note; optionsNote = null }, onDeleteOrRestore = { deleteNote = note; optionsNote = null },
+                    onDismiss = { optionsNote = null },
+                    onExportMarkdown = { exportNote = note; optionsNote = null }, onDeleteOrRestore = { viewModel.deleteNote(note.id) },
                     onMoveToFolder = { moveItem = FolderDrag(note.id, false); optionsNote = null })
             }
         }
-    }
-    deleteNote?.let { note ->
-        DeleteConfirmationSheet(sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            onDismissRequest = { deleteNote = null }, onConfirm = { viewModel.deleteNote(note.id); deleteNote = null })
     }
     moveItem?.let { item -> FolderDestinationSheet(item, onDismiss = { moveItem = null }) }
     if (addExisting) {
@@ -384,6 +383,6 @@ internal fun FolderNameDialog(initial: String, onDismiss: () -> Unit, onSave: (S
         text = { OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(stringResource(R.string.folder_name)) }, singleLine = true,
             modifier = Modifier.focusRequester(focus), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) onSave(name.trim()) })) },
-        confirmButton = { TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } })
+        confirmButton = { TextButton(onClick = { onSave(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.action_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } })
 }

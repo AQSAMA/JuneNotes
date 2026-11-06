@@ -20,6 +20,8 @@ import com.denser.june.presentation.screens.home.timeline.TimelineVM
 import com.denser.june.presentation.screens.settings.screens.sync.SyncVM
 import com.denser.june.presentation.screens.settings.screens.trash.BinVM
 import com.denser.june.presentation.screens.settings.screens.reminder.ReminderVM
+import com.denser.june.presentation.screens.settings.screens.vault.VaultVM
+import com.denser.june.presentation.screens.settings.screens.lock.LockSessionVM
 import com.denser.june.presentation.utils.ExternalIntentProcessor
 import com.denser.june.presentation.utils.StartupManager
 import org.koin.core.module.dsl.singleOf
@@ -60,13 +62,28 @@ val juneModules = module {
     }
     single { StartupManager(get(), get()) }
     singleOf(::ExternalIntentProcessor)
+    singleOf(::LockSessionVM)
     viewModelOf(::SettingsVM)
-    viewModelOf(::EditorVM)
+    viewModel { params ->
+        EditorVM(
+            initialRoute = params.getOrNull(),
+            savedStateHandle = getOrNull() ?: androidx.lifecycle.SavedStateHandle(),
+            context = get(),
+            journalRepo = get(),
+            journalPrefs = get(),
+            songRepo = get(),
+            navigator = get(),
+            folderRepo = get(),
+            billingHandler = get(),
+            lockSessionVM = get()
+        )
+    }
     viewModelOf(::JournalsVM)
     viewModelOf(::FoldersVM)
     viewModelOf(::TagsVM)
     viewModelOf(::TimelineVM)
     viewModelOf(::BinVM)
+    viewModelOf(::VaultVM)
     viewModelOf(::SyncVM)
     viewModelOf(::ReminderVM)
 

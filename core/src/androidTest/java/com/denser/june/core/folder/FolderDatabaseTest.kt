@@ -52,6 +52,51 @@ class FolderDatabaseTest {
         }
     }
 
+    @Test fun combinedMigrationPreservesForkFoldersAndPendingMedia() {
+        val name = "combined-fork-migration"
+        migrations.createDatabase(name, 7).use { db ->
+            db.execSQL("INSERT INTO folders VALUES ('folder','Reading',NULL,0,1,0)")
+            db.execSQL("INSERT INTO pending_media_changes VALUES ('photo.jpg','generation')")
+        }
+        migrations.runMigrationsAndValidate(name, 8, true, DatabaseMigrations.MIGRATION_7_8).use { db ->
+            db.query("SELECT name FROM folders WHERE id = 'folder'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Reading", cursor.getString(0))
+            }
+            db.query("SELECT generation FROM pending_media_changes WHERE fileName = 'photo.jpg'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("generation", cursor.getString(0))
+            }
+        }
+    }
+
+    @Test fun combinedMigrationAcceptsUpstreamVersionSixAndPreservesLockedNotes() {
+        val name = "combined-upstream-migration"
+        migrations.createDatabase(name, 6).use { db ->
+            // Reproduce the independently released upstream schema at the same version.
+            db.execSQL("DROP TABLE folders")
+            db.execSQL("DROP TABLE folder_journals")
+            db.execSQL("DROP TABLE folder_sync_state")
+            db.execSQL("ALTER TABLE journals ADD COLUMN isLocked INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE journals ADD COLUMN theme TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE journals ADD COLUMN font TEXT DEFAULT NULL")
+            db.execSQL("ALTER TABLE journals ADD COLUMN fontVariation TEXT DEFAULT NULL")
+            db.execSQL("""
+                INSERT INTO journals (id,title,content,images,tags,createdAt,dateTime,isBookmarked,isArchived,isDraft,isLocked,font)
+                VALUES ('locked','Locked note','Text','[]','[]',1,1,0,0,0,1,'Recursive')
+            """.trimIndent())
+        }
+        migrations.runMigrationsAndValidate(
+            name, 8, true, DatabaseMigrations.MIGRATION_6_7, DatabaseMigrations.MIGRATION_7_8
+        ).use { db ->
+            db.query("SELECT isLocked, font FROM journals WHERE id = 'locked'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(1, cursor.getInt(0))
+                assertEquals("Recursive", cursor.getString(1))
+            }
+        }
+    }
+
     @Test fun moveReorderDeleteAndTrashRestoreKeepNotesIntact() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val db = Room.inMemoryDatabaseBuilder(context, JournalDatabase::class.java).build()
