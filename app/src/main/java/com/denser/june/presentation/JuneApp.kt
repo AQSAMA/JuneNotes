@@ -8,7 +8,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -26,6 +29,7 @@ import com.denser.june.presentation.theme.LocalInternetAllowed
 import com.denser.june.presentation.theme.LocalSyncEnabled
 import com.denser.june.presentation.utils.StartupManager
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import org.koin.compose.koinInject
 import com.denser.june.core.domain.billing.BillingHandler
 import com.denser.june.presentation.plus.JunePlusPaywallScreen
@@ -49,7 +53,17 @@ fun JuneApp(
     val appState by mainVM.state.collectAsStateWithLifecycle()
 
     val navigator = koinInject<AppNavigator>()
-    val backStack = remember { mutableStateListOf<Route>(Route.Home) }
+    val backStack = rememberSaveable(
+        saver = listSaver<SnapshotStateList<Route>, String>(
+            // The vault must establish a fresh unlock session after recreation.
+            save = { stack ->
+                stack.takeWhile { it != Route.Vault }.map { Json.encodeToString(Route.serializer(), it) }
+            },
+            restore = { routes ->
+                routes.map { Json.decodeFromString(Route.serializer(), it) }.toMutableStateList()
+            }
+        )
+    ) { mutableStateListOf<Route>(Route.Home) }
 
     val startupManager = koinInject<StartupManager>()
     val pendingWhatsChanged by startupManager.pendingWhatsChanged.collectAsStateWithLifecycle(initialValue = null)

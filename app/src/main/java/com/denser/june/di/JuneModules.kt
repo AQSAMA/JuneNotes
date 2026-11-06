@@ -74,7 +74,8 @@ val juneModules = module {
             songRepo = get(),
             navigator = get(),
             folderRepo = get(),
-            billingHandler = get()
+            billingHandler = get(),
+            lockSessionVM = get()
         )
     }
     viewModelOf(::JournalsVM)

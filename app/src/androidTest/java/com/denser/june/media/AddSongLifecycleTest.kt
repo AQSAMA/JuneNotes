@@ -43,7 +43,7 @@ class AddSongLifecycleTest {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T = EditorVM(
                     savedStateHandle = SavedStateHandle(), context = context, journalRepo = koin.get(),
                     journalPrefs = koin.get(), songRepo = koin.get(), navigator = JuneNavigator(),
-                    folderRepo = koin.get(), billingHandler = koin.get()
+                    folderRepo = koin.get(), billingHandler = koin.get(), lockSessionVM = koin.get()
                 ) as T
             })[EditorVM::class.java]
         }

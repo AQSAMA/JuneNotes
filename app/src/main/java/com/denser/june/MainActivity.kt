@@ -69,9 +69,9 @@ class MainActivity : AppCompatActivity() {
             val result = externalIntentProcessor.processIntent(intent)
             val route = result.getOrElse { error ->
                 val message = if (error is com.denser.june.core.domain.markdown.MarkdownTooLargeException) {
-                    getString(R.string.markdown_file_too_large)
+                    getString(com.denser.june.core.R.string.markdown_file_too_large)
                 } else {
-                    getString(R.string.markdown_file_open_failed)
+                    getString(com.denser.june.core.R.string.markdown_file_open_failed)
                 }
                 android.widget.Toast.makeText(this@MainActivity, message, android.widget.Toast.LENGTH_LONG).show()
                 return@launch

@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 import com.denser.june.core.R
+import com.denser.june.R as AppR
 import com.denser.june.presentation.screens.home.tags.TagsVM
 import com.denser.june.presentation.components.SyncIndicator
 import com.denser.june.MainVM
@@ -192,7 +193,7 @@ fun HomeScreen() {
                                 )
                             } else {
                                 Text(
-                                    text = stringResource(R.string.app_name),
+                                    text = stringResource(AppR.string.app_name),
                                     fontWeight = FontWeight.Bold,
                                 )
                             }

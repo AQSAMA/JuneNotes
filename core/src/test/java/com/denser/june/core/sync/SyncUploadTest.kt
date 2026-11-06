@@ -8,6 +8,7 @@ import com.denser.june.core.sync.harness.BaseSyncTest
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,6 +30,18 @@ class SyncUploadTest : BaseSyncTest() {
         harness.assertJournalSyncedLocally("j2")
         harness.assertJournalSyncedLocally("j3")
         assertEquals(3, harness.cloud.manifest?.totalJournals)
+    }
+
+    @Test
+    fun `locked journal and its exclusive attachment stay local`() = runTest {
+        val photo = harness.givenMediaFileOnDisk("vault.jpg")
+        val journal = harness.givenLocalOnlyJournal("vault-note", images = listOf(photo.absolutePath))
+        harness.repo.seed(journal.copy(isLocked = true))
+
+        assertTrue(harness.sync(isFullRevalidation = true).isSuccess)
+        assertNull(harness.cloud.getJournal(journal.id))
+        assertTrue(harness.cloud.allMediaKeys().isEmpty())
+        assertEquals(emptySet<String>(), harness.cloud.manifest?.journalMetadata?.keys)
     }
 
     @Test

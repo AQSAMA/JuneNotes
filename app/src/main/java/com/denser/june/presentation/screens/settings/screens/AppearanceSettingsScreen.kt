@@ -19,6 +19,7 @@ import com.denser.june.presentation.components.JuneAppBarType
 import com.denser.june.presentation.components.JuneTopAppBar
 import com.denser.june.presentation.components.JuneBackButton
 import com.denser.june.presentation.screens.settings.SettingsVM
+import com.denser.june.presentation.screens.settings.SettingsAction
 import com.denser.june.presentation.screens.settings.components.SettingSection
 import com.denser.june.presentation.screens.settings.components.*
 import com.denser.june.presentation.screens.settings.components.sheets.*
@@ -69,23 +70,23 @@ fun AppearanceSettingsScreen() {
                         SettingsItem(
                             title = stringResource(R.string.compact_notes),
                             subtitle = stringResource(R.string.compact_notes_desc),
-                            onClick = { onAction(SettingsAction.OnCompactNotesToggle(!state.compactNotesEnabled)) },
+                            onClick = { settingsVM.onAction(SettingsAction.OnCompactNotesToggle(!state.compactNotesEnabled)) },
                             trailingContent = {
                                 Switch(checked = state.compactNotesEnabled,
-                                    onCheckedChange = { onAction(SettingsAction.OnCompactNotesToggle(it)) })
+                                    onCheckedChange = { settingsVM.onAction(SettingsAction.OnCompactNotesToggle(it)) })
                             }
                         )
                         if (state.compactNotesEnabled) {
                             SettingsItem(title = stringResource(R.string.notes_grid),
                                 subtitle = stringResource(R.string.notes_grid_desc),
-                                onClick = { onAction(SettingsAction.OnNotesGridToggle(!state.notesGridEnabled)) },
+                                onClick = { settingsVM.onAction(SettingsAction.OnNotesGridToggle(!state.notesGridEnabled)) },
                                 trailingContent = { Switch(checked = state.notesGridEnabled,
-                                    onCheckedChange = { onAction(SettingsAction.OnNotesGridToggle(it)) }) })
+                                    onCheckedChange = { settingsVM.onAction(SettingsAction.OnNotesGridToggle(it)) }) })
                             SettingsItem(title = stringResource(R.string.note_preview_length)) {
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     listOf(4 to R.string.note_preview_short, 8 to R.string.note_preview_balanced, 14 to R.string.note_preview_long).forEach { (lines, label) ->
                                         FilterChip(selected = state.notePreviewLines == lines,
-                                            onClick = { onAction(SettingsAction.OnNotePreviewLinesChange(lines)) },
+                                            onClick = { settingsVM.onAction(SettingsAction.OnNotePreviewLinesChange(lines)) },
                                             label = { Text(stringResource(label)) })
                                     }
                                 }

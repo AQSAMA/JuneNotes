@@ -111,7 +111,7 @@ class MediaRepairDatabaseTest {
             dao.insertJournal(sharedDeleted)
             dao.insertJournal(removed)
             dao.insertTag(com.denser.june.core.data.database.journal.TagEntity("#Current"))
-            dao.insertJournalTagCrossRef(com.denser.june.core.data.database.journal.JournalTagCrossRef(edited.id, "#Current"))
+            dao.insertJournalTagCrossRefs(listOf(com.denser.june.core.data.database.journal.JournalTagCrossRef(edited.id, "#Current")))
 
             assertEquals(2, dao.markMediaModified("/old/device/media_shared.jpg", 1000))
             assertEquals(edited.copy(syncedAt = null), dao.getJournalById(edited.id))

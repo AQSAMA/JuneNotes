@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
+import com.denser.june.R as AppR
 import com.denser.june.core.domain.folder.Folder
 import com.denser.june.presentation.components.JuneConfirmationDialog
 import kotlinx.coroutines.flow.first
@@ -83,7 +84,7 @@ internal fun FolderSidebar(
     Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(start = if (compact) 20.dp else 24.dp, end = 8.dp, top = 8.dp, bottom = if (compact) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(if (compact) R.string.folders else R.string.app_name),
+                Text(stringResource(if (compact) R.string.folders else AppR.string.app_name),
                     style = if (compact) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 if (compact) IconButton(onClick = { managing = !managing }, modifier = Modifier.testTag("sidebar-manage")) {

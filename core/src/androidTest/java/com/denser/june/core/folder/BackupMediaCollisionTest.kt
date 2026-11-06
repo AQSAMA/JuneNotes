@@ -40,7 +40,7 @@ class BackupMediaCollisionTest {
             val oldAudio = File(audioDir, "$token.mp3").apply { writeText("OLD AUDIO") }
             val oldArt = File(artDir, "$token.jpg").apply { writeText("OLD ART") }
             try {
-                val notes = JournalRepositoryImpl(db.journalDao(), preferences, context)
+                val notes = JournalRepositoryImpl(db.journalDao(), db, preferences, context)
                 val folders = FolderRepositoryImpl(db)
                 val keep = Journal("keep-$token", "Keep", "Unrelated content", images = listOf(oldMedia.path),
                     songDetails = SongDetails("Keep song", "Artist", localPreviewPath = oldAudio.path, localThumbnailPath = oldArt.path),

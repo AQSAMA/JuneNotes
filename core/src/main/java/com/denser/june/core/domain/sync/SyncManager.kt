@@ -373,10 +373,9 @@ class SyncManager(
             val tombstones = journalRepo.getAllTombstones()
             val tombstoneIds = tombstones.toSet()
 
-            // For sync decisions: use all journals (including deleted) so we don't re-upload still-referenced media.
-            val allReferencedMediaNames = allLocalJournals.flatMap { it.images }
-                .map { File(it).name }.distinct()
-            val localMediaFiles = allReferencedMediaNames.toSet()
+            // Include deleted entries for media ownership while excluding the local-only vault.
+            val syncableJournals = allLocalJournals.filterNot { it.isLocked }
+            val localMediaFiles = syncableJournals.flatMap { it.images }.map { File(it).name }.toSet()
 
             // For display (BUG-02): count only active journals' media that physically exist on disk.
             val activeLocalJournals = allLocalJournals.filter { it.deletedAt == null && !it.isLocked }
@@ -398,7 +397,7 @@ class SyncManager(
                 isFullRevalidation = true
             )
 
-            val locallyModifiedMedia = mediaWithLocalChanges(allLocalJournals, journalRepo.getPendingMediaChanges())
+            val locallyModifiedMedia = mediaWithLocalChanges(syncableJournals, journalRepo.getPendingMediaChanges())
 
             val remoteMediaMeta = remoteManifest?.mediaMetadata ?: emptyMap()
             val mediaToUpload = localMediaFiles.filter { name ->
@@ -898,7 +897,7 @@ class SyncManager(
             if (localJournalsModified) {
                 allLocalJournals = journalRepo.getAllJournalsIncludeDeletedSync()
             }
-            val currentLocalsForUpload = allLocalJournals
+            val syncableJournals = allLocalJournals.filterNot { it.isLocked }
 
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Verifying local media attachments are uploaded...")
             val remoteMediaResult = provider.listMedia()
@@ -909,7 +908,7 @@ class SyncManager(
 
             val failedMediaNames = Collections.synchronizedSet(mutableSetOf<String>())
             val mediaFilesToUpload = mutableListOf<Pair<String, File>>()
-            currentLocalsForUpload.filter { it.deletedAt == null || it.images.any { path -> File(path).name.lowercase() in locallyModifiedMedia } }.forEach { journal ->
+            syncableJournals.filter { it.deletedAt == null || it.images.any { path -> File(path).name.lowercase() in locallyModifiedMedia } }.forEach { journal ->
                 journal.images.forEach { imgPath ->
                     val name = File(imgPath).name
                     val file = if (File(imgPath).isAbsolute && File(imgPath).exists()) File(imgPath) else File(mediaDir, name)
@@ -1013,10 +1012,9 @@ class SyncManager(
             }
 
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Verifying local media attachments are downloaded...")
-            val currentLocals = allLocalJournals
             val uploadedMediaNames = mediaFilesToUpload.map { it.second.name.lowercase() }.toSet()
             val mediaFilesToDownload = mutableListOf<Pair<String, Pair<String, File>>>()
-            currentLocals.forEach { journal ->
+            syncableJournals.forEach { journal ->
                 journal.images.forEach { imgPath ->
                     val filename = File(imgPath).name
                     val file = File(mediaDir, filename)
@@ -1078,7 +1076,7 @@ class SyncManager(
 
             AppLogger.d(AppLogger.Category.SYNC, "SyncManager", "Verifying local song attachments are downloaded...")
             var downloadedSongCount = 0
-            currentLocals.forEach { journal ->
+            syncableJournals.forEach { journal ->
                 journal.songDetails?.let { song ->
                     var previewPath = song.localPreviewPath
                     if (previewPath == null) {
@@ -1218,10 +1216,10 @@ class SyncManager(
                         totalOperations,
                         "Cleaning up cloud media..."
                     )
-                    cleanupCloudOrphanedMedia(provider, currentLocals)
+                    cleanupCloudOrphanedMedia(provider, allLocalJournals)
                 }
 
-                allLocalJournals.forEach { local ->
+                syncableJournals.forEach { local ->
                     val remoteMetaEntry = remoteJournalMeta[local.id]
                     if (remoteMetaEntry != null && local.computeContentHash() == remoteMetaEntry.contentHash) {
                         val hasLocalChange = (local.syncedAt == null) ||
@@ -1238,7 +1236,7 @@ class SyncManager(
                 remoteManifest?.folderData?.let { folderRepo.merge(it) }
                 val finalManifest = createCurrentManifest(
                     provider = provider,
-                    journals = allLocalJournals,
+                    journals = syncableJournals,
                     processedDeletedIds = processedTombstoneIds,
                     remoteDeletedIds = remoteDeletedIds,
                     existingJournalMeta = remoteJournalMeta,

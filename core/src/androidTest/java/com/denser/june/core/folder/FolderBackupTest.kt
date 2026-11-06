@@ -27,8 +27,8 @@ class FolderBackupTest {
         val preferences = Proxy.newProxyInstance(SyncPreferences::class.java.classLoader, arrayOf(SyncPreferences::class.java)) { _, method, _ ->
             error("Backup should not need preferences: ${method.name}")
         } as SyncPreferences
-        val sourceNotes = JournalRepositoryImpl(source.journalDao(), preferences, context)
-        val targetNotes = JournalRepositoryImpl(destination.journalDao(), preferences, context)
+        val sourceNotes = JournalRepositoryImpl(source.journalDao(), source, preferences, context)
+        val targetNotes = JournalRepositoryImpl(destination.journalDao(), destination, preferences, context)
         val sourceFolders = FolderRepositoryImpl(source)
         val targetFolders = FolderRepositoryImpl(destination)
         val exporter = ExportImpl(sourceNotes, context, sourceFolders)
@@ -70,7 +70,7 @@ class FolderBackupTest {
             // Use a fresh empty folder repository to prove sidecar import, independent of existing data.
             val fresh = Room.inMemoryDatabaseBuilder(context, JournalDatabase::class.java).build()
             try {
-                val freshNotes = JournalRepositoryImpl(fresh.journalDao(), preferences, context)
+                val freshNotes = JournalRepositoryImpl(fresh.journalDao(), fresh, preferences, context)
                 val freshFolders = FolderRepositoryImpl(fresh)
                 MarkdownImportImpl(freshNotes, context, freshFolders).importMarkdownZip(android.net.Uri.fromFile(markdownZip)).getOrThrow()
                 assertEquals(child, freshFolders.snapshot().journals.single().folderId)

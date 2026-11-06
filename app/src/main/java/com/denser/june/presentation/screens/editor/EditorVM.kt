@@ -38,6 +38,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
+import com.denser.june.presentation.screens.settings.screens.lock.LockSessionVM
 
 @OptIn(FlowPreview::class)
 class EditorVM(
@@ -49,7 +50,8 @@ class EditorVM(
     private val songRepo: SongRepository,
     private val navigator: AppNavigator,
     private val folderRepo: com.denser.june.core.domain.folder.FolderRepository,
-    private val billingHandler: BillingHandler
+    private val billingHandler: BillingHandler,
+    private val lockSessionVM: LockSessionVM
 ) : ViewModel() {
     private val editorRoute = initialRoute
     private val journalId = editorRoute?.journalId
@@ -513,6 +515,10 @@ class EditorVM(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             val journal = journalRepo.getJournalById(id)
+            if (journal?.isLocked == true && !lockSessionVM.isVaultUnlocked.value) {
+                navigator.navigateBack()
+                return@launch
+            }
 
             if (journal != null) {
                 var details = journal.songDetails

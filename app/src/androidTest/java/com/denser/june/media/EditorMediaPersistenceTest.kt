@@ -38,7 +38,7 @@ class EditorMediaPersistenceTest {
                 override fun <T : ViewModel> create(modelClass: Class<T>): T = EditorVM(
                     savedStateHandle = SavedStateHandle(), context = context, journalRepo = repository,
                     journalPrefs = koin.get(), songRepo = koin.get(), navigator = navigator,
-                    folderRepo = koin.get(), billingHandler = koin.get()
+                    folderRepo = koin.get(), billingHandler = koin.get(), lockSessionVM = koin.get()
                 ) as T
             })[EditorVM::class.java]
             vm.onAction(EditorAction.ChangeTitle(title))
