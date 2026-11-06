@@ -9,6 +9,13 @@ import java.time.DayOfWeek
 import kotlinx.coroutines.flow.Flow
 
 interface JournalPreferences {
+    fun compactNotesEnabled(): Flow<Boolean>
+    suspend fun setCompactNotesEnabled(enabled: Boolean)
+    fun notesGridEnabled(): Flow<Boolean>
+    suspend fun setNotesGridEnabled(enabled: Boolean)
+    fun notePreviewLines(): Flow<Int>
+    suspend fun setNotePreviewLines(lines: Int)
+
     fun isAutoTimeEnabled(): Flow<Boolean>
     suspend fun setAutoTimeEnabled(enabled: Boolean)
 

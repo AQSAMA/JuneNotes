@@ -11,6 +11,9 @@ import java.time.DayOfWeek
 import com.materialkolor.PaletteStyle
 
 sealed interface SettingsAction {
+    data class OnCompactNotesToggle(val enabled: Boolean) : SettingsAction
+    data class OnNotesGridToggle(val enabled: Boolean) : SettingsAction
+    data class OnNotePreviewLinesChange(val lines: Int) : SettingsAction
     data class OnSeedColorChange(val color: Int): SettingsAction
     data class OnThemeSwitch(val themeMode: ThemeMode): SettingsAction
     data class OnAmoledSwitch(val amoled: Boolean): SettingsAction

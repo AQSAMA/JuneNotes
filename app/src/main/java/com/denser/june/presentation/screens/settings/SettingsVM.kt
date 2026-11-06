@@ -71,7 +71,10 @@ class SettingsVM(
             journalPrefs.isCompressPhotosEnabled(),
             journalPrefs.getPhotoCompressionQuality(),
             journalPrefs.isCompressVideosEnabled(),
-            journalPrefs.getVideoCompressionQuality()
+            journalPrefs.getVideoCompressionQuality(),
+            journalPrefs.compactNotesEnabled(),
+            journalPrefs.notesGridEnabled(),
+            journalPrefs.notePreviewLines()
         )
     ) { array ->
         val local = array[0] as SettingsState
@@ -98,6 +101,9 @@ class SettingsVM(
             photoCompressionQuality = array[25] as Int,
             isCompressVideosEnabled = array[26] as Boolean,
             videoCompressionQuality = array[27] as Int,
+            compactNotesEnabled = array[28] as Boolean,
+            notesGridEnabled = array[29] as Boolean,
+            notePreviewLines = array[30] as Int,
 
             appTheme = local.appTheme.copy(
                 seedColor = array[1] as Int,
@@ -117,6 +123,9 @@ class SettingsVM(
     fun onAction(action: SettingsAction) {
         viewModelScope.launch {
             when (action) {
+                is SettingsAction.OnCompactNotesToggle -> journalPrefs.setCompactNotesEnabled(action.enabled)
+                is SettingsAction.OnNotesGridToggle -> journalPrefs.setNotesGridEnabled(action.enabled)
+                is SettingsAction.OnNotePreviewLinesChange -> journalPrefs.setNotePreviewLines(action.lines)
                 SettingsAction.OnDeleteJournals -> {
                     withContext(Dispatchers.IO) {
                         repo.deleteAllJournals()

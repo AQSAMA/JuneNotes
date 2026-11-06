@@ -227,9 +227,25 @@ private fun SheetHeading(title: String, destination: String, busy: Boolean, onDi
 }
 
 @Composable
-internal fun FolderSearchField(query: String, onQuery: (String) -> Unit, placeholder: String) {
+internal fun FolderSearchField(query: String, onQuery: (String) -> Unit, placeholder: String, compact: Boolean = false) {
     val focus = LocalFocusManager.current
-    OutlinedTextField(
+    if (compact) TextField(
+        value = query, onValueChange = onQuery, singleLine = true,
+        placeholder = { Text(placeholder, maxLines = 1) },
+        leadingIcon = { Icon(painterResource(R.drawable.search_24px), null) },
+        trailingIcon = if (query.isNotEmpty()) { {
+            IconButton(onClick = { onQuery("") }) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.clear)) }
+        } } else null,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent),
+        modifier = Modifier.fillMaxWidth()
+    ) else OutlinedTextField(
         value = query, onValueChange = onQuery, singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),

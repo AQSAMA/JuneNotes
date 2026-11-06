@@ -20,6 +20,7 @@ import com.denser.june.presentation.navigation.Route
 import com.denser.june.core.domain.preferences.JournalPreferences
 import com.denser.june.presentation.components.JuneAppBarType
 import com.denser.june.presentation.components.JuneTopAppBar
+import com.denser.june.presentation.screens.home.components.CompactNotesBar
 import com.denser.june.presentation.screens.home.components.HomeBottomBar
 import com.denser.june.presentation.screens.home.journals.JournalsPage
 import com.denser.june.presentation.screens.home.timeline.TimelinePage
@@ -68,6 +69,8 @@ fun HomeScreen() {
     val journalPrefs = koinInject<JournalPreferences>()
     val isAutoTimeEnabled by journalPrefs.isAutoTimeEnabled().collectAsStateWithLifecycle(initialValue = false)
     
+    val compactNotes by journalPrefs.compactNotesEnabled().collectAsStateWithLifecycle(false)
+    val gridNotes by journalPrefs.notesGridEnabled().collectAsStateWithLifecycle(true)
     val pagerState = rememberPagerState(pageCount = { HomeTab.entries.size })
     val scope = rememberCoroutineScope()
 
@@ -109,6 +112,7 @@ fun HomeScreen() {
         sidebar = {
             FolderSidebar(
                 viewModel = foldersVM,
+                compact = compactNotes,
                 folderSelected = pagerState.currentPage == HomeTab.Folders.ordinal,
                 allNotesSelected = pagerState.currentPage == HomeTab.Journals.ordinal,
                 onAllNotes = {
@@ -138,7 +142,30 @@ fun HomeScreen() {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 topBar = {
-                    JuneTopAppBar(
+                    if (compactNotes) CompactNotesBar(
+                        searching = isSearchActive, query = searchQuery, grid = gridNotes,
+                        showLayoutToggle = pagerState.currentPage == HomeTab.Journals.ordinal || pagerState.currentPage == HomeTab.Folders.ordinal,
+                        focusRequester = focusRequester, onQuery = journalsVM::onQueryChange,
+                        onNavigation = {
+                            if (isSearchActive) {
+                                isSearchActive = false
+                                keyboardController?.hide()
+                                focusManager.clearFocus(force = true)
+                                journalsVM.resetAllFilters()
+                            } else sidebarOpen = true
+                        },
+                        onSearch = { scope.launch {
+                            pagerState.scrollToPage(HomeTab.Journals.ordinal)
+                            isSearchActive = true
+                        } },
+                        onToggleLayout = { scope.launch { journalPrefs.setNotesGridEnabled(!gridNotes) } },
+                        onSettings = { navigator.navigateTo(Route.Settings) },
+                        syncIndicator = {
+                            if (appState.isSyncEnabled && appState.isInternetAllowed) SyncIndicator(
+                                status = appState.syncStatus,
+                                onClick = { navigator.navigateTo(Route.SyncSettings) })
+                        }
+                    ) else JuneTopAppBar(
                         type = if (isSearchActive) JuneAppBarType.Small else JuneAppBarType.CenterAligned,
                         title = {
                             if (isSearchActive) {

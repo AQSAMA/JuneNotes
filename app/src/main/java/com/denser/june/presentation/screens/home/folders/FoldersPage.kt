@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -41,6 +43,9 @@ import org.koin.compose.koinInject
 @Composable
 fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boolean = true, onOpenSidebar: (() -> Unit)? = null) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val compactNotes by viewModel.preferences.compactNotesEnabled().collectAsStateWithLifecycle(false)
+    val grid by viewModel.preferences.notesGridEnabled().collectAsStateWithLifecycle(true)
+    val previewLines by viewModel.preferences.notePreviewLines().collectAsStateWithLifecycle(8)
     val time by viewModel.preferences.timeFormat().collectAsStateWithLifecycle(TimeFormat.TWELVE_HOUR)
     val navigator = koinInject<AppNavigator>()
     val snack = remember { SnackbarHostState() }
@@ -95,7 +100,7 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
             } }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (onOpenSidebar != null) IconButton(onClick = onOpenSidebar) { Icon(painterResource(R.drawable.folder_open_24px), stringResource(R.string.folder_open_sidebar)) }
-                Text(state.path.lastOrNull()?.name ?: stringResource(if (showFolderRows) R.string.folders else R.string.folder_unfiled), style = MaterialTheme.typography.headlineSmall,
+                Text(state.path.lastOrNull()?.name ?: stringResource(if (showFolderRows) R.string.folders else R.string.folder_unfiled), style = if (compactNotes) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (showFolderRows) IconButton(onClick = { nameDialog = true }) { Icon(painterResource(R.drawable.create_new_folder_24px), stringResource(R.string.new_folder)) }
                 IconButton(onClick = { addingError = null; addExisting = true }) { Icon(painterResource(R.drawable.edit_note_24px), stringResource(R.string.folder_add_existing)) }
@@ -115,13 +120,52 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
                 // Use the target ID for each animated pane, avoiding duplicate note IDs during transitions.
                 val pane = remember(state, displayedId) { state.copy(currentId = displayedId) }
                 val listState = rememberLazyListState()
+                val gridState = rememberLazyStaggeredGridState()
                 Box(Modifier.fillMaxSize()) {
                 FolderDropSurface(
                     accepts = { displayedId == state.currentId && accepts(it, displayedId) },
                     onDrop = { viewModel.move(it, displayedId) },
                     modifier = Modifier.fillMaxSize(), priority = -10, enabled = displayedId == state.currentId
                 ) {
-                LazyColumn(
+                if (compactNotes && !showFolderRows) {
+                    NoteCollection(notes = pane.visibleNotes, grid = grid, loading = state.loading, state = gridState,
+                        emptyContent = {
+                            Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(painterResource(R.drawable.folder_open_24px), null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.height(12.dp))
+                                Text(stringResource(R.string.folder_empty), style = MaterialTheme.typography.bodyLarge)
+                                Spacer(Modifier.height(12.dp))
+                                FilledTonalButton(onClick = {
+                                    navigator.navigateTo(Route.Editor(initialFolderId = displayedId,
+                                        initialDate = if (autoTime) System.currentTimeMillis() else null), isSingleTop = true)
+                                }) { Text(stringResource(R.string.new_journal)) }
+                            }
+                        }
+                    ) { index, note ->
+                        val item = FolderDrag(note.id, false, note.title.ifBlank { note.content.take(80).replace('\n', ' ') })
+                        FolderDragItem(item, Modifier.testTag("note-row-${note.id}")) {
+                            Box {
+                                NotePreviewCard(note, previewLines,
+                                    onClick = { navigator.navigateTo(Route.Editor(note.id), isSingleTop = true) },
+                                    onLongClick = { optionsNote = note },
+                                    onBookmark = { viewModel.bookmark(note.id) },
+                                    trailingAction = { FolderDragHandle(item) { moveItem = item } })
+                                if (dragging && displayedId == state.currentId) {
+                                    Column(Modifier.matchParentSize()) {
+                                        FolderDropSurface(accepts = { !it.folder && it.id != note.id },
+                                            onDrop = { viewModel.move(it, displayedId, note.id) },
+                                            modifier = Modifier.weight(1f).fillMaxWidth().testTag("note-before-${note.id}"),
+                                            priority = 5, insertion = true, markerAlignment = Alignment.TopCenter) { Box(Modifier.fillMaxSize()) }
+                                        FolderDropSurface(accepts = { !it.folder && it.id != note.id },
+                                            onDrop = { viewModel.move(it, displayedId, pane.visibleNotes.drop(index + 1).firstOrNull { next -> next.id != it.id }?.id) },
+                                            modifier = Modifier.weight(1f).fillMaxWidth().testTag("note-after-${note.id}"),
+                                            priority = 5, insertion = true, markerAlignment = Alignment.BottomCenter) { Box(Modifier.fillMaxSize()) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = UiUtils.BOTTOM_BAR_PADDING),
@@ -214,7 +258,8 @@ fun FoldersPage(viewModel: FoldersVM, isSelected: Boolean, showFolderRows: Boole
                 }
                 }
                 if (displayedId == state.currentId) {
-                    FolderDragAutoScroll(listState, Modifier.fillMaxSize().padding(bottom = UiUtils.BOTTOM_BAR_PADDING)) { }
+                    val scrollState: ScrollableState = if (compactNotes && !showFolderRows) gridState else listState
+                    FolderDragAutoScroll(scrollState, Modifier.fillMaxSize().padding(bottom = UiUtils.BOTTOM_BAR_PADDING)) { }
                 }
                 }
             }

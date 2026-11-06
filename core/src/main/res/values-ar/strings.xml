@@ -495,4 +495,21 @@
     <string name="compression_save_failed">تعذّر حفظ المرفق المضغوط</string>
     <string name="compression_preview_failed">تعذّر إنشاء المعاينة</string>
     <string name="retry_preview">إعادة المحاولة</string>
+
+    <string name="notes_layout">عرض الملاحظات</string>
+    <string name="compact_notes">عرض مدمج للملاحظات (تجريبي)</string>
+    <string name="compact_notes_desc">معاينات مقروءة وشريط بحث مختصر وقائمة مجلدات أبسط. عطّل الخيار للعودة إلى العرض الأصلي.</string>
+    <string name="notes_grid">بطاقات متجاورة</string>
+    <string name="notes_grid_desc">عطّل لعرض عمود واحد. يمكنك التبديل أيضًا من شريط البحث.</string>
+    <string name="note_preview_length">طول المعاينة</string>
+    <string name="note_preview_short">قصير</string>
+    <string name="note_preview_balanced">متوسط</string>
+    <string name="note_preview_long">طويل</string>
+    <string name="notes_show_list">عرض الملاحظات بقائمة</string>
+    <string name="notes_show_grid">عرض الملاحظات جنبًا إلى جنب</string>
+    <string name="notes_search">بحث في الملاحظات</string>
+    <string name="notes_my_folders">مجلداتي</string>
+    <string name="notes_empty_title">لا توجد ملاحظات بعد</string>
+    <string name="notes_empty_desc">اضغط + لكتابة أول ملاحظة.</string>
+    <string name="notes_preview_media">معاينة وسائط الملاحظة</string>
 </resources>

@@ -8,6 +8,10 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import com.denser.june.core.domain.preferences.JournalPreferences
+import com.denser.june.presentation.screens.home.components.NoteCollection
+import com.denser.june.presentation.screens.home.components.NotePreviewCard
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +52,13 @@ fun JournalsPage(
     viewModel: JournalsVM = koinViewModel()
 ) {
     val navigator = koinInject<AppNavigator>()
+    val preferences = koinInject<JournalPreferences>()
+    val compactNotes by preferences.compactNotesEnabled().collectAsStateWithLifecycle(false)
+    val grid by preferences.notesGridEnabled().collectAsStateWithLifecycle(true)
+    val previewLines by preferences.notePreviewLines().collectAsStateWithLifecycle(8)
+    val feedGridState = rememberLazyStaggeredGridState()
+    val searchGridState = rememberLazyStaggeredGridState()
+
     val timeFormat by viewModel.timeFormat.collectAsStateWithLifecycle()
     val is24Hour = timeFormat == TimeFormat.TWENTY_FOUR_HOUR
 
@@ -69,6 +80,9 @@ fun JournalsPage(
         }
     }
 
+    LaunchedEffect(isSearchActive, isBookmarked, isDraft, hasMedia, hasSong, hasLocation) {
+        if (isSearchActive) searchGridState.scrollToItem(0)
+    }
     LaunchedEffect(isBookmarked, isDraft, hasMedia, hasSong, hasLocation) {
         if (isSearchActive) {
             searchListState.scrollToItem(0)
@@ -204,7 +218,23 @@ fun JournalsPage(
                 }
             }
 
-            LazyColumn(
+            if (compactNotes) {
+                NoteCollection(notes = journals, grid = grid, loading = feedState.isLoading,
+                    state = if (isSearchActive) searchGridState else feedGridState,
+                    bottomPadding = if (isSearchActive) 16.dp else UiUtils.BOTTOM_BAR_PADDING,
+                    emptyContent = {
+                        JunePlaceholderPage(Modifier.fillMaxWidth().heightIn(min = 320.dp),
+                            icon = if (hasActiveFilters) R.drawable.search_off_24px else R.drawable.edit_note_24px,
+                            title = stringResource(if (hasActiveFilters) R.string.no_matches_found else R.string.notes_empty_title),
+                            subtitle = stringResource(if (hasActiveFilters) R.string.no_matches_found_desc else R.string.notes_empty_desc))
+                    }
+                ) { _, note ->
+                    NotePreviewCard(note, previewLines,
+                        onClick = { navigator.navigateTo(Route.Editor(note.id), isSingleTop = true) },
+                        onLongClick = { selectedJournalForOptions = note },
+                        onBookmark = { viewModel.toggleBookmark(note.id) })
+                }
+            } else LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(vertical = 16.dp),
