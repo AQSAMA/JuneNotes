@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.presentation.navigation.AppNavigator
 import com.denser.june.presentation.navigation.Route
-import com.denser.june.core.domain.preferences.JournalPreferences
 import com.denser.june.presentation.components.JuneAppBarType
 import com.denser.june.presentation.components.JuneTopAppBar
 import com.denser.june.presentation.screens.home.components.CompactNotesBar
@@ -66,9 +65,9 @@ fun HomeScreen() {
         koinViewModel()
     }
     val appState by mainVM.state.collectAsStateWithLifecycle()
-    val journalPrefs = koinInject<JournalPreferences>()
+    val journalPrefs = koinInject<com.denser.june.core.domain.preferences.JournalPreferences>()
     val isAutoTimeEnabled by journalPrefs.isAutoTimeEnabled().collectAsStateWithLifecycle(initialValue = false)
-    
+
     val compactNotes by journalPrefs.compactNotesEnabled().collectAsStateWithLifecycle(false)
     val gridNotes by journalPrefs.notesGridEnabled().collectAsStateWithLifecycle(true)
     val pagerState = rememberPagerState(pageCount = { HomeTab.entries.size })
@@ -185,7 +184,7 @@ fun HomeScreen() {
                                             IconButton(onClick = { journalsVM.clearSearch() }) {
                                                 Icon(
                                                     painterResource(R.drawable.close_24px),
-                                                    contentDescription = stringResource(R.string.clear)
+                                                    contentDescription = stringResource(R.string.action_clear)
                                                 )
                                             }
                                         }
@@ -220,7 +219,7 @@ fun HomeScreen() {
                                         if (isSearchActive) R.drawable.arrow_back_24px else R.drawable.menu_24px
                                     ),
                                     contentDescription = stringResource(
-                                        if (isSearchActive) R.string.back else R.string.folder_open_sidebar
+                                        if (isSearchActive) R.string.action_back else R.string.folder_open_sidebar
                                     )
                                 )
                             }
@@ -255,7 +254,7 @@ fun HomeScreen() {
                                 ) {
                                     Icon(
                                         painter = painterResource(R.drawable.settings_24px),
-                                        contentDescription = stringResource(R.string.settings)
+                                        contentDescription = stringResource(R.string.label_settings)
                                     )
                                 }
                             }

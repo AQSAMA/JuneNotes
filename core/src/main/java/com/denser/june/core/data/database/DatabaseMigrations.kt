@@ -185,19 +185,39 @@ object DatabaseMigrations {
             )
         }
     }
-    val MIGRATION_5_6 = object : Migration(5, 6) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS `folder_sync_state` (`id` INTEGER NOT NULL, `acknowledgedHash` TEXT NOT NULL, PRIMARY KEY(`id`))")
-            db.execSQL("CREATE TABLE IF NOT EXISTS `folders` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `parentId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_folders_parentId` ON `folders` (`parentId`)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS `folder_journals` (`journalId` TEXT NOT NULL, `folderId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`journalId`))")
-            db.execSQL("CREATE INDEX IF NOT EXISTS `index_folder_journals_folderId` ON `folder_journals` (`folderId`)")
-        }
+    private fun createFolderTables(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `folder_sync_state` (`id` INTEGER NOT NULL, `acknowledgedHash` TEXT NOT NULL, PRIMARY KEY(`id`))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `folders` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `parentId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_folders_parentId` ON `folders` (`parentId`)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `folder_journals` (`journalId` TEXT NOT NULL, `folderId` TEXT, `position` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`journalId`))")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_folder_journals_folderId` ON `folder_journals` (`folderId`)")
     }
+
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) = createFolderTables(db)
+    }
+
     val MIGRATION_6_7 = object : Migration(6, 7) {
         override fun migrate(db: SupportSQLiteDatabase) {
+            createFolderTables(db)
             db.execSQL("CREATE TABLE IF NOT EXISTS `pending_media_changes` (`fileName` TEXT NOT NULL, `generation` TEXT NOT NULL, PRIMARY KEY(`fileName`))")
         }
     }
 
+    // Version 6 was shipped independently by both upstream and JuneNotes.
+    // Complete the fork tables in either case, then add any missing upstream columns.
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            val columns = db.query("PRAGMA table_info(`journals`)").use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                buildSet {
+                    while (cursor.moveToNext()) add(cursor.getString(nameIndex))
+                }
+            }
+            if ("isLocked" !in columns) db.execSQL("ALTER TABLE `journals` ADD COLUMN `isLocked` INTEGER NOT NULL DEFAULT 0")
+            if ("theme" !in columns) db.execSQL("ALTER TABLE `journals` ADD COLUMN `theme` TEXT DEFAULT NULL")
+            if ("font" !in columns) db.execSQL("ALTER TABLE `journals` ADD COLUMN `font` TEXT DEFAULT NULL")
+            if ("fontVariation" !in columns) db.execSQL("ALTER TABLE `journals` ADD COLUMN `fontVariation` TEXT DEFAULT NULL")
+        }
+    }
 }

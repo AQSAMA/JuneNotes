@@ -88,7 +88,7 @@ internal fun FolderSidebar(
                     fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 if (compact) IconButton(onClick = { managing = !managing }, modifier = Modifier.testTag("sidebar-manage")) {
                     Icon(painterResource(if (managing) R.drawable.check_24px else R.drawable.edit_24px),
-                        stringResource(if (managing) R.string.done else R.string.folder_organize))
+                        stringResource(if (managing) R.string.action_done else R.string.folder_organize))
                 }
                 IconButton(onClick = onClose) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.folder_close_sidebar)) }
             }
@@ -223,7 +223,7 @@ internal fun FolderSidebar(
             } else TextButton(onClick = { managing = !managing }, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("sidebar-manage")) {
                 Icon(painterResource(if (managing) R.drawable.check_24px else R.drawable.drag_indicator_24px), null, Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(if (managing) R.string.done else R.string.folder_organize))
+                Text(stringResource(if (managing) R.string.action_done else R.string.folder_organize))
             }
         }
     }
@@ -241,13 +241,13 @@ internal fun FolderSidebar(
                 SidebarAction(R.drawable.create_new_folder_24px, stringResource(R.string.folder_new_subfolder)) { createParent = folder.id; creating = true; options = null }
                 SidebarAction(R.drawable.edit_24px, stringResource(R.string.rename)) { renaming = folder; options = null }
                 SidebarAction(R.drawable.drive_folder_upload_24px, moveLabel) { moving = FolderDrag(folder.id, true, folder.name); options = null }
-                SidebarAction(R.drawable.delete_24px, stringResource(R.string.delete)) { deleting = folder; options = null }
+                SidebarAction(R.drawable.delete_24px, stringResource(R.string.action_delete)) { deleting = folder; options = null }
             }
         }
     }
     deleting?.let { folder ->
         JuneConfirmationDialog(onDismiss = { deleting = null }, onConfirm = { viewModel.delete(folder.id); deleting = null },
-            title = stringResource(R.string.folder_delete_title), description = stringResource(R.string.folder_delete_description), confirmButtonText = stringResource(R.string.delete))
+            title = stringResource(R.string.folder_delete_title), description = stringResource(R.string.folder_delete_description), confirmButtonText = stringResource(R.string.action_delete))
     }
     moving?.let { FolderDestinationSheet(it, onDismiss = { moving = null }) }
 }

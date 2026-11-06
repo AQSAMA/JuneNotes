@@ -36,7 +36,9 @@ class EditorMediaPersistenceTest {
             vm = ViewModelProvider(store, object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T = EditorVM(
-                    SavedStateHandle(), context, repository, koin.get(), koin.get(), navigator, koin.get()
+                    savedStateHandle = SavedStateHandle(), context = context, journalRepo = repository,
+                    journalPrefs = koin.get(), songRepo = koin.get(), navigator = navigator,
+                    folderRepo = koin.get(), billingHandler = koin.get()
                 ) as T
             })[EditorVM::class.java]
             vm.onAction(EditorAction.ChangeTitle(title))

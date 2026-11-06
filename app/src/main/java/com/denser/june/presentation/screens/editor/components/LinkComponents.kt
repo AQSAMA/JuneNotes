@@ -163,15 +163,15 @@ fun JuneLinkSheet(
                 JuneFloatingActionBar {
                      JuneFloatingAction(
                         onClick = onDismiss,
-                        label = stringResource(R.string.cancel),
+                        label = stringResource(R.string.action_cancel),
                         icon = { Icon(painterResource(R.drawable.close_24px), null, Modifier.size(20.dp)) },
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     JuneFloatingAction(
                         onClick = { onConfirm(text, url) },
-                        label = stringResource(R.string.confirm),
+                        label = stringResource(R.string.action_confirm),
                         icon = { Icon(painterResource(R.drawable.check_24px), null, Modifier.size(20.dp)) },
                         enabled = url.isNotBlank()
                     )

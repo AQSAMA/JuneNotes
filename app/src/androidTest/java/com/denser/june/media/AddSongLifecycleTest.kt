@@ -41,7 +41,9 @@ class AddSongLifecycleTest {
             vm = ViewModelProvider(owner, object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T = EditorVM(
-                    SavedStateHandle(), context, koin.get(), koin.get(), koin.get(), JuneNavigator(), koin.get()
+                    savedStateHandle = SavedStateHandle(), context = context, journalRepo = koin.get(),
+                    journalPrefs = koin.get(), songRepo = koin.get(), navigator = JuneNavigator(),
+                    folderRepo = koin.get(), billingHandler = koin.get()
                 ) as T
             })[EditorVM::class.java]
         }

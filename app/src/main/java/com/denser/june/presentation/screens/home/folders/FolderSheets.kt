@@ -24,7 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.denser.june.core.R
 import com.denser.june.core.domain.folder.*
 import com.denser.june.core.domain.model.Journal
-import com.denser.june.presentation.screens.home.components.JournalCard
+import com.denser.june.presentation.components.journal.JournalCard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
@@ -140,7 +140,7 @@ fun FolderDestinationSheet(item: FolderDrag, onDismiss: () -> Unit) {
                         Icon(painterResource(R.drawable.folder_open_24px), stringResource(R.string.folders))
                     }
                     IconButton(onClick = { open(current?.parentId) }, enabled = !busy) {
-                        Icon(painterResource(R.drawable.arrow_back_24px), stringResource(R.string.back))
+                        Icon(painterResource(R.drawable.arrow_back_24px), stringResource(R.string.action_back))
                     }
                 }
                 Text(current?.name ?: stringResource(R.string.folders), Modifier.weight(1f),
@@ -221,7 +221,7 @@ private fun SheetHeading(title: String, destination: String, busy: Boolean, onDi
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = onDismiss, enabled = !busy) {
-            Icon(painterResource(R.drawable.close_24px), stringResource(R.string.close))
+            Icon(painterResource(R.drawable.close_24px), stringResource(R.string.action_close))
         }
     }
 }
@@ -234,7 +234,7 @@ internal fun FolderSearchField(query: String, onQuery: (String) -> Unit, placeho
         placeholder = { Text(placeholder, maxLines = 1) },
         leadingIcon = { Icon(painterResource(R.drawable.search_24px), null) },
         trailingIcon = if (query.isNotEmpty()) { {
-            IconButton(onClick = { onQuery("") }) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.clear)) }
+            IconButton(onClick = { onQuery("") }) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.action_clear)) }
         } } else null,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
@@ -252,7 +252,7 @@ internal fun FolderSearchField(query: String, onQuery: (String) -> Unit, placeho
         placeholder = { Text(placeholder) },
         leadingIcon = { Icon(painterResource(R.drawable.search_24px), null) },
         trailingIcon = if (query.isNotEmpty()) { {
-            IconButton(onClick = { onQuery("") }) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.clear)) }
+            IconButton(onClick = { onQuery("") }) { Icon(painterResource(R.drawable.close_24px), stringResource(R.string.action_clear)) }
         } } else null,
         shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth()
     )
