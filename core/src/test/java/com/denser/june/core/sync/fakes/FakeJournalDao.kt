@@ -41,7 +41,7 @@ class FakeJournalDao : JournalDao {
 
     override suspend fun findMatchingDraftId(title: String, content: String): String? =
         journals.values.filter {
-            it.isDraft && it.deletedAt == null && it.title == title && it.content == content
+            it.isDraft && it.deletedAt == null && !it.isLocked && it.title == title && it.content == content
         }.minByOrNull { it.createdAt }?.id
 
     override suspend fun insertJournal(journal: JournalEntity) {

@@ -65,9 +65,10 @@ class ExternalIntentProcessor(
 
             val journal = MarkdownEngine.fromMarkdown(content, displayName, isDraft = true)
             // Query only an ID: loading every journal can exhaust memory on a large library.
-            val targetId = journalRepo.getJournalById(journal.id)?.id
+            val existing = journalRepo.getJournalById(journal.id)
+            val targetId = existing?.takeUnless { it.isLocked }?.id
                 ?: journalRepo.findMatchingDraftId(journal.title, journal.content)
-                ?: journalRepo.insertJournal(journal)
+                ?: journalRepo.insertJournal(if (existing?.isLocked == true) journal.copy(id = "") else journal)
             Result.success(Route.Editor(journalId = targetId))
         } catch (e: CancellationException) {
             throw e

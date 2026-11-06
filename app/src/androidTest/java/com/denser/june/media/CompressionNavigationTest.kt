@@ -92,10 +92,12 @@ class CompressionNavigationTest {
                 )
             }
         }
-        ui.onNodeWithContentDescription("More options").assertIsNotEnabled()
+        val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext
+        val options = context.getString(com.denser.june.core.R.string.options)
+        ui.onNodeWithContentDescription(options).assertIsNotEnabled()
         ui.runOnIdle { saving = false }
-        ui.onNodeWithContentDescription("More options").performClick()
-        ui.onNodeWithText(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.getString(com.denser.june.core.R.string.action_delete)).performClick()
+        ui.onNodeWithContentDescription(options).performClick()
+        ui.onNodeWithText(context.getString(com.denser.june.core.R.string.action_delete)).performClick()
         ui.runOnIdle { assertEquals(1, deletes) }
     }
 
